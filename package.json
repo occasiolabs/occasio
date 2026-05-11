@@ -1,6 +1,6 @@
 {
   "name": "@localfirst-ai/localfirst",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "LocalFirst — control what re-enters the model after every AI tool call. Per-tool decision (LOCAL/PASS/BLOCK/TRANSFORM) driven by one policy.yml, tamper-evident audit chain, same engine for Claude Code and MCP.",
   "main": "src/index.js",
   "files": [

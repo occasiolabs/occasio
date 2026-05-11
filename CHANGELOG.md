@@ -1,5 +1,133 @@
 # Changelog
 
+## [0.7.1] — 2026-05-11  Context-control framing + four observability features
+
+A substantive release. The headline shifts from "govern, audit, prove" to
+**"control what re-enters the model after every tool call."** Audit/compliance
+becomes the evidence layer, not the lead. Four user-visible commands ship the
+new framing end-to-end, and one critical enforcement bypass is closed.
+
+### Fixed (security)
+
+**deny_paths shell-mediated read bypass.**
+- Before this release, `deny_paths` and `allow_paths` were only evaluated for
+  the typed tool surface (`read_file`, `find_files`, `grep`). A `Bash { cat
+  <denied-path> }` or PowerShell `Get-Content <denied-path>` skipped the path
+  check entirely, was routed through the bash/powershell allowlist, and read
+  the file. `Read` returned `(blocked by policy)` while `cat` returned the
+  bytes — a direct contradiction of the documented governance claim.
+- `src/policy/shell-path.js` (new) extracts file operands from the shell
+  command shapes the native handler actually executes (`cat`, `bat`, `type`,
+  `head`, `tail`, `Get-Content`), including `cd <dir> && <read>` and
+  `Set-Location <dir>; <read>` compound chains.
+- The engine now consults `deny_paths` / `allow_paths` against every
+  extractable shell read operand before classifier dispatch. A denied operand
+  blocks the whole shell command.
+- 21 new unit tests (Section 35) + 1 smoke test (Section 17) cover the closed
+  bypass. GOVERNANCE's "deny rule consulted before any routing decision, so
+  it cannot be bypassed" sentence is again truthful.
+
+### Added — control plane
+
+**`localfirst boundary` (Feature 1).**
+- Per-request three-column view: tool output **produced**, tool output that
+  **re-entered** the model's next request, tool output **prevented** from
+  re-entering and why. Reads the existing JSONL log and projects it through
+  `buildBoundaryView`; renders a colour-coded table per request.
+- New data primitives recorded on every tool call: `bytes` (raw, unchanged),
+  `kept_bytes` (post-shaping), `prevention_reason` (`distill_clip` /
+  `redact_secrets` / `context_budget` / `null`). Backward-compatible — older
+  log entries without `kept_bytes` render as "kept fully".
+- `--last N`, `--entry N`, `--run <prefix>`, `--json`, `--scope today|all`.
+
+**Per-tool context budget — `max_output_tokens` (Feature 2).**
+- New `policy.yml` field on any tool entry. Applied as the FINAL clip after
+  any TRANSFORM/distill so the budget can further trim already-shaped
+  output. Mirrors the existing distill marker convention with
+  `[LocalFirst: ~Nt cut by context_budget (max Mt). …]` so the reason
+  is visible to the model and to `localfirst boundary`.
+- Validator (`policy validate`) errors on non-positive-integer values —
+  silently dropping a budget rule is treated as a cost gap, not a warning.
+- Hot-reload applies on the very next tool call (existing policy loader
+  contract).
+
+**`localfirst baseline` (Feature 3).**
+- Per-project-cwd behaviour baseline. `baseline learn` mines the last N days
+  of logs scoped to the current project, persists a frequency profile to
+  `~/.localfirst/baseline/<cwd-hash>.json` (paths, tool categories, shell
+  verbs, session size quantiles).
+- `baseline compare` walks the most recent session against the baseline and
+  surfaces anomalies: `sensitive_path` (HIGH, fires even on cold start;
+  hardcoded list covers `~/.ssh`, `~/.aws`, `~/.gcloud`, `~/.azure`,
+  `~/.gnupg`, `*/credentials`, `*/secrets`, `*.env*`, `/etc/shadow|passwd|
+  sudoers`, `*/private/*`), `new_path` / `new_tool` (medium), `new_shell_
+  verb` (HIGH for `curl`, `wget`, `ssh`, `rm`, `sudo`, `npm`, `pip`, …),
+  `volume_spike` (>1.5× p95 baseline session size).
+- Baselines are local-only, no export, no telemetry.
+
+**`localfirst replay --attribute` (Feature 4).**
+- Per-run token attribution. Answers "who ate the context window?" without
+  persisting request bodies. Three classes: **tool contributions** (Σ
+  kept_bytes / 4, approximate, marked '~'), **cache reuse** (Σ cache_read_
+  tokens, exact, Anthropic-reported), **residual** (Σ input_tokens − tool_
+  kept_total — covers system prompt + user messages + cross-request tool_
+  result carry-over). Plus a four-line "prevented from re-entering"
+  breakdown derived from existing JSONL fields.
+- Counterfactual line shows what the run would have cost without LocalFirst
+  shaping.
+
+### Added — self-verification
+
+**`localfirst selftest`.**
+- Eight in-process governance checks on a scratch policy and scratch audit
+  chain in `os.tmpdir()`. Never touches the user's `~/.localfirst`. Covers
+  read_file deny, shell_bash/shell_powershell deny (the new bypass class),
+  allow-path positive, secret BLOCK under strict mode, redact-secrets
+  TRANSFORM, audit-chain verify, chain shape sanity (≥3 BLOCK + ≥1
+  TRANSFORM). Single command, exit 0 on green / 1 on red.
+
+### Changed — public framing
+
+- **README headline.** "Govern, audit, prove" → "Control what re-enters the
+  model after every tool call." "What it does" rewritten as five sections in
+  the new priority order: per-tool decision → local execution → shape &
+  redact → cross-protocol → audit as evidence layer. "How it works" rewritten
+  so the control point comes first; legacy v0.5-era proxy/cache framing is
+  gone.
+- **Cross-platform quickstart.** README quickstart no longer Windows-only;
+  PowerShell and bash/zsh `register` flows shown side by side.
+- **`GOVERNANCE.md` opening** aligned to the same framing.
+- **`package.json` description** rewritten so npmjs.com search and
+  `npm info` carry the new positioning.
+- **Modes section** replaced by "Overrides" — clarifies that `--preset
+  strict|off` are session-level overrides on top of `policy.yml`, not the
+  durable surface.
+
+### Removed
+
+- **`src/localrouter.js`** (Ollama / local-LLM routing). Undocumented in the
+  v0.7.0 reframe, ran a 1.5 s probe on every request even when no Ollama
+  daemon was present, produced confusing `qwen2.5:7b` entries in `localfirst
+  inspect`. The product story is now "control what re-enters the model after
+  a tool call" — outbound prompt redirection is a separate problem and out
+  of scope. If demand returns, reintroduce behind an opt-in flag with
+  explicit policy.yml syntax.
+- **`RELEASE.md`** — stale v0.6.2 checklist that contradicted current state.
+
+### Notes
+
+- **VERSION constant** in `src/index.js` synced to `package.json` (was
+  `0.6.2` while `package.json` already said `0.7.0` — the banner lied).
+  Adds a one-line value to the `--version` output and the session banner.
+- **Tests.** 1923 → 2194 main (+271), 87 → 113 smoke (+26), 8/8 selftest
+  scenarios, `npm run check-validation` PASS. Live-validated on the
+  maintainer's Windows 11 workstation 2026-05-11.
+- **Audit chain.** Multi-writer caveat from v0.6.5 still applies — running
+  the Claude Code proxy and the MCP server simultaneously against the same
+  `~/.localfirst/pipeline-events.jsonl` will break the SHA-256 chain. The
+  maintainer rotated the broken local chain on 2026-05-11; a hardening pass
+  (PID file or named-pipe single-writer guard) is queued for a later release.
+
 ## [0.7.0] — 2026-05-10  License: MIT → Apache-2.0
 
 A licensing-only release. **No functional changes**, no new features, no

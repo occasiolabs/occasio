@@ -48,7 +48,7 @@ const { runInspectCli }   = require('./inspect');
 const { runAuditCli }     = require('./audit/verifier');
 const { budgetStatus, fmtBudget, BUDGET_EXCEEDED_EVENT } = require('./budget');
 
-const VERSION = '0.7.0';
+const VERSION = '0.7.1';
 const LOG_SCHEMA_VERSION = 2;
 let PORT = 8081;
 const ANTHROPIC_REAL = 'api.anthropic.com';
