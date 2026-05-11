@@ -9311,6 +9311,208 @@ console.log('\n3. runLocally');
     }
   }
 
+  // ── 43. Outbound deny_paths enforcement (path-2 defense) ─────────────────
+  // Strip pre-baked tool_result content from outbound bodies when the
+  // source file path is under deny_paths. Regression coverage for the
+  // Claude Code auto-context bypass discovered live by `localfirst
+  // harness --scenario deny-read`.
+  {
+    console.log('\n43. Outbound deny_paths enforcement (path-2)');
+    const {
+      enforceOutboundDenyPaths,
+      buildToolUsePathMap,
+      pathIsDenied,
+      STRIP_MARKER,
+    } = require('./src/outbound-policy');
+    const fsM    = require('fs');
+    const osM    = require('os');
+    const pathM  = require('path');
+
+    // Set up a scratch denied dir + file
+    const tmp = fsM.mkdtempSync(pathM.join(osM.tmpdir(), 'lf-outbound-'));
+    const denyDir = pathM.join(tmp, 'notes');
+    fsM.mkdirSync(denyDir);
+    const denyFile = pathM.join(denyDir, 'plans.md');
+    const allowFile = pathM.join(tmp, 'README.md');
+    fsM.writeFileSync(denyFile, 'TOP-SECRET-MARKER\n');
+    fsM.writeFileSync(allowFile, '# readme\n');
+    const denyPolicy = { deny_paths: [denyDir] };
+
+    // pathIsDenied — primitive
+    assert('pathIsDenied: denied file under denyDir → path-denied',
+      pathIsDenied(denyFile, denyPolicy) === 'path-denied');
+    assert('pathIsDenied: file outside denyDir → null',
+      pathIsDenied(allowFile, denyPolicy) === null);
+    assert('pathIsDenied: null input → null',
+      pathIsDenied(null, denyPolicy) === null);
+    assert('pathIsDenied: empty policy → null',
+      pathIsDenied(denyFile, {}) === null);
+    assert('pathIsDenied: allow_paths positive, file outside → path-not-allowed',
+      pathIsDenied('/tmp/elsewhere', { allow_paths: [tmp] }) === 'path-not-allowed');
+
+    // buildToolUsePathMap — covers Read, find_files, grep, shell
+    {
+      const messages = [
+        { role: 'assistant', content: [
+          { type: 'tool_use', id: 'tu_r', name: 'Read', input: { file_path: denyFile } },
+        ] },
+        { role: 'assistant', content: [
+          { type: 'tool_use', id: 'tu_g', name: 'Glob', input: { path: denyDir } },
+        ] },
+        { role: 'assistant', content: [
+          { type: 'tool_use', id: 'tu_b', name: 'Bash', input: { command: `cat ${denyFile}` } },
+        ] },
+        { role: 'assistant', content: [
+          { type: 'tool_use', id: 'tu_skip', name: 'Edit', input: { file_path: denyFile } },
+        ] },
+      ];
+      const map = buildToolUsePathMap(messages);
+      assert('toolUsePathMap: Read recorded',         map.has('tu_r'));
+      assert('toolUsePathMap: Glob recorded',         map.has('tu_g'));
+      assert('toolUsePathMap: Bash recorded',         map.has('tu_b'));
+      assert('toolUsePathMap: Edit NOT recorded',     !map.has('tu_skip'));
+      assert('toolUsePathMap: Bash path is denyFile',
+        map.get('tu_b').paths.includes(denyFile));
+    }
+
+    // enforceOutboundDenyPaths — Read of denied path is stripped
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: denyFile } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'TOP-SECRET-MARKER\n' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundDenyPaths(body, denyPolicy);
+      assert('outbound deny: 1 strip',                r.strips.length === 1);
+      assert('outbound deny: strip carries path',     r.strips[0].path.endsWith('plans.md'));
+      assert('outbound deny: strip carries reason',   r.strips[0].reason === 'path-denied');
+      // tool_result content replaced with marker
+      const tr = r.messages[1].content[0];
+      assert('outbound deny: content replaced',       tr.content === STRIP_MARKER);
+      assert('outbound deny: marker present',         tr.content.includes('LocalFirst'));
+      assert('outbound deny: secret bytes gone',      !tr.content.includes('TOP-SECRET-MARKER'));
+    }
+
+    // enforceOutboundDenyPaths — allowed Read passes through unchanged
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: allowFile } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: '# readme\n' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundDenyPaths(body, denyPolicy);
+      assert('outbound deny: allowed path → 0 strips', r.strips.length === 0);
+      assert('outbound deny: content preserved',       r.messages[1].content[0].content === '# readme\n');
+    }
+
+    // enforceOutboundDenyPaths — Bash auto-context (cat denied-file) is stripped
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tub', name: 'Bash',
+              input: { command: `cat ${denyFile}` } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tub', content: 'TOP-SECRET-MARKER\n' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundDenyPaths(body, denyPolicy);
+      assert('outbound deny via shell: stripped',     r.strips.length === 1);
+      assert('outbound deny via shell: marker absent',
+        !r.messages[1].content[0].content.includes('TOP-SECRET-MARKER'));
+    }
+
+    // enforceOutboundDenyPaths — empty policy is a no-op
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: denyFile } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'TOP-SECRET-MARKER\n' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundDenyPaths(body, {});
+      assert('outbound deny: no policy → no strip',   r.strips.length === 0);
+      assert('outbound deny: no policy → content preserved',
+        r.messages[1].content[0].content === 'TOP-SECRET-MARKER\n');
+    }
+
+    // allow_paths boundary case: outside allow → strip
+    {
+      const otherFile = pathM.join(tmp, 'elsewhere.txt');
+      fsM.writeFileSync(otherFile, 'OTHER-MARKER\n');
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: otherFile } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'OTHER-MARKER\n' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundDenyPaths(body, { allow_paths: [allowFile] });
+      assert('outbound: allow_paths boundary triggers strip',
+        r.strips.length === 1 && r.strips[0].reason === 'path-not-allowed');
+    }
+
+    // Multi-tool_result for same id — both stripped
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: denyFile } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'TOP-SECRET-MARKER\n' },
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'TOP-SECRET-MARKER-again\n' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundDenyPaths(body, denyPolicy);
+      assert('outbound multi-tr: 2 strips',           r.strips.length === 2);
+      assert('outbound multi-tr: both content gone',
+        r.messages[1].content.every(b => !String(b.content || '').includes('TOP-SECRET')));
+    }
+
+    // Edit/Write tool_use blocks (non-read) are not stripped — they aren't
+    // auto-context reads, they are model-emitted actions handled elsewhere.
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Edit',
+              input: { file_path: denyFile, old_string: 'a', new_string: 'b' } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'edit ok' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundDenyPaths(body, denyPolicy);
+      assert('outbound: Edit tool not stripped (out of scope for path-2)',
+        r.strips.length === 0);
+    }
+
+    // Cleanup
+    try { fsM.rmSync(tmp, { recursive: true, force: true }); } catch {}
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   const total = passed + failed;

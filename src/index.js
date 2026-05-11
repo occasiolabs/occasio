@@ -1111,6 +1111,58 @@ const server = http.createServer((req, res) => {
             }
           }
         }
+        // ── Path-2 defense: enforce deny_paths against pre-baked auto-context
+        // The tool-call gate in src/policy/engine.js catches deny_paths
+        // violations in `tool_use` blocks the cloud model EMITS. But
+        // Claude Code (and similar agent runtimes) inject synthetic
+        // `tool_use Read` + `tool_result <file content>` pairs into the
+        // OUTBOUND body as agentic context before the model has had a
+        // chance to call any tool. Those reach the model unless we strip
+        // them here. STRIP semantics (not request-BLOCK): mirror the
+        // existing redact-secrets TRANSFORM convention so the agent sees
+        // structural continuity but the bytes never reach the model.
+        const { enforceOutboundDenyPaths } = require('./outbound-policy');
+        const policyForOutbound = require('./policy/loader').load();
+        const outboundResult = enforceOutboundDenyPaths(b, policyForOutbound);
+        if (outboundResult.strips.length > 0) {
+          b.messages = outboundResult.messages;
+          // Emit one BLOCK audit row per stripped tool_result, mirroring the
+          // tool-call-time gate's shape so `localfirst report` aggregates
+          // both paths uniformly under blocked_accesses[].
+          const { makeBoundaryEvent } = require('./core/boundary-event');
+          for (const strip of outboundResult.strips) {
+            const evt = makeBoundaryEvent({
+              direction: 'outbound', kind: 'tool_call',
+              agent: 'claude-code', protocol: 'anthropic-http',
+              sessionId: undefined, runId: currentRunId,
+              toolName: /^(Read|read_file)$/i.test(strip.toolName) ? 'read_file'
+                      : /^(Glob|find_files)$/i.test(strip.toolName) ? 'find_files'
+                      : /^(Grep|grep)$/i.test(strip.toolName)       ? 'grep'
+                      : /^(Bash|shell_bash)$/i.test(strip.toolName)  ? 'shell_bash'
+                      : /^(PowerShell|shell_powershell)$/i.test(strip.toolName) ? 'shell_powershell'
+                      : strip.toolName,
+              toolInput: { file_path: strip.path, path: strip.path },
+            });
+            const status = sessionAuditor.record(
+              evt,
+              { action: 'BLOCK', reason: 'outbound-context-' + strip.reason,
+                policySource: policyForOutbound.deny_paths?.length ? 'user' : 'default' },
+              { blocked: true },
+            );
+            if (status && status.ok === false) {
+              const { AuditWriteError } = require('./audit/errors');
+              throw new AuditWriteError(status.error, status.droppedRow);
+            }
+          }
+          if (LIVE_VERBOSE) {
+            const tsOut = new Date().toTimeString().slice(0, 8);
+            const head  = outboundResult.strips.slice(0, 2).map(s => path.basename(s.path)).join(', ');
+            const more  = outboundResult.strips.length > 2 ? ` +${outboundResult.strips.length - 2} more` : '';
+            process.stderr.write(`${col.d(tsOut)} ${col.r('🛑 outbound-deny')} ${col.d(`stripped: ${head}${more}`)}\n`);
+          }
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         // LAO: trim low-relevance file tool_results when context is large (>20k tokens)
         const lao = await optimizeContext(b, process.cwd());
         if (lao.tokensSaved > 0) {
