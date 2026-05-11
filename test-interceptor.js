@@ -8947,7 +8947,7 @@ console.log('\n3. runLocally');
       assert('prepareWorkspace: secret has marker',
         secretText.includes(ctx.marker));
       assert('prepareWorkspace: marker is the deterministic shape',
-        ctx.marker.startsWith('LF-HARNESS-MARKER-'));
+        ctx.marker.startsWith('LF-MARKER-'));
       cleanupWorkspace(ctx);
       assert('cleanupWorkspace: workspace removed',
         !fsM.existsSync(ctx.workspace));
