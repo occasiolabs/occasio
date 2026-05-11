@@ -602,6 +602,7 @@ async function run() {
   console.log('\n' + '─'.repeat(40));
   if (failed === 0) {
     console.log(`✓ All ${passed} smoke tests passed`);
+    process.exit(0);
   } else {
     console.error(`✗ ${failed} of ${passed + failed} smoke tests FAILED`);
     process.exit(1);

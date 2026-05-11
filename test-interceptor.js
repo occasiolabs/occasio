@@ -9316,6 +9316,12 @@ console.log('\n3. runLocally');
   const total = passed + failed;
   if (failed === 0) {
     console.log(`✓ All ${total} tests passed\n`);
+    // Explicit exit: belt-and-braces against any dangling handle (timers,
+    // sockets, watchers) accidentally introduced by a future module
+    // imported here. Node would otherwise wait for the event loop to drain
+    // before terminating, which makes the run appear to hang after the
+    // success line. Exit cleanly so the wrapper / CI sees us finish.
+    process.exit(0);
   } else {
     console.error(`✗ ${failed}/${total} tests failed\n`);
     process.exit(1);

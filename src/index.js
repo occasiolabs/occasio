@@ -1431,7 +1431,25 @@ server.listen(PORT, '127.0.0.1', () => {
   // On Windows, npm installs binaries as .cmd wrappers (claude.cmd).
   // spawn() without shell:true calls CreateProcess directly, which won't
   // execute .cmd files — claude would silently fail to start.
-  const claude = spawn('claude', claudeArgs, {
+  //
+  // shell:true on Windows joins the args array with spaces and runs the
+  // result through `cmd.exe /d /s /c "<line>"`. Node's auto-quoting is
+  // unreliable for args containing spaces (the prompt passed via --print
+  // gets truncated at the first space). Build the command line ourselves
+  // with explicit quoting and pass a single pre-quoted string when
+  // shell:true is in play.
+  let cmdLine, spawnArgs;
+  if (process.platform === 'win32') {
+    const quote = (a) => /[\s"^&|<>]/.test(a)
+      ? `"${String(a).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`
+      : String(a);
+    cmdLine   = ['claude', ...claudeArgs.map(quote)].join(' ');
+    spawnArgs = [];
+  } else {
+    cmdLine   = 'claude';
+    spawnArgs = claudeArgs;
+  }
+  const claude = spawn(cmdLine, spawnArgs, {
     env,
     stdio: ['inherit', 'inherit', 'inherit'],
     shell: process.platform === 'win32',
