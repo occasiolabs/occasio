@@ -8932,6 +8932,7 @@ console.log('\n3. runLocally');
     assert('harness: SCENARIOS contains symlink-bypass',     !!SCENARIOS['symlink-bypass']);
     assert('harness: SCENARIOS contains redact-secrets-live', !!SCENARIOS['redact-secrets-live']);
     assert('harness: SCENARIOS contains context-budget-live', !!SCENARIOS['context-budget-live']);
+    assert('harness: SCENARIOS contains plain-text-context',  !!SCENARIOS['plain-text-context']);
 
     // prepareWorkspace creates a usable scratch
     {
@@ -9667,6 +9668,268 @@ console.log('\n3. runLocally');
       assert('outbound secret: null body → no redactions',  r1.redactions.length === 0);
       const r2 = enforceOutboundSecretRedaction({}, { redact_secrets_in_tool_results: true });
       assert('outbound secret: empty body → no redactions', r2.redactions.length === 0);
+    }
+  }
+
+  // ── 45. Outbound shaping (distill-output + max_output_tokens) path-2 ─────
+  // Final member of the path-1 ↔ path-2 defense-symmetry trio: shaping at
+  // the outbound boundary so pre-baked auto-context tool_result content
+  // gets the same distill + budget treatment as path-1.
+  {
+    console.log('\n45. Outbound shaping (path-2)');
+    const { enforceOutboundShaping, canonicalToolName } = require('./src/outbound-policy');
+
+    // canonicalToolName helper
+    assert('shape: canonical Read → read_file',       canonicalToolName('Read') === 'read_file');
+    assert('shape: canonical read_file → read_file',  canonicalToolName('read_file') === 'read_file');
+    assert('shape: canonical Bash → shell_bash',      canonicalToolName('Bash') === 'shell_bash');
+    assert('shape: canonical Grep → grep',            canonicalToolName('Grep') === 'grep');
+    assert('shape: canonical unknown → null',         canonicalToolName('Frobnicate') === null);
+
+    // Helper to build a body with a tool_use Read + huge tool_result
+    const bodyWithGrep = (content) => ({
+      messages: [
+        { role: 'assistant', content: [
+          { type: 'tool_use', id: 'tu1', name: 'Grep',
+            input: { pattern: 'lorem', path: '/src' } },
+        ] },
+        { role: 'user', content: [
+          { type: 'tool_result', tool_use_id: 'tu1', content },
+        ] },
+      ],
+    });
+    const bodyWithRead = (content, filePath = '/p/big.txt') => ({
+      messages: [
+        { role: 'assistant', content: [
+          { type: 'tool_use', id: 'tu1', name: 'Read',
+            input: { file_path: filePath } },
+        ] },
+        { role: 'user', content: [
+          { type: 'tool_result', tool_use_id: 'tu1', content },
+        ] },
+      ],
+    });
+
+    // 1. No shaping configured → no-op
+    {
+      const body = bodyWithGrep('line\n'.repeat(500));
+      const r = enforceOutboundShaping(body, {});
+      assert('shape: empty policy → no-op',            r.shapings.length === 0);
+      assert('shape: empty policy → content preserved',
+        r.messages[1].content[0].content === 'line\n'.repeat(500));
+    }
+
+    // 2. distill-output via per-tool TRANSFORM
+    {
+      const body = bodyWithGrep('match line\n'.repeat(500));
+      const r = enforceOutboundShaping(body, {
+        tools: { grep: { action: 'TRANSFORM', transform: 'distill-output' } },
+      });
+      assert('shape: per-tool distill → fired',         r.shapings.length === 1);
+      assert('shape: per-tool distill → reason includes distill',
+        r.shapings[0].reasons.includes('distill-output'));
+      assert('shape: distilled content shorter',
+        r.messages[1].content[0].content.length < ('match line\n'.repeat(500)).length);
+    }
+
+    // 3. max_output_tokens caps the result
+    {
+      const body = bodyWithRead('X'.repeat(10000));
+      const r = enforceOutboundShaping(body, {
+        tools: { read_file: { action: 'LOCAL', max_output_tokens: 50 } },
+      });
+      assert('shape: max_output_tokens → fired',        r.shapings.length === 1);
+      assert('shape: max_output_tokens reason',
+        r.shapings[0].reasons.includes('context-budget'));
+      assert('shape: clipped content much shorter',
+        r.messages[1].content[0].content.length < 1000);
+      assert('shape: budget marker present',
+        /context_budget/.test(r.messages[1].content[0].content));
+    }
+
+    // 4. distill + max_output_tokens chained
+    {
+      const body = bodyWithGrep('match line\n'.repeat(500));
+      const r = enforceOutboundShaping(body, {
+        tools: { grep: { action: 'TRANSFORM', transform: 'distill-output', max_output_tokens: 20 } },
+      });
+      assert('shape: chain → both reasons',
+        r.shapings.length === 1 &&
+        r.shapings[0].reasons.includes('distill-output') &&
+        r.shapings[0].reasons.includes('context-budget'));
+      assert('shape: chain final content very small',
+        r.messages[1].content[0].content.length < 200);
+    }
+
+    // 5. Global distill_tool_results flag
+    {
+      const body = bodyWithGrep('match line\n'.repeat(500));
+      const r = enforceOutboundShaping(body, { distill_tool_results: true });
+      assert('shape: global distill flag → fired',     r.shapings.length === 1);
+    }
+
+    // 6. Clean small output → no-op even with shaping configured
+    {
+      const body = bodyWithRead('tiny');
+      const r = enforceOutboundShaping(body, {
+        tools: { read_file: { action: 'LOCAL', max_output_tokens: 1000 } },
+      });
+      assert('shape: small content → no-op',           r.shapings.length === 0);
+    }
+
+    // 7. Untied tool_result (no matching tool_use_id) → no-op
+    {
+      const body = {
+        messages: [
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'orphan',
+              content: 'X'.repeat(10000) },
+          ] },
+        ],
+      };
+      const r = enforceOutboundShaping(body, {
+        tools: { read_file: { action: 'LOCAL', max_output_tokens: 50 } },
+      });
+      assert('shape: untied tool_result → no-op',      r.shapings.length === 0);
+    }
+
+    // 8. Edit tool_use (not in shape-eligible set) → no-op
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Edit',
+              input: { file_path: '/p/x', old_string: 'a', new_string: 'b' } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'X'.repeat(10000) },
+          ] },
+        ],
+      };
+      const r = enforceOutboundShaping(body, {
+        tools: { read_file: { action: 'LOCAL', max_output_tokens: 50 } },
+      });
+      assert('shape: Edit tool_use → no canonical match → no-op',
+        r.shapings.length === 0);
+    }
+
+    // 9. savedTokens accounting
+    {
+      const body = bodyWithRead('X'.repeat(10000));
+      const r = enforceOutboundShaping(body, {
+        tools: { read_file: { action: 'LOCAL', max_output_tokens: 50 } },
+      });
+      assert('shape: savedTokens > 0',                  r.shapings[0].savedTokens > 0);
+    }
+
+    // 10. Multiple shaped tool_results, each independent
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: '/a.log' } },
+            { type: 'tool_use', id: 'tu2', name: 'Read', input: { file_path: '/b.log' } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'X'.repeat(10000) },
+            { type: 'tool_result', tool_use_id: 'tu2', content: 'short' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundShaping(body, {
+        tools: { read_file: { action: 'LOCAL', max_output_tokens: 50 } },
+      });
+      assert('shape: 2 tool_results, 1 shaped',         r.shapings.length === 1);
+      assert('shape: large tu1 clipped',
+        r.messages[1].content[0].content.length < r.messages[1].content[0].content.length + 1 &&
+        r.messages[1].content[0].content.length < 1000);
+      assert('shape: small tu2 unchanged',
+        r.messages[1].content[1].content === 'short');
+    }
+  }
+
+  // ── 46. Harness audit-chain verifier in verifyScenario ───────────────────
+  // Every harness pass must also produce a valid hash chain. A defended
+  // scenario with a broken chain is a governance failure.
+  {
+    console.log('\n46. Harness audit-chain verifier');
+    const fsM = require('fs');
+    const pathM = require('path');
+    const { verifyScenario, prepareWorkspace, cleanupWorkspace } = require('./src/harness');
+
+    // Empty audit chain → chain assertion passes (nothing to verify)
+    {
+      const ctx = prepareWorkspace('deny-read', { runId: 'audit-chain-1' });
+      // Don't write any rows. The marker assertion will pass because
+      // stdout is empty.
+      const v = verifyScenario('deny-read', ctx,
+        { exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const chainAssertion = v.assertions.find(a => /audit chain intact/.test(a.name));
+      assert('chain verifier: empty chain → assertion passes',
+        chainAssertion && chainAssertion.passed === true);
+      assert('chain verifier: result has auditChainOk=true',  v.auditChainOk === true);
+      cleanupWorkspace(ctx);
+    }
+
+    // Valid hash-chained rows → chain assertion passes
+    {
+      const { createAuditor } = require('./src/audit/jsonl-auditor');
+      const { makeBoundaryEvent } = require('./src/core/boundary-event');
+      const ctx = prepareWorkspace('deny-read', { runId: 'audit-chain-2' });
+      const auditor = createAuditor(ctx.auditPath);
+      // Write a synthetic BLOCK row through the real auditor so the
+      // chain is correctly formed.
+      auditor.record(
+        makeBoundaryEvent({
+          direction: 'inbound', kind: 'tool_call',
+          agent: 'claude-code', protocol: 'anthropic-http',
+          toolName: 'read_file', toolInput: { file_path: ctx.secretPath },
+        }),
+        { action: 'BLOCK', reason: 'path-denied', policySource: 'user' },
+        { blocked: true, response: '(blocked by policy)' },
+      );
+      const v = verifyScenario('deny-read', ctx,
+        { exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      assert('chain verifier: valid chain → auditChainOk=true', v.auditChainOk === true);
+      const chainAssertion = v.assertions.find(a => /audit chain intact/.test(a.name));
+      assert('chain verifier: valid chain → assertion passes',
+        chainAssertion && chainAssertion.passed === true);
+      cleanupWorkspace(ctx);
+    }
+
+    // Tampered chain → assertion fails
+    {
+      const { createAuditor } = require('./src/audit/jsonl-auditor');
+      const { makeBoundaryEvent } = require('./src/core/boundary-event');
+      const ctx = prepareWorkspace('deny-read', { runId: 'audit-chain-3' });
+      const auditor = createAuditor(ctx.auditPath);
+      auditor.record(
+        makeBoundaryEvent({
+          direction: 'inbound', kind: 'tool_call',
+          agent: 'claude-code', protocol: 'anthropic-http',
+          toolName: 'read_file', toolInput: { file_path: ctx.secretPath },
+        }),
+        { action: 'BLOCK', reason: 'path-denied', policySource: 'user' },
+        { blocked: true, response: '(blocked by policy)' },
+      );
+      // Append a row with a wrong prev_hash to break the chain
+      fsM.appendFileSync(ctx.auditPath,
+        JSON.stringify({
+          ts: '2026-05-11T17:00:00.000Z',
+          event_id: 'tampered',
+          tool_name: 'read_file', action: 'LOCAL', reason: 'ok',
+          prev_hash: '0'.repeat(64),  // wrong
+          hash: 'a'.repeat(64),       // wrong
+        }) + '\n');
+      const v = verifyScenario('deny-read', ctx,
+        { exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      assert('chain verifier: tampered chain → auditChainOk=false',
+        v.auditChainOk === false);
+      const chainAssertion = v.assertions.find(a => /audit chain intact/.test(a.name));
+      assert('chain verifier: tampered chain → assertion fails',
+        chainAssertion && chainAssertion.passed === false);
+      assert('chain verifier: tampered chain → result.passed=false', v.passed === false);
+      cleanupWorkspace(ctx);
     }
   }
 

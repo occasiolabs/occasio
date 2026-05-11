@@ -116,8 +116,15 @@ function buildToolUsePathMap(messages) {
         // First path is the primary; the rest are auxiliary for shell
         // chains. Store as a single record keyed by tool_use_id; if the
         // primary is denied, we strip; if any of the aux paths is denied
-        // we also strip.
-        map.set(block.id, { paths: filePaths, toolName: name });
+        // we also strip. For shell tools, also carry the raw command so
+        // the path-2 shaping gate can pass it to distill() for proper
+        // classification.
+        const rec = { paths: filePaths, toolName: name };
+        if (/^(Bash|PowerShell|shell_bash|shell_powershell)$/i.test(name) &&
+            typeof inp.command === 'string') {
+          rec.command = inp.command;
+        }
+        map.set(block.id, rec);
       }
     }
   }
@@ -278,12 +285,149 @@ function enforceOutboundSecretRedaction(reqBody, policy) {
   return { messages: newMessages, redactions };
 }
 
+// ── Path-2 output shaping: distill-output + max_output_tokens ───────────────
+//
+// Symmetric to path-1's TRANSFORM distill-output and policy.tools[*]
+// .max_output_tokens. At path-1, both shaping steps run on the result of a
+// tool_use the cloud model emits, just before the result re-enters the
+// model context. Path-2 covers the same gap as deny_paths and secret
+// redaction: when an agent runtime injects pre-baked tool_use + tool_result
+// pairs into the OUTBOUND body as agentic context, those tool_results
+// never trigger path-1 because no model-initiated call happened — the
+// huge output reaches the model unless this gate clips.
+//
+// Two shaping steps, applied in path-1 order:
+//   1. distill-output  — clips noisy tool output (grep / find / git log /
+//                        test runners) to a per-tool line limit using the
+//                        shared src/distiller.js logic. Fires when the
+//                        global flag is set OR a per-tool TRANSFORM entry
+//                        names distill-output.
+//   2. max_output_tokens — hard token cap per tool category (chars/4 est.,
+//                        marked '~' in the marker line). Fires when the
+//                        per-tool entry sets max_output_tokens. Final
+//                        clip, runs after distill so the budget can
+//                        further trim an already-distilled output.
+//
+// The audit row reason names which step fired (or both as a chain).
+
+function canonicalToolName(name) {
+  if (!name) return null;
+  const s = String(name).toLowerCase();
+  if (s === 'read'   || s === 'read_file')   return 'read_file';
+  if (s === 'glob'   || s === 'find_files')  return 'find_files';
+  if (s === 'grep')                           return 'grep';
+  if (s === 'bash'   || s === 'shell_bash')   return 'shell_bash';
+  if (s === 'powershell' || s === 'shell_powershell') return 'shell_powershell';
+  return null;
+}
+
+function enforceOutboundShaping(reqBody, policy) {
+  const messages = (reqBody && reqBody.messages) || [];
+  const noChange = { messages, shapings: [] };
+
+  const globalDistill = policy && policy.distill_tool_results === true;
+  const tools         = (policy && policy.tools) || {};
+
+  // Quick exit: nothing configured anywhere
+  const anyConfigured = globalDistill || Object.keys(tools).some((k) => {
+    const t = tools[k] || {};
+    return (t.action === 'TRANSFORM' && /distill/.test(t.transform || '')) ||
+           typeof t.max_output_tokens === 'number';
+  });
+  if (!anyConfigured) return noChange;
+
+  const { distill }              = require('./distiller');
+  const { enforceContextBudget } = require('./context-budget');
+  const idToInfo = buildToolUsePathMap(messages);
+
+  const shapings = [];
+  const newMessages = messages.map((msg) => {
+    if (!Array.isArray(msg.content)) return msg;
+    let changed = false;
+    const newContent = msg.content.map((block) => {
+      if (block.type !== 'tool_result' || !block.tool_use_id) return block;
+      if (typeof block.content !== 'string' || !block.content) return block;
+      const info = idToInfo.get(block.tool_use_id);
+      if (!info) return block;
+
+      const canonical = canonicalToolName(info.toolName);
+      const toolEntry = (canonical && tools[canonical]) || null;
+
+      const perToolDistill = !!(toolEntry && toolEntry.action === 'TRANSFORM' &&
+        /distill/.test(toolEntry.transform || ''));
+      const shouldDistill  = globalDistill || perToolDistill;
+      const budgetTokens   = toolEntry && typeof toolEntry.max_output_tokens === 'number'
+        ? toolEntry.max_output_tokens : null;
+
+      if (!shouldDistill && budgetTokens === null) return block;
+
+      let working      = block.content;
+      const reasons    = [];
+      let totalSaved   = 0;
+      let distillLabel = null;
+
+      // 1. Distill (per tool's command type).
+      // distill() classifies on the first word of the cmd string (grep,
+      // find, ls, git-log, test runners). Auto-context tool_use blocks
+      // expose typed inputs (Grep has .pattern, Bash has .command) not
+      // a shell command line, so we synthesize a cmd verb that
+      // classifyCmd recognises. Read auto-context is intentionally a
+      // no-op here — Read is not in the distill rules.
+      if (shouldDistill) {
+        const tn = (info.toolName || '').toLowerCase();
+        let synthCmd = '';
+        if (tn === 'grep')                                    synthCmd = 'grep _';
+        else if (tn === 'glob' || tn === 'find_files')         synthCmd = 'find .';
+        else if (tn === 'bash' || tn === 'shell_bash')          synthCmd = info.command || 'ls';
+        else if (tn === 'powershell' || tn === 'shell_powershell') synthCmd = info.command || 'ls';
+        else                                                    synthCmd = info.toolName || '';
+        if (synthCmd) {
+          const r = distill(synthCmd, working);
+          if (r && r.distilled && r.content !== working) {
+            working      = r.content;
+            totalSaved  += r.savedTokens || 0;
+            distillLabel = r.label || null;
+            reasons.push('distill-output');
+          }
+        }
+      }
+      // 2. max_output_tokens (final clip)
+      if (budgetTokens !== null) {
+        const r = enforceContextBudget(working, budgetTokens);
+        if (r && r.clipped) {
+          working    = r.content;
+          totalSaved += r.prevented_tokens || 0;
+          reasons.push('context-budget');
+        }
+      }
+
+      if (working === block.content) return block;
+
+      shapings.push({
+        tool_use_id: block.tool_use_id,
+        path:        (info.paths && info.paths[0]) || null,
+        toolName:    info.toolName,
+        reasons,
+        savedTokens: totalSaved,
+        label:       distillLabel,
+      });
+      changed = true;
+      return { ...block, content: working };
+    });
+    return changed ? { ...msg, content: newContent } : msg;
+  });
+
+  return { messages: newMessages, shapings };
+}
+
 module.exports = {
   enforceOutboundDenyPaths,
   enforceOutboundSecretRedaction,
+  enforceOutboundShaping,
   buildToolUsePathMap,
   pathIsDenied,
   resolveInputPath,
+  canonicalToolName,
   STRIP_MARKER,
   SECRET_REDACT_REASONS,
 };

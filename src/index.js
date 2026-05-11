@@ -1121,7 +1121,7 @@ const server = http.createServer((req, res) => {
         // them here. STRIP semantics (not request-BLOCK): mirror the
         // existing redact-secrets TRANSFORM convention so the agent sees
         // structural continuity but the bytes never reach the model.
-        const { enforceOutboundDenyPaths, enforceOutboundSecretRedaction } = require('./outbound-policy');
+        const { enforceOutboundDenyPaths, enforceOutboundSecretRedaction, enforceOutboundShaping } = require('./outbound-policy');
         const policyForOutbound = require('./policy/loader').load();
         const outboundResult = enforceOutboundDenyPaths(b, policyForOutbound);
         if (outboundResult.strips.length > 0) {
@@ -1205,6 +1205,54 @@ const server = http.createServer((req, res) => {
             const tsOut = new Date().toTimeString().slice(0, 8);
             const total = secretResult.redactions.reduce((s, r) => s + r.secretsRedacted, 0);
             process.stderr.write(`${col.d(tsOut)} ${col.r('🛑 outbound-secrets')} ${col.d(`${total} secret(s) redacted in ${secretResult.redactions.length} tool_result(s)`)}\n`);
+          }
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
+        // ── Path-2 defense: outbound output shaping (distill-output +
+        // max_output_tokens). Completes the path-1 ↔ path-2 symmetry trio
+        // (deny_paths ✓ secrets ✓ shaping ✓). One TRANSFORM audit row per
+        // shaped tool_result with the steps that ran in `transform` and
+        // saved-tokens recorded.
+        const shapingResult = enforceOutboundShaping(b, policyForOutbound);
+        if (shapingResult.shapings.length > 0) {
+          b.messages = shapingResult.messages;
+          const { makeBoundaryEvent: mkBE2 } = require('./core/boundary-event');
+          for (const sh of shapingResult.shapings) {
+            const canonicalName =
+              /^(Read|read_file)$/i.test(sh.toolName || '')          ? 'read_file' :
+              /^(Glob|find_files)$/i.test(sh.toolName || '')         ? 'find_files' :
+              /^(Grep|grep)$/i.test(sh.toolName || '')               ? 'grep' :
+              /^(Bash|shell_bash)$/i.test(sh.toolName || '')          ? 'shell_bash' :
+              /^(PowerShell|shell_powershell)$/i.test(sh.toolName || '') ? 'shell_powershell' :
+              (sh.toolName || 'tool_result');
+            const transformName = sh.reasons.length > 1
+              ? sh.reasons.join('+')
+              : sh.reasons[0] || 'distill-output';
+            const evt = mkBE2({
+              direction: 'outbound', kind: 'tool_call',
+              agent: 'claude-code', protocol: 'anthropic-http',
+              sessionId: undefined, runId: currentRunId,
+              toolName: canonicalName,
+              toolInput: sh.path ? { file_path: sh.path, path: sh.path } : undefined,
+            });
+            const status = sessionAuditor.record(
+              evt,
+              { action: 'TRANSFORM',
+                reason: 'outbound-shaping-' + sh.reasons.join('+'),
+                transform: transformName,
+                policySource: 'user' },
+              { transformed: true, savedTokens: sh.savedTokens, label: sh.label },
+            );
+            if (status && status.ok === false) {
+              const { AuditWriteError } = require('./audit/errors');
+              throw new AuditWriteError(status.error, status.droppedRow);
+            }
+          }
+          if (LIVE_VERBOSE) {
+            const tsOut = new Date().toTimeString().slice(0, 8);
+            const total = shapingResult.shapings.reduce((s, r) => s + r.savedTokens, 0);
+            process.stderr.write(`${col.d(tsOut)} ${col.r('🛑 outbound-shaping')} ${col.d(`${shapingResult.shapings.length} tool_result(s) shaped, ~${total}t saved`)}\n`);
           }
         }
         // ──────────────────────────────────────────────────────────────────────
