@@ -1,0 +1,72 @@
+{
+  "version": "1.0",
+  "description": "Class centroids for local routing decisions. Edit to extend without touching code.",
+
+  "always_local": [
+    "grep", "rg", "fd", "fzf",
+    "find", "locate",
+    "ls", "eza", "exa", "lsd", "tree",
+    "cat", "bat", "less", "more", "head", "tail",
+    "wc", "nl", "sort", "uniq", "cut", "tr",
+    "echo", "pwd", "which", "whereis", "where", "type",
+    "stat", "file", "du", "df", "dir",
+    "diff", "delta",
+    "date", "uptime", "uname",
+    "ps", "top", "htop"
+  ],
+  "_removed_from_always_local": {
+    "env": "may expose API keys/tokens — output bypasses outbound secret scanner when intercepted",
+    "printenv": "same reason as env"
+  },
+
+  "never_local": [
+    "rm", "rmdir", "del",
+    "npm", "npx", "pip", "pip3", "yarn", "pnpm", "cargo", "gem", "go", "mvn", "gradle",
+    "curl", "wget", "fetch",
+    "ssh", "scp", "sftp", "rsync",
+    "docker", "kubectl", "helm", "terraform", "ansible",
+    "python", "python3", "node", "ruby", "java", "perl", "php", "lua",
+    "make", "cmake", "gcc", "g++", "clang", "rustc", "javac",
+    "touch", "mkdir", "cp", "mv",
+    "chmod", "chown", "chgrp",
+    "kill", "pkill", "killall",
+    "tee", "dd",
+    "apt", "apt-get", "brew", "pacman", "yum", "dnf"
+  ],
+
+  "git_safe_subcommands": [
+    "log", "status", "diff", "show", "blame",
+    "branch", "tag",
+    "remote",
+    "stash",
+    "describe", "shortlog", "rev-parse",
+    "ls-files", "ls-remote", "ls-tree",
+    "cat-file", "count-objects",
+    "help", "version",
+    "bisect"
+  ],
+  "_removed_from_git_safe": {
+    "config": "git config without --get/--list is a write command (user.email, core.hooksPath, etc.)"
+  },
+
+  "git_unsafe_subcommands": [
+    "push", "pull", "fetch",
+    "commit", "merge", "rebase", "cherry-pick", "am",
+    "reset", "restore", "checkout", "switch",
+    "add", "rm", "mv",
+    "clean", "gc",
+    "init", "clone",
+    "submodule", "worktree"
+  ],
+
+  "dangerous_flags": [
+    "--force", "-f",
+    "--delete", "-D",
+    "--hard",
+    "--no-verify",
+    "--allow-unrelated-histories",
+    "--squash"
+  ],
+
+  "confidence_threshold": 0.5
+}

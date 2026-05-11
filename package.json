@@ -1,0 +1,41 @@
+{
+  "name": "@localfirst-ai/localfirst",
+  "version": "0.7.0",
+  "description": "LocalFirst — control what re-enters the model after every AI tool call. Per-tool decision (LOCAL/PASS/BLOCK/TRANSFORM) driven by one policy.yml, tamper-evident audit chain, same engine for Claude Code and MCP.",
+  "main": "src/index.js",
+  "files": [
+    "bin/",
+    "src/",
+    "schemas/",
+    "policy-templates/",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "node test-interceptor.js",
+    "smoke": "node test-smoke.js",
+    "restart-check": "node scripts/restart-check.js",
+    "check-validation": "node scripts/check-validation.js",
+    "start": "node bin/localfirst.js"
+  },
+  "keywords": [
+    "claude", "claude-code", "cline", "anthropic", "proxy", "ai-agents",
+    "governance", "policy", "audit", "privacy", "secrets", "cost", "local"
+  ],
+  "bin": {
+    "localfirst": "bin/localfirst.js",
+    "lf": "bin/localfirst.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/localfirst-ai/localfirst.git"
+  },
+  "homepage": "https://github.com/localfirst-ai/localfirst#readme",
+  "bugs": {
+    "url": "https://github.com/localfirst-ai/localfirst/issues"
+  },
+  "license": "Apache-2.0"
+}

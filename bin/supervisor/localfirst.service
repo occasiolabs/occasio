@@ -1,0 +1,18 @@
+[Unit]
+Description=LocalFirst — local AI-agent governance proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env localfirst start
+Restart=always
+RestartSec=2
+# v0.6.4: the proxy aborts with exit code 1 if it cannot append to its
+# audit log. Restart=always plus a short RestartSec lets the chain resume
+# as soon as the underlying I/O issue clears.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

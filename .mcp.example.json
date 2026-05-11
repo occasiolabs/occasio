@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lf": {
+      "command": "node",
+      "args": ["./bin/localfirst-mcp.js"]
+    }
+  }
+}

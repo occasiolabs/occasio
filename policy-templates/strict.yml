@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://localfirst.ai/schemas/localfirst-policy.schema.json
+# LocalFirst policy — strict template
+#
+# Locked-down posture for deployments where the agent should only ever
+# touch a small, declared set of project paths and never see credentials
+# of any kind.
+#
+# Before activating: review the allow_paths list — the default below
+# allows ONLY ~/projects. Anything outside that prefix is blocked, even
+# read_file calls. On Windows, paths are matched case-insensitively;
+# both POSIX (~/.ssh) and Windows-style (C:\Users\…\.ssh) deny entries
+# are honoured.
+#
+#   localfirst policy show       — confirm the active policy
+#   localfirst policy validate   — lint this file
+version: 1
+
+# ── Global flags ──────────────────────────────────────────────────────────────
+block_secrets_in_tool_results: true
+redact_secrets_in_tool_results: false
+distill_tool_results: true
+block_requests_over_budget: true
+
+# ── Path-based access control ─────────────────────────────────────────────────
+# Deny common credential / config locations. The list intentionally covers
+# the same prefixes on both Linux/macOS (~) and Windows (C:\Users\<you>\…),
+# so the same template works across the team without per-platform edits.
+deny_paths:
+  - ~/.ssh
+  - ~/.aws
+  - ~/.config/gcloud
+  - ~/.gnupg
+  - ~/.kube
+  - ~/.docker
+  - ~/.netrc
+
+# Allow ONLY this prefix. Anything outside is blocked. Widen this for your
+# project layout — for example, add ~/work, ~/code, or specific repos.
+# An empty allow_paths list disables the allowlist (deny_paths still applies).
+allow_paths:
+  - ~/projects
+
+# ── Custom deny patterns ──────────────────────────────────────────────────────
+# Conservative additions to the built-in scanner. The patterns below cover
+# common internal token / ticket shapes that a generic secret scanner would
+# miss. Extend per-org as needed.
+deny_patterns:
+  internal-jwt:    "eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"
+  internal-ticket: "INC-[0-9]{6,}"

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://localfirst.ai/schemas/localfirst-policy.schema.json",
+  "title": "LocalFirst Policy",
+  "description": "Schema for ~/.localfirst/policy.yml — the single document that governs how LocalFirst handles tool calls and tool results. Authoritative reference: src/policy/loader.js (parser) and src/policy/validate.js (linter). Stable across v0.6.x.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Policy schema version. Currently 1.",
+      "const": 1
+    },
+    "block_secrets_in_tool_results": {
+      "type": "boolean",
+      "description": "Block the request when a tool result contains a recognised secret pattern. The model never sees the secret; a synthetic refusal is returned instead."
+    },
+    "redact_secrets_in_tool_results": {
+      "type": "boolean",
+      "description": "Replace recognised secrets with [REDACTED] in-place rather than blocking outright. Mutually intended with block_secrets_in_tool_results=false."
+    },
+    "distill_tool_results": {
+      "type": "boolean",
+      "description": "Distil long tool outputs (file reads, grep results) before sending to the model. Reduces token cost; the full raw output is still saved locally."
+    },
+    "block_requests_over_budget": {
+      "type": "boolean",
+      "description": "Block outbound requests once the session spend reaches the --budget limit. Returns HTTP 402 without invoking the model."
+    },
+    "tools": {
+      "type": "object",
+      "description": "Per-tool routing. When present, REPLACES the built-in defaults entirely — every tool not listed here will PASS to the cloud. Use sparingly; the defaults are usually what you want.",
+      "additionalProperties": {
+        "$ref": "#/$defs/toolEntry"
+      }
+    },
+    "deny_paths": {
+      "type": "array",
+      "description": "Filesystem prefixes denied for read_file, find_files, and grep. Comparisons are on the symlink-resolved absolute path; case-insensitive on Windows. ~ is expanded to the user's home directory.",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "allow_paths": {
+      "type": "array",
+      "description": "Filesystem prefixes allowed for read_file, find_files, and grep. When non-empty, access is restricted to these prefixes; anything outside is blocked. Empty (the default) means no allowlist.",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "deny_patterns": {
+      "type": "object",
+      "description": "Custom regex patterns that, when matched in a tool result, are treated like secret-scanner hits — blocked or redacted depending on the global flags. Each entry is label: \"regex-string\".",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "description": "JavaScript-flavored regular expression source (without leading/trailing slashes)."
+      }
+    }
+  },
+  "$defs": {
+    "toolEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["PASS", "LOCAL", "TRANSFORM"],
+          "description": "What the dispatcher does with this tool call. PASS forwards to the cloud; LOCAL executes on the user's machine; TRANSFORM executes locally then applies a shaping step."
+        },
+        "transform": {
+          "type": "string",
+          "description": "Required when action is TRANSFORM. Built-in values: redact-secrets, distill-output. Other names are forward-compatible but only execute if the dispatcher knows about them.",
+          "minLength": 1
+        },
+        "executor": {
+          "type": "string",
+          "description": "Optional executor name. Default: native.",
+          "minLength": 1
+        },
+        "classifier": {
+          "type": "string",
+          "description": "Optional input-validation classifier. Built-in values: read-input-validator, glob-input-validator, grep-input-validator, todo-write-validator, todo-read-validator, bash-allowlist, powershell-allowlist.",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional reason string surfaced in audit rows when this entry's action fires.",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "const": "TRANSFORM" } }, "required": ["action"] },
+          "then": { "required": ["transform"] }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LocalFirst launchd template (v0.6.4).
+
+  This file is a TEMPLATE: replace {{LOCALFIRST_BIN}} with the absolute
+  path to your `localfirst` executable before installing. See
+  bin/supervisor/README.md for the install command.
+
+  STATUS: shipped unvalidated on macOS in v0.6.4. The Linux systemd unit
+  is structurally analogous but only the Windows scheduled-task path has
+  been live-tested by the maintainers. Please report issues.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.localfirst.proxy</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{LOCALFIRST_BIN}}</string>
+        <string>start</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/localfirst.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/localfirst.err.log</string>
+</dict>
+</plist>
