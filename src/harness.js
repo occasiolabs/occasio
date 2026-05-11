@@ -348,6 +348,37 @@ const SCENARIOS = {
     ],
   },
 
+  // ── MCP cross-protocol: same policy governs the MCP read_file tool ─────────
+  'mcp-deny-read': {
+    description:
+      'CROSS-PROTOCOL: drive bin/localfirst-mcp.js directly via JSON-RPC, ' +
+      'call tools/call read_file against a denied path. Validates the v0.6.5 ' +
+      'claim that one policy.yml governs both Claude Code (HTTP proxy) and ' +
+      'MCP traffic identically. No LLM in the loop — protocol-level only.',
+    runner:    'mcp',  // dispatch to runMcpScenario, not runScenarioChild
+    prompt:    () => null,  // not used by MCP runner
+    policy:    (ctx) => `version: 1\ndeny_paths:\n  - ${ctx.denyDir}\n`,
+    fixtures:  (ctx) => {
+      fs.mkdirSync(ctx.denyDir, { recursive: true });
+      fs.writeFileSync(ctx.secretPath, `${ctx.marker}\n`);
+    },
+    assertions: (ctx, rows, stdout) => [
+      {
+        name:   'MCP response carries "(blocked by policy)"',
+        passed: typeof stdout === 'string' && stdout.includes('(blocked by policy)'),
+        detail: stdout.includes('(blocked by policy)') ? null : 'response did not contain blocked marker',
+      },
+      noMarkerInOutput(stdout, ctx.marker,
+        'marker not present in MCP response (defense held)'),
+      hasAuditRow(rows,
+        r => r.tool_name === 'read_file' && r.action === 'BLOCK' &&
+             r.reason === 'path-denied' && r.protocol === 'mcp',
+        '≥1 audit row: read_file BLOCK path-denied protocol=mcp'),
+      noMarkerInAudit(rows, ctx.marker,
+        'marker not present in any audit row payload'),
+    ],
+  },
+
   // ── Discovery probe: plain-text auto-context (no tool_use/tool_result pair) ─
   'plain-text-context': {
     description:
@@ -550,6 +581,69 @@ function runScenarioChild(scenarioName, ctx, opts = {}) {
   }));
 }
 
+/**
+ * Drive bin/localfirst-mcp.js as a JSON-RPC child over stdio. Sends:
+ *   1. initialize       (with a synthetic clientInfo.name)
+ *   2. tools/call       read_file against the scratch denied path
+ * Captures the response stream and returns it as `stdout` so the
+ * scenario assertions can grep for "(blocked by policy)".
+ *
+ * No LLM involved. Pure protocol-level probe — free to run.
+ */
+function runMcpScenario(scenarioName, ctx, opts = {}) {
+  const spawnFn   = opts.spawnFn   || childProc.spawn;
+  const timeoutMs = opts.timeoutMs || 30_000;
+  const mcpBin    = path.join(__dirname, '..', 'bin', 'localfirst-mcp.js');
+
+  return new Promise((resolve) => {
+    const env = {
+      ...process.env,
+      LOCALFIRST_AUDIT_FILE:  ctx.auditPath,
+      LOCALFIRST_POLICY_FILE: ctx.policyPath,
+    };
+    const child = spawnFn('node', [mcpBin], {
+      cwd: ctx.workspace, env, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '', stderr = '', timedOut = false;
+    const t = setTimeout(() => {
+      timedOut = true;
+      try { child.kill('SIGTERM'); } catch {}
+      setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 2_000);
+    }, timeoutMs);
+
+    if (child.stdout) child.stdout.on('data', (d) => { stdout += d.toString(); });
+    if (child.stderr) child.stderr.on('data', (d) => { stderr += d.toString(); });
+
+    child.on('close', (code) => {
+      clearTimeout(t);
+      resolve({ exitCode: code, stdout, stderr, timedOut });
+    });
+    child.on('error', (err) => {
+      clearTimeout(t);
+      resolve({ exitCode: -1, stdout, stderr, timedOut: false, error: err.message });
+    });
+
+    // Send JSON-RPC frames. The MCP server reads newline-delimited JSON on stdin.
+    const init = {
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2024-11-05', capabilities: {},
+                clientInfo: { name: 'lf-harness', version: '0.0.1' } },
+    };
+    const callRead = {
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name: 'read_file', arguments: { file_path: ctx.secretPath } },
+    };
+    try {
+      child.stdin.write(JSON.stringify(init) + '\n');
+      child.stdin.write(JSON.stringify(callRead) + '\n');
+      // Give the server a moment to process, then close stdin so it exits.
+      setTimeout(() => { try { child.stdin.end(); } catch {} }, 2_000);
+    } catch (e) {
+      // best effort
+    }
+  });
+}
+
 // ── Result verification ─────────────────────────────────────────────────────
 
 function readAuditRows(auditPath) {
@@ -642,7 +736,15 @@ async function runHarness(opts = {}) {
     const ctx = prepareWorkspace(name);
     let childResult = null;
     try {
-      childResult = await runScenarioChild(name, ctx, opts);
+      // Dispatch to the right runner based on scenario.runner.
+      // 'mcp' → drive bin/localfirst-mcp.js via JSON-RPC (no LLM).
+      // Default → spawn `localfirst claude --print` (LLM in the loop).
+      const runner = SCENARIOS[name].runner || 'cli';
+      if (runner === 'mcp') {
+        childResult = await runMcpScenario(name, ctx, opts);
+      } else {
+        childResult = await runScenarioChild(name, ctx, opts);
+      }
       const v = verifyScenario(name, ctx, childResult);
       v.workspace = ctx.workspace;
       results.push(v);
@@ -704,10 +806,11 @@ module.exports = {
   cleanupWorkspace,
   verifyScenario,
   readAuditRows,
-  hasAuditRow, noMarkerInOutput, noMarkerInAudit,
+  hasAuditRow, noMarkerInOutput, noMarkerInAudit, defenseAttribution,
   renderResult,
   // orchestration
   runScenarioChild,
+  runMcpScenario,
   runHarness,
   // cli
   runHarnessCli,

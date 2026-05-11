@@ -8936,6 +8936,9 @@ console.log('\n3. runLocally');
     assert('harness: SCENARIOS contains encoded-output',      !!SCENARIOS['encoded-output']);
     assert('harness: SCENARIOS contains tool-chain-read-write-read',
       !!SCENARIOS['tool-chain-read-write-read']);
+    assert('harness: SCENARIOS contains mcp-deny-read',       !!SCENARIOS['mcp-deny-read']);
+    assert('harness: mcp-deny-read.runner === "mcp"',
+      SCENARIOS['mcp-deny-read'].runner === 'mcp');
 
     // prepareWorkspace creates a usable scratch
     {

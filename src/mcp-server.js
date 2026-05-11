@@ -41,7 +41,10 @@ const LOG_FILE = path.join(os.homedir(), '.localfirst', 'mcp-experiment.jsonl');
 // both are running concurrently with audit traffic, an interleaved append on
 // Windows can corrupt the chain. A dedicated slice (deferred) will harden
 // concurrent audit writing; until then, run one or the other.
-let mcpAuditor = createAuditor();
+// Audit-file override via env var (symmetric with the Claude Code proxy
+// in src/index.js). Used by `localfirst harness --scenario mcp-*` to
+// keep MCP test traffic out of the user's real ~/.localfirst chain.
+let mcpAuditor = createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undefined);
 
 // v0.6.6: emit a policy_loaded row on first policy load and on every
 // hot-reload that changes the policy file's bytes. The MCP server is a
