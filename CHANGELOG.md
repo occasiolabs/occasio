@@ -378,8 +378,8 @@ audit fields, **no** schema-based replacement of the existing validator,
 - All headline text now references the cross-protocol claim — Claude Code
   *and* MCP traffic governed by the same `policy.yml` — and points at the
   v0.6.5 demo at `docs/demos/mcp-block.md` as the artefact behind it.
-- The repository URLs in `package.json` are updated from the previous
-  `SynthexCapital/localfirst` org to `localfirst-ai/localfirst`.
+- The repository URLs in `package.json` now point at
+  `localfirst-ai/localfirst`.
 - Discipline: every claim in the rewritten paragraphs points at an
   artefact in the repo. Test 34's link guard fails if any of those
   artefacts go missing.

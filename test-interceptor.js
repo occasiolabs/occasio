@@ -7991,8 +7991,12 @@ console.log('\n3. runLocally');
     assert('schema file exists', fsMod.existsSync(SCHEMA_PATH));
     const schema = JSON.parse(fsMod.readFileSync(SCHEMA_PATH, 'utf8'));
     assert('schema has $id', typeof schema['$id'] === 'string' && schema['$id'].includes('localfirst-policy.schema.json'));
-    assert('schema $id uses localfirst.ai or localfirst-ai (not SynthexCapital)',
-      /localfirst\.ai|localfirst-ai/.test(schema['$id']) && !/SynthexCapital/i.test(schema['$id']));
+    // Drift guard: $id must use the published localfirst-ai host and must not
+    // accidentally reference a pre-rename org name. Pattern is intentionally
+    // permissive on the published host and strict on legacy host names.
+    assert('schema $id uses the published localfirst host',
+      /localfirst\.ai|localfirst-ai/.test(schema['$id']) &&
+      !/(github\.com\/[A-Z][a-zA-Z]+\/localfirst)/.test(schema['$id']));
     assert('schema has $defs.toolEntry', schema['$defs'] && schema['$defs'].toolEntry);
 
     const { KNOWN_TOP_LEVEL } = require('./src/policy/validate');
