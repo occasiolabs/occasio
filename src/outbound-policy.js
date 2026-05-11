@@ -183,10 +183,107 @@ function enforceOutboundDenyPaths(reqBody, policy) {
   return { messages: newMessages, strips };
 }
 
+// ── Path-2 secret redaction (symmetric with path-1 redact-secrets) ──────────
+//
+// Path-1 (src/policy/engine.js + dispatcher TRANSFORM redact-secrets) scans
+// the *result* of a tool_use the cloud model emits and replaces matching
+// secret bytes before the result re-enters the model context. That path
+// works correctly today.
+//
+// Path-2 covers the same defense gap as the deny_paths outbound fix: when
+// Claude Code (or another agent runtime) injects pre-baked
+// `tool_use Read` + `tool_result <content>` pairs into the OUTBOUND body
+// as agentic context, those tool_results never trigger path-1 because no
+// model-initiated tool call happened. Secrets in that content reach the
+// model unless we scan and redact here.
+//
+// Design choice — REDACT, not request-BLOCK:
+//   At path-1, block_secrets_in_tool_results under `--preset strict` is a
+//   request-block. At path-2 the request body is already constructed by
+//   the agent runtime; refusing the whole turn is destructive (the agent
+//   loses its prompt round) while redaction is the smallest surgical fix
+//   that preserves the workflow. We always REDACT path-2 secrets, never
+//   request-block. The strict-mode tool-call-time block still fires for
+//   tool_use blocks the model emits — the two gates remain complementary.
+//
+//   This gate fires when EITHER `redact_secrets_in_tool_results` OR
+//   `block_secrets_in_tool_results` is true. The latter, on its own, does
+//   not perform a request-block here (see above); it is treated as
+//   permission to redact at the outbound boundary. The audit row reason
+//   distinguishes the two flags so a reviewer can tell which policy was
+//   the proximate cause.
+//
+// Implementation reuses analyzer.scanSecrets / analyzer.redactSecrets so
+// the path-1 and path-2 detection sets stay identical. `deny_patterns` is
+// honoured via the existing extraPatterns surface.
+
+const SECRET_REDACT_REASONS = Object.freeze({
+  redact_flag: 'outbound-secret-redacted',  // user explicitly opted into redaction
+  block_flag:  'outbound-secret-redacted-strict',  // user has block_secrets on; path-2 redacts symmetrically
+});
+
+function enforceOutboundSecretRedaction(reqBody, policy) {
+  const messages = (reqBody && reqBody.messages) || [];
+  const noChange = { messages, redactions: [] };
+
+  const redactOn = policy && policy.redact_secrets_in_tool_results === true;
+  const blockOn  = policy && policy.block_secrets_in_tool_results  === true;
+  if (!redactOn && !blockOn) return noChange;
+
+  const { scanSecrets, redactSecrets } = require('./analyzer');
+  const denyPatternsRaw = (policy && policy.deny_patterns) || [];
+  // policy.deny_patterns is already normalized to [{ label, regex }] by
+  // src/policy/loader.js — scanSecrets expects exactly that shape.
+  const extraPatterns = denyPatternsRaw.length > 0 ? denyPatternsRaw : undefined;
+  const opts = extraPatterns ? { extraPatterns } : undefined;
+
+  // Source attribution (best-effort): if a tool_result is paired with a
+  // known tool_use Read/find/grep/shell, we can record the source path in
+  // the audit row. Untied tool_results still get redacted; their audit
+  // row just lacks a path.
+  const idToInfo = buildToolUsePathMap(messages);
+
+  const reason = redactOn ? SECRET_REDACT_REASONS.redact_flag
+                          : SECRET_REDACT_REASONS.block_flag;
+
+  const redactions = [];
+  const newMessages = messages.map(msg => {
+    if (!Array.isArray(msg.content)) return msg;
+    let changed = false;
+    const newContent = msg.content.map(block => {
+      if (block.type !== 'tool_result') return block;
+      // v1 scope: scan string content. tool_results with array-of-text
+      // content also occur; v2 can extend to that shape if a real bypass
+      // surfaces through it.
+      if (typeof block.content !== 'string' || !block.content) return block;
+      const hits = scanSecrets(block.content, opts);
+      if (hits.length === 0) return block;
+      const redacted = redactSecrets(block.content, opts);
+      if (redacted === block.content) return block;  // defensive
+      const info = idToInfo.get(block.tool_use_id);
+      redactions.push({
+        tool_use_id:    block.tool_use_id,
+        path:           (info && info.paths && info.paths[0]) || null,
+        toolName:       info && info.toolName || null,
+        secretsRedacted: hits.length,
+        labels:         [...new Set(hits.map(h => h.label))],
+        reason,
+      });
+      changed = true;
+      return { ...block, content: redacted };
+    });
+    return changed ? { ...msg, content: newContent } : msg;
+  });
+
+  return { messages: newMessages, redactions };
+}
+
 module.exports = {
   enforceOutboundDenyPaths,
+  enforceOutboundSecretRedaction,
   buildToolUsePathMap,
   pathIsDenied,
   resolveInputPath,
   STRIP_MARKER,
+  SECRET_REDACT_REASONS,
 };

@@ -8928,6 +8928,10 @@ console.log('\n3. runLocally');
     assert('harness: SCENARIOS contains deny-read',         !!SCENARIOS['deny-read']);
     assert('harness: SCENARIOS contains deny-shell-bypass', !!SCENARIOS['deny-shell-bypass']);
     assert('harness: SCENARIOS contains budget-distill',    !!SCENARIOS['budget-distill']);
+    assert('harness: SCENARIOS contains path-traversal',     !!SCENARIOS['path-traversal']);
+    assert('harness: SCENARIOS contains symlink-bypass',     !!SCENARIOS['symlink-bypass']);
+    assert('harness: SCENARIOS contains redact-secrets-live', !!SCENARIOS['redact-secrets-live']);
+    assert('harness: SCENARIOS contains context-budget-live', !!SCENARIOS['context-budget-live']);
 
     // prepareWorkspace creates a usable scratch
     {
@@ -9511,6 +9515,159 @@ console.log('\n3. runLocally');
 
     // Cleanup
     try { fsM.rmSync(tmp, { recursive: true, force: true }); } catch {}
+  }
+
+  // ── 44. Outbound secret redaction (path-2 symmetry) ──────────────────────
+  // Symmetric defense to the path-1 TRANSFORM redact-secrets gate. Scans
+  // pre-baked auto-context tool_result content in the OUTBOUND body for
+  // secrets and redacts in-place before the body reaches the cloud.
+  {
+    console.log('\n44. Outbound secret redaction');
+    const {
+      enforceOutboundSecretRedaction, SECRET_REDACT_REASONS,
+    } = require('./src/outbound-policy');
+
+    const AKIA = 'AKIAIOSFODNN7EXAMPLE';
+    const bodyWith = (content) => ({
+      messages: [
+        { role: 'assistant', content: [
+          { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: '/p/config.txt' } },
+        ] },
+        { role: 'user', content: [
+          { type: 'tool_result', tool_use_id: 'tu1', content },
+        ] },
+      ],
+    });
+
+    // EITHER flag triggers redaction
+    {
+      const body = bodyWith(`region = us-east-1\naccess_key_id = ${AKIA}\n`);
+      const r = enforceOutboundSecretRedaction(body, { redact_secrets_in_tool_results: true });
+      assert('outbound secret: redact flag → 1 redaction',  r.redactions.length === 1);
+      assert('outbound secret: AKIA removed from content',
+        !r.messages[1].content[0].content.includes(AKIA));
+      assert('outbound secret: reason = redact_flag',
+        r.redactions[0].reason === SECRET_REDACT_REASONS.redact_flag);
+      assert('outbound secret: count = 1',                  r.redactions[0].secretsRedacted === 1);
+      assert('outbound secret: label captured',
+        r.redactions[0].labels.includes('aws-access-key'));
+      assert('outbound secret: source path attributed via tool_use_id',
+        r.redactions[0].path === '/p/config.txt');
+    }
+
+    {
+      const body = bodyWith(`access_key_id = ${AKIA}\n`);
+      const r = enforceOutboundSecretRedaction(body, { block_secrets_in_tool_results: true });
+      assert('outbound secret: block flag → also redacts (symmetric choice)',
+        r.redactions.length === 1);
+      assert('outbound secret: reason = block_flag',
+        r.redactions[0].reason === SECRET_REDACT_REASONS.block_flag);
+      assert('outbound secret: block flag redacts not blocks request',
+        !r.messages[1].content[0].content.includes(AKIA));
+    }
+
+    // BOTH flags → redact (with the explicit redact reason, since the
+    // explicit flag takes precedence over the symmetric one)
+    {
+      const body = bodyWith(`access_key_id = ${AKIA}\n`);
+      const r = enforceOutboundSecretRedaction(body, {
+        redact_secrets_in_tool_results: true,
+        block_secrets_in_tool_results:  true,
+      });
+      assert('outbound secret: both flags → redact_flag reason',
+        r.redactions[0].reason === SECRET_REDACT_REASONS.redact_flag);
+    }
+
+    // NEITHER flag → no-op
+    {
+      const body = bodyWith(`access_key_id = ${AKIA}\n`);
+      const r = enforceOutboundSecretRedaction(body, {});
+      assert('outbound secret: no flags → no redaction',    r.redactions.length === 0);
+      assert('outbound secret: content preserved',
+        r.messages[1].content[0].content.includes(AKIA));
+    }
+
+    // Clean content → no-op
+    {
+      const body = bodyWith('region = us-east-1\nno secrets here\n');
+      const r = enforceOutboundSecretRedaction(body, { redact_secrets_in_tool_results: true });
+      assert('outbound secret: clean tool_result → 0 redactions', r.redactions.length === 0);
+      assert('outbound secret: clean content unchanged',
+        r.messages[1].content[0].content === 'region = us-east-1\nno secrets here\n');
+    }
+
+    // Multiple secrets in one tool_result
+    {
+      const body = bodyWith(
+        `aws=${AKIA}\nbearer_token = sk-some-bearer-token-value-12345\n`);
+      const r = enforceOutboundSecretRedaction(body, { redact_secrets_in_tool_results: true });
+      assert('outbound secret: multiple secrets in one block → count > 1',
+        r.redactions[0].secretsRedacted >= 1);
+      assert('outbound secret: AKIA stripped',
+        !r.messages[1].content[0].content.includes(AKIA));
+    }
+
+    // Multiple tool_results — each scanned independently
+    {
+      const body = {
+        messages: [
+          { role: 'assistant', content: [
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: '/a.txt' } },
+            { type: 'tool_use', id: 'tu2', name: 'Read', input: { file_path: '/b.txt' } },
+          ] },
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: `key=${AKIA}` },
+            { type: 'tool_result', tool_use_id: 'tu2', content: 'clean' },
+          ] },
+        ],
+      };
+      const r = enforceOutboundSecretRedaction(body, { redact_secrets_in_tool_results: true });
+      assert('outbound secret: 2 tool_results, 1 redaction',  r.redactions.length === 1);
+      assert('outbound secret: tu1 redacted',
+        !r.messages[1].content[0].content.includes(AKIA));
+      assert('outbound secret: tu2 unchanged',
+        r.messages[1].content[1].content === 'clean');
+    }
+
+    // deny_patterns flow via extraPatterns
+    {
+      const body = bodyWith('ticket = INC-987654321 active');
+      const r = enforceOutboundSecretRedaction(body, {
+        redact_secrets_in_tool_results: true,
+        deny_patterns: [{ label: 'ticket', regex: /INC-\d{6,}/ }],
+      });
+      assert('outbound secret: custom deny_pattern triggers redaction',
+        r.redactions.length === 1);
+      assert('outbound secret: custom pattern label preserved',
+        r.redactions[0].labels.includes('ticket'));
+      assert('outbound secret: INC-XXX stripped',
+        !/INC-987654321/.test(r.messages[1].content[0].content));
+    }
+
+    // Tool_result with non-string content (e.g. array) — skipped, not crashed
+    {
+      const body = {
+        messages: [
+          { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: 'tu1',
+              content: [{ type: 'text', text: `key=${AKIA}` }] },
+          ] },
+        ],
+      };
+      const r = enforceOutboundSecretRedaction(body, { redact_secrets_in_tool_results: true });
+      // v1 scope: only string-content tool_results. Array-shaped passes
+      // through unchanged. Documented limitation.
+      assert('outbound secret: array content skipped (v1 scope)',
+        r.redactions.length === 0);
+    }
+
+    // Empty/missing message body → no crash, no redactions
+    {
+      const r1 = enforceOutboundSecretRedaction(null, { redact_secrets_in_tool_results: true });
+      assert('outbound secret: null body → no redactions',  r1.redactions.length === 0);
+      const r2 = enforceOutboundSecretRedaction({}, { redact_secrets_in_tool_results: true });
+      assert('outbound secret: empty body → no redactions', r2.redactions.length === 0);
+    }
   }
 
   // ── Summary ────────────────────────────────────────────────────────────────

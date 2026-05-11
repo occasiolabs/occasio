@@ -1121,7 +1121,7 @@ const server = http.createServer((req, res) => {
         // them here. STRIP semantics (not request-BLOCK): mirror the
         // existing redact-secrets TRANSFORM convention so the agent sees
         // structural continuity but the bytes never reach the model.
-        const { enforceOutboundDenyPaths } = require('./outbound-policy');
+        const { enforceOutboundDenyPaths, enforceOutboundSecretRedaction } = require('./outbound-policy');
         const policyForOutbound = require('./policy/loader').load();
         const outboundResult = enforceOutboundDenyPaths(b, policyForOutbound);
         if (outboundResult.strips.length > 0) {
@@ -1159,6 +1159,52 @@ const server = http.createServer((req, res) => {
             const head  = outboundResult.strips.slice(0, 2).map(s => path.basename(s.path)).join(', ');
             const more  = outboundResult.strips.length > 2 ? ` +${outboundResult.strips.length - 2} more` : '';
             process.stderr.write(`${col.d(tsOut)} ${col.r('🛑 outbound-deny')} ${col.d(`stripped: ${head}${more}`)}\n`);
+          }
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
+        // ── Path-2 defense: outbound secret redaction (symmetric with the
+        // path-1 TRANSFORM redact-secrets). Fires when
+        // redact_secrets_in_tool_results OR block_secrets_in_tool_results is
+        // true. Always redacts (never request-blocks) — see outbound-policy.js
+        // for the design rationale. One TRANSFORM audit row per redacted
+        // tool_result, attributed to the source tool_use when paired.
+        const secretResult = enforceOutboundSecretRedaction(b, policyForOutbound);
+        if (secretResult.redactions.length > 0) {
+          b.messages = secretResult.messages;
+          const { makeBoundaryEvent: mkBE } = require('./core/boundary-event');
+          for (const r of secretResult.redactions) {
+            const canonicalName =
+              /^(Read|read_file)$/i.test(r.toolName || '')          ? 'read_file' :
+              /^(Glob|find_files)$/i.test(r.toolName || '')         ? 'find_files' :
+              /^(Grep|grep)$/i.test(r.toolName || '')               ? 'grep' :
+              /^(Bash|shell_bash)$/i.test(r.toolName || '')          ? 'shell_bash' :
+              /^(PowerShell|shell_powershell)$/i.test(r.toolName || '') ? 'shell_powershell' :
+              (r.toolName || 'tool_result');
+            const evt = mkBE({
+              direction: 'outbound', kind: 'tool_call',
+              agent: 'claude-code', protocol: 'anthropic-http',
+              sessionId: undefined, runId: currentRunId,
+              toolName: canonicalName,
+              toolInput: r.path ? { file_path: r.path, path: r.path } : undefined,
+            });
+            const status = sessionAuditor.record(
+              evt,
+              { action: 'TRANSFORM',
+                reason: r.reason,
+                transform: 'redact-secrets',
+                policySource: policyForOutbound.deny_patterns?.length ? 'user' : 'default' },
+              { transformed: true, secretsRedacted: new Array(r.secretsRedacted) },
+            );
+            if (status && status.ok === false) {
+              const { AuditWriteError } = require('./audit/errors');
+              throw new AuditWriteError(status.error, status.droppedRow);
+            }
+          }
+          if (LIVE_VERBOSE) {
+            const tsOut = new Date().toTimeString().slice(0, 8);
+            const total = secretResult.redactions.reduce((s, r) => s + r.secretsRedacted, 0);
+            process.stderr.write(`${col.d(tsOut)} ${col.r('🛑 outbound-secrets')} ${col.d(`${total} secret(s) redacted in ${secretResult.redactions.length} tool_result(s)`)}\n`);
           }
         }
         // ──────────────────────────────────────────────────────────────────────
