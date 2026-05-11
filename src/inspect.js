@@ -51,19 +51,10 @@ function buildBoundaryFacts(entry) {
 
   const et = entry.event_type || (entry.intercepted ? 'local_only' : 'cloud_sent');
 
-  // Model the request was actually served by. Anthropic-cloud models start
-  // with claude- or are short forms like opus-*/sonnet-*/haiku-*. Anything
-  // else (e.g. qwen2.5:7b, llama3:8b) means localrouter.js answered locally
-  // via Ollama — those bytes never reached Anthropic.
-  const model = entry.model || '';
-  const isLocalLlmModel = !!model && !/^claude-|^opus|^sonnet|^haiku/i.test(model);
-
   return {
     event_type:              et,
-    model,
-    routed_to_local_llm:     isLocalLlmModel,
     // true for any event type where something reached Anthropic (even after trim/intercept)
-    reached_anthropic:       et !== 'blocked' && et !== 'budget_exceeded' && !isLocalLlmModel,
+    reached_anthropic:       et !== 'blocked' && et !== 'budget_exceeded',
     blocked_entirely:        et === 'blocked' || et === 'budget_exceeded',
 
     // Tokens Anthropic actually reported (exact — from provider response)
@@ -179,15 +170,10 @@ function renderLocalOnly(facts) {
   }
 
   if (facts.input_tokens > 0 || facts.output_tokens > 0) {
-    if (facts.routed_to_local_llm) {
-      console.log(sectionHeader(col.g('⚙'), 'ANSWERED BY LOCAL LLM', `${facts.model} — nothing was sent to Anthropic`));
-      console.log(`    Tokens:   ${col.y(fmtN(facts.input_tokens) + ' in')} / ${col.y(fmtN(facts.output_tokens) + ' out')}   ${col.g('$' + facts.cost.toFixed(4))}  ${col.d('(local, no cloud cost)')}`);
-    } else {
-      console.log(sectionHeader(col.c('→'), 'SENT TO ANTHROPIC', 'initial + follow-up calls combined'));
-      console.log(`    Tokens:   ${col.y(fmtN(facts.input_tokens) + ' in')} / ${col.y(fmtN(facts.output_tokens) + ' out')}   ${col.g('$' + facts.cost.toFixed(4))}`);
-      if (facts.cache_read_tokens > 0) {
-        console.log(col.d(`    Cache:    ${fmtN(facts.cache_read_tokens)} tokens read  (saved $${facts.cache_savings.toFixed(4)})`));
-      }
+    console.log(sectionHeader(col.c('→'), 'SENT TO ANTHROPIC', 'initial + follow-up calls combined'));
+    console.log(`    Tokens:   ${col.y(fmtN(facts.input_tokens) + ' in')} / ${col.y(fmtN(facts.output_tokens) + ' out')}   ${col.g('$' + facts.cost.toFixed(4))}`);
+    if (facts.cache_read_tokens > 0) {
+      console.log(col.d(`    Cache:    ${fmtN(facts.cache_read_tokens)} tokens read  (saved $${facts.cache_savings.toFixed(4)})`));
     }
   }
 

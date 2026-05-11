@@ -39,7 +39,6 @@ function selectAdapter(headers, sseBody) {
     registry: toolNamesRegistry,
   });
 }
-const { shouldRouteLocal, handleLocally } = require('./localrouter');
 const { parseFileTokens, scanSecrets } = require('./analyzer');
 const { optimizeContext } = require('./lao');
 const { randomUUID }      = require('crypto');
@@ -1000,31 +999,6 @@ const server = http.createServer((req, res) => {
         }
       } catch {}
     }
-
-    // ── Local routing (Ollama / local LLM) ────────────────────────────────────
-    if (isMsg && reqBody) {
-      const routing = await shouldRouteLocal(reqBody);
-      if (routing.local) {
-        const ts = new Date().toTimeString().slice(0, 8);
-        if (LIVE_VERBOSE) process.stderr.write(`\n${col.d(ts)} ${col.g('🏠 local:')} ${col.d(`${routing.model} · ${routing.reason}`)}\n`);
-        const { inputTokens, outputTokens } = await handleLocally(req, res, reqBody);
-        const entry = {
-          v: LOG_SCHEMA_VERSION,
-          iso: new Date().toISOString(), ts, run_id: currentRunId,
-          event_type: 'local_only',
-          model: routing.model,
-          input_tokens: inputTokens, output_tokens: outputTokens,
-          cache_read_tokens: 0, cache_write_tokens: 0,
-          cache_savings: 0, lao_tokens_saved: 0, lao_cost_saved: 0,
-          tools_local_count: 0, tools_attempted: 0,
-          cost: 0, files: [], file_tokens: [], secrets: [], blocked: [],
-          intercepted: false, tools: [], local: true,
-        };
-        writeLog(entry); updateSession(entry);
-        return;
-      }
-    }
-    // ──────────────────────────────────────────────────────────────────────────
 
     // ── Budget enforcement (Stage 2: policy-driven BLOCK) ─────────────────────
     // The decision-to-block is produced by policy.evaluateRequest, which

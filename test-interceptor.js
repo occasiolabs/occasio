@@ -3168,13 +3168,8 @@ console.log('\n3. runLocally');
         const snip = indexSrc.slice(idx, idx + 500);
         return snip.includes('tools_attempted: 0');
       })());
-    assert('local_only (Ollama) entry has tools_attempted: 0',
-      (() => {
-        const idx = indexSrc.indexOf("event_type: 'local_only'");
-        if (idx < 0) return false;
-        const snip = indexSrc.slice(idx, idx + 300);
-        return snip.includes('tools_attempted: 0');
-      })());
+    // (the former "local_only (Ollama) entry has tools_attempted: 0" check
+    // was removed alongside src/localrouter.js — no Ollama routing exists)
 
     // ── Slice D-0: cmds field logged for unhandled Bash/PowerShell ──────────
     // Post-Phase-E: this code lives in adapters/claude-code.js (runToolLoop).
@@ -8338,70 +8333,6 @@ console.log('\n3. runLocally');
     // Cleanup
     loaderS35._resetCache();
     try { fsMod35.rmSync(tmpRoot, { recursive: true, force: true }); } catch {}
-  }
-
-  // ── 35b. inspect: local-LLM routing must not be labelled "SENT TO ANTHROPIC"
-  // When localrouter.js answers a request via Ollama (model name like
-  // qwen2.5:7b / llama3:8b), the inspect rendering must surface that the
-  // bytes never reached Anthropic. Regression for the label-bug found in
-  // live `localfirst inspect` output.
-  {
-    console.log('\n35b. inspect: local-LLM routing label');
-    const { buildBoundaryFacts } = require('./src/inspect');
-
-    const local = buildBoundaryFacts({
-      event_type:    'local_only',
-      model:         'qwen2.5:7b',
-      input_tokens:  9800,
-      output_tokens: 0,
-      cost:          0,
-    });
-    assert('local Ollama: routed_to_local_llm=true',  local.routed_to_local_llm === true);
-    assert('local Ollama: reached_anthropic=false',   local.reached_anthropic === false);
-    assert('local Ollama: model preserved',           local.model === 'qwen2.5:7b');
-
-    const cloudOpus = buildBoundaryFacts({
-      event_type:    'cloud_sent',
-      model:         'claude-opus-4-7',
-      input_tokens:  100,
-      output_tokens: 200,
-      cost:          0.01,
-    });
-    assert('Anthropic opus: routed_to_local_llm=false', cloudOpus.routed_to_local_llm === false);
-    assert('Anthropic opus: reached_anthropic=true',    cloudOpus.reached_anthropic === true);
-
-    const cloudShort = buildBoundaryFacts({
-      event_type:    'cloud_sent',
-      model:         'opus-4-7',
-      input_tokens:  6,
-      output_tokens: 1300,
-      cost:          0.1,
-    });
-    assert('short opus-* name: routed_to_local_llm=false', cloudShort.routed_to_local_llm === false);
-
-    const cloudSonnet = buildBoundaryFacts({
-      event_type: 'cloud_sent', model: 'sonnet-4-6',
-      input_tokens: 1, output_tokens: 1,
-    });
-    assert('short sonnet-* name: routed_to_local_llm=false', cloudSonnet.routed_to_local_llm === false);
-
-    const cloudHaiku = buildBoundaryFacts({
-      event_type: 'cloud_sent', model: 'haiku-4-5',
-      input_tokens: 1, output_tokens: 1,
-    });
-    assert('short haiku-* name: routed_to_local_llm=false', cloudHaiku.routed_to_local_llm === false);
-
-    const llama = buildBoundaryFacts({
-      event_type: 'local_only', model: 'llama3:8b',
-      input_tokens: 500, output_tokens: 0,
-    });
-    assert('llama3 local LLM: routed_to_local_llm=true', llama.routed_to_local_llm === true);
-
-    const noModel = buildBoundaryFacts({
-      event_type: 'cloud_sent', input_tokens: 0, output_tokens: 0,
-    });
-    assert('no model: routed_to_local_llm=false',   noModel.routed_to_local_llm === false);
-    assert('no model: reached_anthropic=true',      noModel.reached_anthropic === true);
   }
 
   // ── 36. `localfirst selftest` regression coverage ────────────────────────
