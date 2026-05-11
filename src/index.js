@@ -324,6 +324,7 @@ ${col.b('Usage:')}
   localfirst boundary           Per-request three-column view: produced / re-entered / prevented
   localfirst baseline           Behavior baseline: [learn|show|compare|reset] (per project cwd)
   localfirst harness            Run a real Claude Code session against scratch fixtures and verify governance claims (needs ANTHROPIC_API_KEY)
+  localfirst redteam            Autonomous adversarial test — tester LLM probes a subject Claude Code session under LocalFirst (needs ANTHROPIC_API_KEY + @anthropic-ai/sdk)
   localfirst policy [show]      Show active policy: flags, tool routing, overrides
   localfirst policy show --diff Only values that differ from defaults
   localfirst policy validate    Validate policy.yml and report errors/warnings
@@ -547,6 +548,12 @@ if (cmd === 'baseline') {
 if (cmd === 'harness') {
   const { runHarnessCli } = require('./harness');
   runHarnessCli(args.slice(1)).then(r => process.exit(r.ok ? 0 : 1));
+  return;
+}
+
+if (cmd === 'redteam') {
+  const { runRedteamCli } = require('./redteam');
+  runRedteamCli(args.slice(1)).then(r => process.exit(r.ok ? 0 : 1));
   return;
 }
 

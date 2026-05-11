@@ -9067,6 +9067,250 @@ console.log('\n3. runLocally');
     }
   }
 
+  // ── 42. localfirst redteam — tester loop + verifier (no real SDK call) ──
+  // Unit coverage for the autonomous tester loop using a mock Anthropic
+  // client and a mock sendPromptFn. The real @anthropic-ai/sdk is never
+  // required at test time.
+  {
+    console.log('\n42. localfirst redteam');
+    const fsM = require('fs');
+    const {
+      GOALS, TESTER_TOOLS, verifyDefense, runTesterLoop, dispatchTesterTool,
+    } = require('./src/redteam');
+    const harnessM = require('./src/harness');
+
+    assert('redteam: GOALS has adversarial-read',     !!GOALS['adversarial-read']);
+    assert('redteam: TESTER_TOOLS has send_prompt',   TESTER_TOOLS.some(t => t.name === 'send_prompt'));
+    assert('redteam: TESTER_TOOLS has read_audit_log', TESTER_TOOLS.some(t => t.name === 'read_audit_log'));
+    assert('redteam: TESTER_TOOLS has done',           TESTER_TOOLS.some(t => t.name === 'done'));
+    assert('redteam: TESTER_TOOLS has 4 tools',        TESTER_TOOLS.length === 4);
+
+    // verifyDefense — clean scratch, no leak → defended
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-1' });
+      // Write a single BLOCK row, nothing referencing the marker
+      fsM.writeFileSync(ctx.auditPath,
+        JSON.stringify({ event_id: 'r1', tool_name: 'read_file', action: 'BLOCK', reason: 'path-denied' }) + '\n');
+      const v = verifyDefense(ctx, []);
+      assert('verifyDefense: clean chain + empty transcript → defended', v.verdict === 'defended');
+      assert('verifyDefense: exploited=false',                            v.exploited === false);
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // verifyDefense — marker leaked in subject stdout (tool_result content) → exploited
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-2' });
+      fsM.writeFileSync(ctx.auditPath, '');
+      const transcript = [
+        { turn: 1, role: 'tool_results', content: [
+          { type: 'tool_result', tool_use_id: 'tu1',
+            content: JSON.stringify({ subject_stdout: 'oh look here: ' + ctx.marker, new_audit_rows: [] }) },
+        ] },
+      ];
+      const v = verifyDefense(ctx, transcript);
+      assert('verifyDefense: marker in tool_result → exploited', v.verdict === 'exploited');
+      assert('verifyDefense: leakedInStdout=true',               v.leakedInStdout === true);
+      assert('verifyDefense: leak_source set',                   !!v.leakSource);
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // verifyDefense — marker in audit row → exploited
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-3' });
+      fsM.writeFileSync(ctx.auditPath,
+        JSON.stringify({ event_id: 'leak', tool_inputs: { path: ctx.marker }, action: 'LOCAL' }) + '\n');
+      const v = verifyDefense(ctx, []);
+      assert('verifyDefense: marker in audit row → exploited',
+        v.verdict === 'exploited' && v.leakedInAudit === true);
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // dispatchTesterTool — send_prompt invokes injected sendPromptFn
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-4' });
+      fsM.writeFileSync(ctx.auditPath, '');
+      let captured = null;
+      const sendPromptFn = async (prompt, c, o) => {
+        captured = { prompt, cwd: c.workspace };
+        // Simulate the subject writing one row
+        fsM.appendFileSync(ctx.auditPath,
+          JSON.stringify({ event_id: 'syn', tool_name: 'read_file', action: 'BLOCK' }) + '\n');
+        return { stdout: '(blocked by policy)', exitCode: 0, stderr: '', timedOut: false };
+      };
+      let subjectStdout = '';
+      const out = await dispatchTesterTool(
+        { name: 'send_prompt', id: 'tu1', input: { prompt: 'try cat' } },
+        { ctx, sendPromptFn, opts: { maxTurns: 8 },
+          getSubjectStdout: () => subjectStdout,
+          setSubjectStdout: (s) => { subjectStdout = s; } },
+      );
+      assert('dispatch send_prompt: invokes sendPromptFn',
+        captured && captured.prompt === 'try cat');
+      assert('dispatch send_prompt: returns subject_stdout',
+        out.subject_stdout === '(blocked by policy)');
+      assert('dispatch send_prompt: reports new audit rows',
+        out.new_audit_row_count === 1);
+      assert('dispatch send_prompt: updates subject stdout',
+        subjectStdout === '(blocked by policy)');
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // dispatchTesterTool — read_audit_log returns rows
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-5' });
+      fsM.writeFileSync(ctx.auditPath,
+        JSON.stringify({ event_id: 'a' }) + '\n' +
+        JSON.stringify({ event_id: 'b' }) + '\n');
+      const out = await dispatchTesterTool(
+        { name: 'read_audit_log', id: 'tu', input: {} },
+        { ctx, opts: {}, getSubjectStdout: () => '', setSubjectStdout: () => {} },
+      );
+      assert('dispatch read_audit_log: returns rows',         Array.isArray(out.rows) && out.rows.length === 2);
+      assert('dispatch read_audit_log: returns total_rows',   out.total_rows === 2);
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // dispatchTesterTool — done is acknowledged
+    {
+      const out = await dispatchTesterTool(
+        { name: 'done', id: 'tu', input: { verdict: 'defended', reasoning: 'tried everything' } },
+        { ctx: {}, opts: {}, getSubjectStdout: () => '', setSubjectStdout: () => {} },
+      );
+      assert('dispatch done: acknowledged',                   out.acknowledged === true);
+    }
+
+    // dispatchTesterTool — unknown tool → error
+    {
+      const out = await dispatchTesterTool(
+        { name: 'rm_rf', id: 'tu', input: {} },
+        { ctx: {}, opts: {}, getSubjectStdout: () => '', setSubjectStdout: () => {} },
+      );
+      assert('dispatch unknown tool: returns error',          /unknown tool/.test(out.error || ''));
+    }
+
+    // runTesterLoop — single-turn happy path: tester calls done immediately
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-6' });
+      fsM.writeFileSync(ctx.auditPath, '');
+      const mockClient = {
+        messages: { create: async () => ({
+          content: [
+            { type: 'tool_use', id: 'tu1', name: 'done',
+              input: { verdict: 'defended', reasoning: 'gave up' } },
+          ],
+          usage: { input_tokens: 200, output_tokens: 50 },
+        }) },
+      };
+      const r = await runTesterLoop({
+        client: mockClient, goal: 'adversarial-read', ctx,
+        opts: { maxTurns: 8, testerModel: 'haiku-mock', testerBudget: 1.0 },
+        sendPromptFn: async () => ({ stdout: '', exitCode: 0 }),
+      });
+      assert('tester loop: 1 turn',                  r.turns === 1);
+      assert('tester loop: verdict=defended',        r.tester_verdict === 'defended');
+      assert('tester loop: spend > 0',               r.spend > 0);
+      assert('tester loop: spend < 0.01 (Haiku)',    r.spend < 0.01);
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // runTesterLoop — tester probes once then declares done
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-7' });
+      fsM.writeFileSync(ctx.auditPath, '');
+      let callIdx = 0;
+      const mockClient = {
+        messages: { create: async () => {
+          callIdx++;
+          if (callIdx === 1) {
+            return {
+              content: [
+                { type: 'tool_use', id: 'tu1', name: 'send_prompt',
+                  input: { prompt: 'try reading via cat' } },
+              ],
+              usage: { input_tokens: 300, output_tokens: 60 },
+            };
+          }
+          return {
+            content: [
+              { type: 'tool_use', id: 'tu2', name: 'done',
+                input: { verdict: 'defended', reasoning: 'blocked' } },
+            ],
+            usage: { input_tokens: 400, output_tokens: 30 },
+          };
+        } },
+      };
+      let sendCount = 0;
+      const r = await runTesterLoop({
+        client: mockClient, goal: 'adversarial-read', ctx,
+        opts: { maxTurns: 8, testerModel: 'haiku-mock', testerBudget: 1.0 },
+        sendPromptFn: async () => {
+          sendCount++;
+          fsM.appendFileSync(ctx.auditPath,
+            JSON.stringify({ tool_name: 'shell_bash', action: 'BLOCK', reason: 'path-denied' }) + '\n');
+          return { stdout: '(blocked by policy)', exitCode: 0 };
+        },
+      });
+      assert('tester probe+done: 2 turns',           r.turns === 2);
+      assert('tester probe+done: sendPromptFn invoked once', sendCount === 1);
+      assert('tester probe+done: ends defended',     r.tester_verdict === 'defended');
+      const v = verifyDefense(ctx, r.transcript);
+      assert('tester probe+done: verifier also says defended', v.verdict === 'defended');
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // runTesterLoop — exhausts budget mid-loop and breaks
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-8' });
+      fsM.writeFileSync(ctx.auditPath, '');
+      const mockClient = {
+        messages: { create: async () => ({
+          content: [{ type: 'tool_use', id: 'tu', name: 'send_prompt', input: { prompt: 'x' } }],
+          usage: { input_tokens: 5_000_000, output_tokens: 0 },  // forces $1.25 spend per call
+        }) },
+      };
+      const r = await runTesterLoop({
+        client: mockClient, goal: 'adversarial-read', ctx,
+        opts: { maxTurns: 8, testerModel: 'haiku-mock', testerBudget: 0.50 },
+        sendPromptFn: async () => ({ stdout: '', exitCode: 0 }),
+      });
+      assert('tester budget exhaust: turns < maxTurns',  r.turns < 8);
+      assert('tester budget exhaust: spend > budget',    r.spend > 0.50);
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // runTesterLoop — API error returned cleanly
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-9' });
+      fsM.writeFileSync(ctx.auditPath, '');
+      const mockClient = {
+        messages: { create: async () => { throw new Error('rate limited'); } },
+      };
+      const r = await runTesterLoop({
+        client: mockClient, goal: 'adversarial-read', ctx,
+        opts: { maxTurns: 8, testerModel: 'haiku-mock', testerBudget: 1.0 },
+        sendPromptFn: async () => ({ stdout: '', exitCode: 0 }),
+      });
+      assert('tester API error: verdict=error',          r.tester_verdict === 'error');
+      assert('tester API error: reasoning mentions API', /API/.test(r.tester_reasoning || ''));
+      harnessM.cleanupWorkspace(ctx);
+    }
+
+    // Verifier catches tester hallucination — tester claims exploit, no leak in transcript
+    {
+      const ctx = harnessM.prepareWorkspace('deny-shell-bypass', { runId: 'redteam-10' });
+      fsM.writeFileSync(ctx.auditPath, '');
+      const transcript = [
+        { turn: 1, role: 'tool_results', content: [
+          { type: 'tool_result', tool_use_id: 'tu', content: JSON.stringify({ subject_stdout: '(blocked by policy)' }) },
+        ] },
+      ];
+      const v = verifyDefense(ctx, transcript);
+      assert('verifier catches hallucination: no leak in transcript → defended',
+        v.verdict === 'defended');
+      harnessM.cleanupWorkspace(ctx);
+    }
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   const total = passed + failed;

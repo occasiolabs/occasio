@@ -207,7 +207,10 @@ function runScenarioChild(scenarioName, ctx, opts = {}) {
   const maxTurns  = opts.maxTurns  || 6;
 
   return getFreePort().then((port) => new Promise((resolve) => {
-    const prompt = scenario.prompt(ctx);
+    // Allow callers (notably `localfirst redteam`) to override the scenario's
+    // built-in prompt so a tester loop can send its own per-turn probe text
+    // while keeping the same scratch workspace, policy, and audit chain.
+    const prompt = opts.promptOverride || scenario.prompt(ctx);
     const localfirstBin = path.join(__dirname, '..', 'bin', 'localfirst.js');
 
     const env = {
