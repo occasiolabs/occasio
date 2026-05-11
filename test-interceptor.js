@@ -8933,6 +8933,9 @@ console.log('\n3. runLocally');
     assert('harness: SCENARIOS contains redact-secrets-live', !!SCENARIOS['redact-secrets-live']);
     assert('harness: SCENARIOS contains context-budget-live', !!SCENARIOS['context-budget-live']);
     assert('harness: SCENARIOS contains plain-text-context',  !!SCENARIOS['plain-text-context']);
+    assert('harness: SCENARIOS contains encoded-output',      !!SCENARIOS['encoded-output']);
+    assert('harness: SCENARIOS contains tool-chain-read-write-read',
+      !!SCENARIOS['tool-chain-read-write-read']);
 
     // prepareWorkspace creates a usable scratch
     {
