@@ -50,7 +50,10 @@ const { budgetStatus, fmtBudget, BUDGET_EXCEEDED_EVENT } = require('./budget');
 
 const VERSION = '0.7.1';
 const LOG_SCHEMA_VERSION = 2;
-let PORT = 8081;
+// Port override via env var (used by `localfirst harness` and redteam to
+// run isolated proxies against scratch audit chains on free ports). Default
+// is 8081 to preserve existing user-facing behaviour.
+let PORT = parseInt(process.env.LOCALFIRST_PORT, 10) || 8081;
 const ANTHROPIC_REAL = 'api.anthropic.com';
 const LOG_DIR      = path.join(os.homedir(), '.localfirst');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
@@ -320,6 +323,7 @@ ${col.b('Usage:')}
   localfirst inspect            Cloud-boundary manifest (--last N, --entry N, --run <id>)
   localfirst boundary           Per-request three-column view: produced / re-entered / prevented
   localfirst baseline           Behavior baseline: [learn|show|compare|reset] (per project cwd)
+  localfirst harness            Run a real Claude Code session against scratch fixtures and verify governance claims (needs ANTHROPIC_API_KEY)
   localfirst policy [show]      Show active policy: flags, tool routing, overrides
   localfirst policy show --diff Only values that differ from defaults
   localfirst policy validate    Validate policy.yml and report errors/warnings
@@ -538,6 +542,12 @@ if (cmd === 'baseline') {
   const { runBaselineCli } = require('./baseline');
   const result = runBaselineCli(args.slice(1));
   process.exit(result.ok ? 0 : 1);
+}
+
+if (cmd === 'harness') {
+  const { runHarnessCli } = require('./harness');
+  runHarnessCli(args.slice(1)).then(r => process.exit(r.ok ? 0 : 1));
+  return;
 }
 
 if (cmd === 'inspect') {
@@ -860,7 +870,10 @@ const pendingToolInjections  = new Map();   // tool_use_id → distilled content
 // remains the source of truth for cost/usage; this file complements it with
 // per-event tracing and is the foundation for Stage 2's tamper-evident log.
 const { createAuditor: _createAuditor } = require('./audit/jsonl-auditor');
-const sessionAuditor = _createAuditor();
+// Audit-file override via env var. Used by `localfirst harness` to run
+// against a scratch chain so the user's real ~/.localfirst/pipeline-events
+// .jsonl is never touched. When unset, the auditor uses its default location.
+const sessionAuditor = _createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undefined);
 
 // v0.6.6: register a policy-change listener that emits a `policy_loaded`
 // audit row whenever the active policy hash transitions to a new value

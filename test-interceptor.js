@@ -8910,6 +8910,163 @@ console.log('\n3. runLocally');
     }
   }
 
+  // ── 41. localfirst harness — workspace + verification (no real spawn) ───
+  // Unit coverage for the parts that don't require an actual Anthropic API
+  // call: scratch workspace setup, audit-row reading, assertion helpers,
+  // verifyScenario aggregation, and renderResult output shape. The real
+  // child-spawn is exercised manually by the user.
+  {
+    console.log('\n41. localfirst harness');
+    const fsM = require('fs');
+    const pathM = require('path');
+    const {
+      SCENARIOS, prepareWorkspace, cleanupWorkspace, verifyScenario,
+      readAuditRows, hasAuditRow, noMarkerInOutput, noMarkerInAudit,
+      renderResult,
+    } = require('./src/harness');
+
+    assert('harness: SCENARIOS contains deny-read',         !!SCENARIOS['deny-read']);
+    assert('harness: SCENARIOS contains deny-shell-bypass', !!SCENARIOS['deny-shell-bypass']);
+    assert('harness: SCENARIOS contains budget-distill',    !!SCENARIOS['budget-distill']);
+
+    // prepareWorkspace creates a usable scratch
+    {
+      const ctx = prepareWorkspace('deny-read', { runId: 'unit-test-1' });
+      assert('prepareWorkspace: workspace exists',
+        fsM.existsSync(ctx.workspace));
+      assert('prepareWorkspace: secret.txt exists',
+        fsM.existsSync(ctx.secretPath));
+      assert('prepareWorkspace: README.md exists',
+        fsM.existsSync(pathM.join(ctx.workspace, 'README.md')));
+      assert('prepareWorkspace: policy.yml exists',
+        fsM.existsSync(ctx.policyPath));
+      const policyText = fsM.readFileSync(ctx.policyPath, 'utf8');
+      assert('prepareWorkspace: policy contains deny_paths',
+        policyText.includes('deny_paths'));
+      const secretText = fsM.readFileSync(ctx.secretPath, 'utf8');
+      assert('prepareWorkspace: secret has marker',
+        secretText.includes(ctx.marker));
+      assert('prepareWorkspace: marker is the deterministic shape',
+        ctx.marker.startsWith('LF-HARNESS-MARKER-'));
+      cleanupWorkspace(ctx);
+      assert('cleanupWorkspace: workspace removed',
+        !fsM.existsSync(ctx.workspace));
+    }
+
+    // budget-distill creates the src/ directory and big files
+    {
+      const ctx = prepareWorkspace('budget-distill', { runId: 'unit-test-2' });
+      const a = pathM.join(ctx.workspace, 'src', 'a.txt');
+      assert('budget-distill: src/a.txt exists',     fsM.existsSync(a));
+      assert('budget-distill: src/a.txt is large',   fsM.statSync(a).size > 10_000);
+      const policyText = fsM.readFileSync(ctx.policyPath, 'utf8');
+      assert('budget-distill: policy has max_output_tokens', policyText.includes('max_output_tokens: 200'));
+      cleanupWorkspace(ctx);
+    }
+
+    // Assertion primitives
+    {
+      const rows = [
+        { tool_name: 'read_file', action: 'BLOCK', reason: 'path-denied', event_id: 'e1' },
+        { tool_name: 'shell_bash', action: 'LOCAL', reason: 'ok', event_id: 'e2' },
+      ];
+      const hit = hasAuditRow(rows, r => r.action === 'BLOCK', 'block exists');
+      assert('hasAuditRow: match → passed=true',  hit.passed === true);
+      const miss = hasAuditRow(rows, r => r.action === 'TRANSFORM', 'transform exists');
+      assert('hasAuditRow: no match → passed=false', miss.passed === false);
+
+      const stdoutClean = noMarkerInOutput('all clean', 'LF-MARK', 'no marker');
+      assert('noMarkerInOutput: absent → passed',  stdoutClean.passed === true);
+      const stdoutLeak  = noMarkerInOutput('leaked LF-MARK here', 'LF-MARK', 'no marker');
+      assert('noMarkerInOutput: present → failed', stdoutLeak.passed === false);
+
+      const cleanAudit = noMarkerInAudit(rows, 'LF-MARK', 'no marker');
+      assert('noMarkerInAudit: clean rows pass', cleanAudit.passed === true);
+      const dirtyAudit = noMarkerInAudit([{ tool_inputs: { path: 'LF-MARK' } }], 'LF-MARK', 'no marker');
+      assert('noMarkerInAudit: marker in row → fails', dirtyAudit.passed === false);
+    }
+
+    // readAuditRows handles missing file
+    {
+      const missing = readAuditRows('/no/such/path.jsonl');
+      assert('readAuditRows: missing file → []', Array.isArray(missing) && missing.length === 0);
+    }
+
+    // readAuditRows parses real jsonl + skips malformed
+    {
+      const osM = require('os');
+      const tmp = pathM.join(osM.tmpdir(), `lf-test-rows-${Date.now()}.jsonl`);
+      fsM.writeFileSync(tmp,
+        '{"event_id":"e1","action":"BLOCK"}\n' +
+        '{ malformed json\n' +
+        '{"event_id":"e2","action":"LOCAL"}\n');
+      const rows = readAuditRows(tmp);
+      assert('readAuditRows: skips malformed, keeps valid', rows.length === 2);
+      assert('readAuditRows: first row parsed',             rows[0].event_id === 'e1');
+      fsM.unlinkSync(tmp);
+    }
+
+    // verifyScenario aggregates assertions, picks up child error
+    {
+      const ctx = prepareWorkspace('deny-read', { runId: 'unit-test-3' });
+      // Write a synthetic audit row that satisfies the deny-read assertions
+      fsM.writeFileSync(ctx.auditPath,
+        JSON.stringify({
+          event_id: 'ev-1', tool_name: 'read_file', action: 'BLOCK',
+          reason: 'path-denied', tool_inputs: { path: ctx.secretPath },
+        }) + '\n');
+      const v = verifyScenario('deny-read', ctx, { exitCode: 0, stdout: 'all clean', stderr: '', timedOut: false });
+      assert('verifyScenario: passed when all assertions hold', v.passed === true);
+      assert('verifyScenario: auditRows=1',                     v.auditRows === 1);
+      assert('verifyScenario: scenario name preserved',         v.scenario === 'deny-read');
+
+      // Now check failure when marker leaks
+      const v2 = verifyScenario('deny-read', ctx,
+        { exitCode: 0, stdout: 'oh look: ' + ctx.marker, stderr: '', timedOut: false });
+      assert('verifyScenario: fails when marker in stdout', v2.passed === false);
+
+      // Failure when child errored
+      const v3 = verifyScenario('deny-read', ctx,
+        { exitCode: -1, stdout: '', stderr: '', timedOut: false, error: 'spawn ENOENT' });
+      assert('verifyScenario: childError fails the result',
+        v3.passed === false && v3.childError === 'spawn ENOENT');
+
+      cleanupWorkspace(ctx);
+    }
+
+    // renderResult produces a meaningful string
+    {
+      const out = renderResult({
+        scenario: 'deny-read', passed: true, childExit: 0, auditRows: 3,
+        assertions: [
+          { name: 'audit row present', passed: true, detail: null },
+          { name: 'no marker leaked',  passed: true, detail: null },
+        ],
+        timedOut: false, childError: null,
+      });
+      assert('renderResult: contains PASS',         out.includes('PASS'));
+      assert('renderResult: contains scenario',     out.includes('deny-read'));
+      assert('renderResult: contains assertion ✓',  out.includes('✓'));
+
+      const failOut = renderResult({
+        scenario: 'deny-read', passed: false, childExit: 0, auditRows: 0,
+        assertions: [{ name: 'audit row present', passed: false, detail: 'no matching row' }],
+        timedOut: false, childError: null,
+      });
+      assert('renderResult: FAIL path renders',     failOut.includes('FAIL'));
+      assert('renderResult: shows assertion ✗',     failOut.includes('✗'));
+    }
+
+    // Scenario prompts are deterministic strings
+    {
+      const ctx = prepareWorkspace('deny-shell-bypass', { runId: 'unit-test-4' });
+      const p = SCENARIOS['deny-shell-bypass'].prompt(ctx);
+      assert('prompt: includes secretPath',  p.includes(ctx.secretPath));
+      assert('prompt: mentions cat',         /cat|Get-Content/i.test(p));
+      cleanupWorkspace(ctx);
+    }
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   const total = passed + failed;
