@@ -316,7 +316,7 @@ ${col.b('Usage:')}
   localfirst clear              Reset today's log and session data
   localfirst clear --history    Wipe all historical logs
   localfirst ledger             Inspect token ledger (--last N, --summary, --scope session|today)
-  localfirst replay             Replay run audit (--last N, --detail, --run <id>)
+  localfirst replay             Replay run audit (--last N, --detail, --run <id>, --attribute)
   localfirst distill            Inspect distilled outputs (--last N, --entry <N> for raw)
   localfirst inspect            Cloud-boundary manifest (--last N, --entry N, --run <id>)
   localfirst boundary           Per-request three-column view: produced / re-entered / prevented

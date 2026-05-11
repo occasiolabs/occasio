@@ -8839,6 +8839,146 @@ console.log('\n3. runLocally');
         .includes('No anomalies'));
   }
 
+  // ── 40. Token attribution — replay --attribute ──────────────────────────
+  // Aggregates per-run context-window sources: tool contributions (approx),
+  // cache reuse (exact), residual (system + user + carry-over), and the
+  // prevention breakdown (distill / redact / context_budget / lao).
+  {
+    console.log('\n40. Token attribution');
+    const { attributeRun, fmtAttribution } = require('./src/replay');
+
+    // Empty run
+    {
+      const a = attributeRun([]);
+      assert('attribute: empty → request_count=0',   a.request_count === 0);
+      assert('attribute: empty → input_tokens=0',    a.input_tokens === 0);
+      assert('attribute: empty → tool_kept_total=0', a.tool_kept_total === 0);
+      assert('attribute: empty → residual=0',        a.residual_tokens === 0);
+    }
+
+    // Single request, no tools — residual = input_tokens
+    {
+      const a = attributeRun([
+        { iso: 't1', model: 'opus-4-7', input_tokens: 1200, output_tokens: 80, cache_read_tokens: 0 },
+      ]);
+      assert('attribute: 1 request',                a.request_count === 1);
+      assert('attribute: input_tokens=1200',        a.input_tokens === 1200);
+      assert('attribute: tool_kept_total=0',        a.tool_kept_total === 0);
+      assert('attribute: residual=1200',            a.residual_tokens === 1200);
+      assert('attribute: model captured',           a.model === 'opus-4-7');
+    }
+
+    // Tools across multiple requests, with cache reuse
+    {
+      const a = attributeRun([
+        { iso: 't1', input_tokens: 5000, cache_read_tokens: 2000,
+          tools: [
+            { tool: 'Read', cmd: 'README.md', bytes: 4000, kept_bytes: 4000, prevention_reason: null },
+            { tool: 'Grep', cmd: 'q',         bytes: 12000, kept_bytes: 800, prevention_reason: 'distill_clip' },
+          ],
+          distill_tokens_saved: 2800 },
+        { iso: 't2', input_tokens: 6200, cache_read_tokens: 4500,
+          tools: [
+            { tool: 'Bash', cmd: 'git status', bytes: 1200, kept_bytes: 1200, prevention_reason: null },
+          ],
+          distill_tokens_saved: 0, lao_tokens_saved: 200 },
+      ]);
+
+      assert('attribute: 2 requests',                a.request_count === 2);
+      assert('attribute: Σ input_tokens',            a.input_tokens === 11200);
+      assert('attribute: Σ cache_read',              a.cache_read_tokens === 6500);
+
+      // Tool tokens: read_file kept=4000 → 1000t; grep kept=800 → 200t; bash kept=1200 → 300t
+      assert('attribute: read_file ~1000t',          a.tool_contributions.read_file === 1000);
+      assert('attribute: grep ~200t',                a.tool_contributions.grep === 200);
+      assert('attribute: shell_bash ~300t',          a.tool_contributions.shell_bash === 300);
+      assert('attribute: tool_kept_total ~1500',     a.tool_kept_total === 1500);
+
+      // Residual: 11200 - 1500 = 9700
+      assert('attribute: residual = input - kept',   a.residual_tokens === 9700);
+
+      // Prevented: distill 2800 + lao 200
+      assert('attribute: prevented.distill=2800',    a.prevented.distill_clip === 2800);
+      assert('attribute: prevented.lao=200',         a.prevented.lao_drop === 200);
+      assert('attribute: prevented_total=3000',      a.prevented_total === 3000);
+
+      // Counterfactual: input + prevented
+      assert('attribute: counterfactual = 14200',    a.counterfactual_input_tokens === 14200);
+    }
+
+    // context_budget prevention derived from raw - kept on relevant tools
+    {
+      const a = attributeRun([
+        { iso: 't1', input_tokens: 100,
+          tools: [
+            { tool: 'Read', cmd: 'big.log', bytes: 40000, kept_bytes: 200, prevention_reason: 'context_budget' },
+          ] },
+      ]);
+      // 40000 - 200 = 39800 bytes saved → ~9950 tokens
+      assert('attribute: context_budget tokens derived from bytes',
+        a.prevented.context_budget === 9950);
+      assert('attribute: prevented_total includes budget',
+        a.prevented_total === 9950);
+    }
+
+    // Tool category mapping covers both agent-protocol and canonical names
+    {
+      const a = attributeRun([
+        { iso: 't1', input_tokens: 0,
+          tools: [
+            { tool: 'read_file',  cmd: 'a', bytes: 400, kept_bytes: 400 },
+            { tool: 'Read',       cmd: 'b', bytes: 400, kept_bytes: 400 },
+          ] },
+      ]);
+      assert('attribute: Read+read_file collapse to one category',
+        Object.keys(a.tool_contributions).length === 1 && a.tool_contributions.read_file === 200);
+    }
+
+    // Tools without kept_bytes (legacy entries) → fall back to bytes
+    {
+      const a = attributeRun([
+        { iso: 't1', input_tokens: 0,
+          tools: [
+            { tool: 'Read', cmd: 'old', bytes: 2000 /* no kept_bytes */ },
+          ] },
+      ]);
+      assert('attribute: legacy entry kept_bytes ← bytes',
+        a.tool_contributions.read_file === 500);
+    }
+
+    // Renderer produces a string with expected sections
+    {
+      const a = attributeRun([
+        { iso: 't1', model: 'opus-4-7', input_tokens: 5000, cache_read_tokens: 2000,
+          tools: [
+            { tool: 'Grep', cmd: 'q', bytes: 8000, kept_bytes: 800, prevention_reason: 'distill_clip' },
+          ],
+          distill_tokens_saved: 1800 },
+      ]);
+      const s = fmtAttribution(a, 'r-test-12345');
+      assert('fmtAttribution: shows "Tokens reaching"',
+        s.includes('Tokens reaching the model'));
+      assert('fmtAttribution: shows Tool contributions',
+        s.includes('Tool contributions'));
+      assert('fmtAttribution: shows Cache reuse',
+        s.includes('Cache reuse'));
+      assert('fmtAttribution: shows Residual',
+        s.includes('Residual'));
+      assert('fmtAttribution: shows Prevented from re-entering',
+        s.includes('Prevented from re-entering'));
+      assert('fmtAttribution: shows Counterfactual',
+        s.includes('Counterfactual'));
+      assert('fmtAttribution: shows grep row',
+        s.includes('grep'));
+      assert('fmtAttribution: notes approximation',
+        s.includes('approximate (chars/4)'));
+
+      const sEmpty = fmtAttribution(attributeRun([]), 'r-empty');
+      assert('fmtAttribution: empty → "no entries"',
+        sEmpty.includes('no entries'));
+    }
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   const total = passed + failed;

@@ -201,10 +201,174 @@ function printRunDetail(runId, entries) {
   console.log(col.d(`\n  Total:  `) + col.y(`$${stats.cost.toFixed(4)}`) + savedStr + localStr + trimmedStr + blockedStr + '\n');
 }
 
+// ── Token attribution ─────────────────────────────────────────────────────────
+//
+// "Where did this run's context tokens come from?"
+//
+// Walks a run's JSONL entries and reconstructs a per-source breakdown of the
+// total input_tokens reported by Anthropic. Three classes:
+//
+//   tool_contributions — Σ kept_bytes / 4 per canonical tool category. This
+//                        approximates how many tokens of each tool's output
+//                        first entered the model's context. APPROXIMATE
+//                        (chars/4) and marked with '~'.
+//   cache_reuse        — Σ cache_read_tokens. EXACT (Anthropic-reported).
+//   residual           — Σ input_tokens − Σ tool_kept_tokens. Includes
+//                        system prompt, user messages, and cross-request
+//                        tool_result carry-over. We do NOT inspect request
+//                        bodies; carry-over is folded into residual rather
+//                        than mis-attributed to tools.
+//
+// "Prevented from re-entering" is summed exactly from the per-request log
+// fields (distill_tokens_saved, lao_tokens_saved, plus a derived
+// context_budget_saved from tools[].kept_bytes vs bytes when the prevention
+// reason is 'context_budget').
+//
+// The function returns a plain JS object; renderers and CLI live below.
+
+const TOOL_CATEGORY_MAP = {
+  Read: 'read_file',     read_file:  'read_file',
+  Glob: 'find_files',    find_files: 'find_files',
+  Grep: 'grep',          grep:       'grep',
+  Bash: 'shell_bash',    shell_bash: 'shell_bash',
+  PowerShell: 'shell_powershell', shell_powershell: 'shell_powershell',
+  TodoWrite: 'todo_write', todo_write: 'todo_write',
+  TodoRead:  'todo_read',  todo_read:  'todo_read',
+};
+function categoryOf(toolName) {
+  return TOOL_CATEGORY_MAP[toolName] || (toolName ? String(toolName).toLowerCase() : 'unknown');
+}
+function tokensFromBytes(b) {
+  return Math.ceil((b || 0) / 4);
+}
+
+function attributeRun(runEntries) {
+  const base = {
+    request_count: 0,
+    model: null,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    tool_contributions: {},     // category → tokens
+    tool_kept_total: 0,
+    prevented: {
+      distill_clip:   0,
+      redact_secrets: 0,
+      context_budget: 0,
+      lao_drop:       0,
+    },
+    prevented_total: 0,
+    residual_tokens: 0,
+    counterfactual_input_tokens: 0,
+    approximations: ['tool_contributions (chars/4)', 'residual (input_tokens − tool_kept)'],
+  };
+  if (!Array.isArray(runEntries) || runEntries.length === 0) return base;
+
+  for (const e of runEntries) {
+    base.request_count++;
+    base.model              = base.model || e.model || null;
+    base.input_tokens       += (e.input_tokens       || 0);
+    base.output_tokens      += (e.output_tokens      || 0);
+    base.cache_read_tokens  += (e.cache_read_tokens  || 0);
+    base.cache_write_tokens += (e.cache_write_tokens || 0);
+    base.prevented.distill_clip += (e.distill_tokens_saved || 0);
+    base.prevented.lao_drop     += (e.lao_tokens_saved     || 0);
+
+    if (!Array.isArray(e.tools)) continue;
+    for (const t of e.tools) {
+      const cat = categoryOf(t.tool);
+      const kept = typeof t.kept_bytes === 'number' ? t.kept_bytes : (t.bytes || 0);
+      const keptTokens = tokensFromBytes(kept);
+      base.tool_contributions[cat] = (base.tool_contributions[cat] || 0) + keptTokens;
+      base.tool_kept_total += keptTokens;
+      // Context-budget savings derived from raw - kept on tools where the
+      // reason recorded by interceptor.js was 'context_budget'. The distill
+      // and redact paths already populate distill_tokens_saved /
+      // secretsRedacted-bytes elsewhere; only the budget path lacks a
+      // dedicated saved-tokens field.
+      if (t.prevention_reason === 'context_budget' && typeof t.bytes === 'number' && typeof t.kept_bytes === 'number') {
+        const saved = tokensFromBytes(Math.max(0, t.bytes - t.kept_bytes));
+        base.prevented.context_budget += saved;
+      }
+      if (typeof t.secretsRedacted === 'number' && t.secretsRedacted > 0 &&
+          typeof t.bytes === 'number' && typeof t.kept_bytes === 'number') {
+        // Approximate: bytes redacted ≈ delta. For full-redaction this is the
+        // honest figure; for partial-redaction it slightly overstates.
+        const saved = tokensFromBytes(Math.max(0, t.bytes - t.kept_bytes));
+        base.prevented.redact_secrets += saved;
+      }
+    }
+  }
+
+  base.prevented_total = base.prevented.distill_clip
+                       + base.prevented.redact_secrets
+                       + base.prevented.context_budget
+                       + base.prevented.lao_drop;
+  base.residual_tokens = Math.max(0, base.input_tokens - base.tool_kept_total);
+  base.counterfactual_input_tokens = base.input_tokens + base.prevented_total;
+  return base;
+}
+
+function fmtAttribution(attr, runId) {
+  if (!attr || attr.request_count === 0) {
+    return '\n  (no entries in this run)\n';
+  }
+  const lines = [];
+  const C = col;
+  const bar = (n, max, width = 24) => {
+    if (max <= 0) return '';
+    const cells = Math.min(width, Math.round((n / max) * width));
+    return '█'.repeat(cells);
+  };
+  const maxComponent = Math.max(
+    attr.tool_kept_total,
+    attr.cache_read_tokens,
+    attr.residual_tokens,
+    1,
+  );
+
+  lines.push('');
+  lines.push(`${C.b('Run')} ${C.d(shortId(runId || ''))}${attr.model ? '  ' + C.d(attr.model) : ''}  ${C.d(`(${attr.request_count} requests)`)}`);
+  lines.push('');
+  lines.push(`  ${C.b('Tokens reaching the model (Σ across run):')}`);
+  const toolsSorted = Object.entries(attr.tool_contributions).sort((a, b) => b[1] - a[1]);
+  if (toolsSorted.length === 0) {
+    lines.push(`    ${C.d('(no tool calls in this run)')}`);
+  } else {
+    lines.push(`    ${C.b('Tool contributions')}     ${C.y(`~${fmtN(attr.tool_kept_total)}t`)}   ${C.d('(kept_bytes / 4)')}`);
+    for (const [cat, tok] of toolsSorted) {
+      lines.push(`      ${cat.padEnd(20)} ${('~' + fmtN(tok) + 't').padStart(8)}   ${C.c(bar(tok, maxComponent))}`);
+    }
+  }
+  lines.push(`    ${C.b('Cache reuse')}            ${C.g(fmtN(attr.cache_read_tokens) + 't')}     ${C.c(bar(attr.cache_read_tokens, maxComponent))}   ${C.d('(Anthropic prompt cache, exact)')}`);
+  lines.push(`    ${C.b('Residual')}               ${fmtN(attr.residual_tokens) + 't'.padEnd(7)}    ${C.c(bar(attr.residual_tokens, maxComponent))}   ${C.d('(system + user + carry-over)')}`);
+  lines.push(`    ${C.d('─────')}`);
+  lines.push(`    ${C.b('Σ input_tokens')}         ${C.b(fmtN(attr.input_tokens) + 't')}     ${C.d('(Anthropic-reported, exact)')}`);
+  lines.push('');
+  lines.push(`  ${C.b('Prevented from re-entering:')}`);
+  const p = attr.prevented;
+  lines.push(`    distill_clip            ${('~' + fmtN(p.distill_clip) + 't').padStart(8)}`);
+  lines.push(`    redact_secrets          ${('~' + fmtN(p.redact_secrets) + 't').padStart(8)}`);
+  lines.push(`    context_budget          ${('~' + fmtN(p.context_budget) + 't').padStart(8)}`);
+  lines.push(`    lao_drop                ${('~' + fmtN(p.lao_drop) + 't').padStart(8)}`);
+  lines.push(`    ${C.d('─────')}`);
+  lines.push(`    ${C.b('Total prevented')}         ${C.r('~' + fmtN(attr.prevented_total) + 't')}`);
+  lines.push('');
+  const pct = attr.counterfactual_input_tokens > 0
+    ? Math.round((attr.prevented_total / attr.counterfactual_input_tokens) * 100)
+    : 0;
+  lines.push(`  ${C.b('Counterfactual:')}        would have been ~${fmtN(attr.counterfactual_input_tokens)}t  ${C.d(`(~${pct}% prevented)`)}`);
+  lines.push('');
+  lines.push(C.d('  Token figures with ~ are approximate (chars/4). Σ input_tokens and cache values are exact.'));
+  return lines.join('\n');
+}
+
 function runReplayCli(args) {
   let limit     = 3;
   let detail    = false;
   let runFilter = null;
+  const attribute = args.includes('--attribute');
 
   const lastIdx = args.indexOf('--last');
   if (lastIdx >= 0) limit = parseInt(args[lastIdx + 1], 10) || 3;
@@ -237,6 +401,11 @@ function runReplayCli(args) {
       console.log(col.d(`\n   No run found matching '${runFilter}' in today's log.\n`));
       return;
     }
+    if (attribute) {
+      console.log(col.b(`\n⚡ LocalFirst Replay — Token Attribution`));
+      console.log(fmtAttribution(attributeRun(runsMap.get(matchedKey)), matchedKey));
+      return;
+    }
     printRunDetail(matchedKey, runsMap.get(matchedKey));
     return;
   }
@@ -258,7 +427,9 @@ function runReplayCli(args) {
   }
 
   for (const { runId, runEntries } of sliced) {
-    if (detail) {
+    if (attribute) {
+      console.log(fmtAttribution(attributeRun(runEntries), runId));
+    } else if (detail) {
       printRunDetail(runId, runEntries);
     } else {
       printRunHeader(runId, buildRunStats(runEntries));
@@ -272,4 +443,4 @@ function runReplayCli(args) {
   }
 }
 
-module.exports = { groupByRun, buildRunStats, runReplayCli };
+module.exports = { groupByRun, buildRunStats, attributeRun, fmtAttribution, runReplayCli };
