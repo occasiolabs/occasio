@@ -2384,7 +2384,13 @@ console.log('\n3. runLocally');
 
   // ── expandPsEnvVars ────────────────────────────────────────────────────────
   {
-    const home = process.env.USERPROFILE || process.env.HOME || '';
+    // Cross-platform shim: USERPROFILE is Windows-only. On Linux / macOS CI
+    // we mirror it from HOME so expandPsEnvVars has a target to resolve.
+    // Scoped to the test process; production code is unaffected.
+    if (!process.env.USERPROFILE && process.env.HOME) {
+      process.env.USERPROFILE = process.env.HOME;
+    }
+    const home = process.env.USERPROFILE || '';
     assert('expandPsEnvVars: $env:USERPROFILE expands to process.env.USERPROFILE',
       expandPsEnvVars('$env:USERPROFILE') === home);
     assert('expandPsEnvVars: Get-Content $env:USERPROFILE\\file → path expanded',
@@ -2471,13 +2477,18 @@ console.log('\n3. runLocally');
     !isInterceptable(psBlk('Select-String -Pattern "foo" -Path ".\\\\src\\\\*.js"')));
 
   // ── nativeHandle: $env: expansion in Get-Content ──────────────────────────
-  {
+  // Windows-only: the test models real Claude Code on Windows emitting
+  // `Get-Content "$env:TEMP\filename.txt"` with a backslash separator.
+  // The same shape with backslashes is not a valid path on Linux/macOS,
+  // so the assertion would fail there for reasons unrelated to the
+  // expansion logic itself — which is already covered cross-platform
+  // by the expandPsEnvVars unit tests above.
+  if (process.platform === 'win32') {
     const tmpFile = path.join(require('os').tmpdir(), 'lf-test-envvar-' + Date.now() + '.txt');
     fs.writeFileSync(tmpFile, 'env var expansion works');
     const tmpDir  = require('os').tmpdir();
     const tmpBase = path.basename(tmpFile);
-    // Simulate Claude Code on Windows: Get-Content "$env:TEMP\filename.txt"
-    const envVar  = process.platform === 'win32' ? 'TEMP' : 'TMPDIR';
+    const envVar  = 'TEMP';
     process.env[envVar] = process.env[envVar] || tmpDir;
     const cmd = `Get-Content "$env:${envVar}\\${tmpBase}"`;
     const expanded = expandPsEnvVars(cmd);
