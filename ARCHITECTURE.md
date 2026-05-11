@@ -1,6 +1,6 @@
-# LocalFirst Architecture (Stage 1)
+# LocalFirst Architecture
 
-LocalFirst is built as a **user-side boundary layer** between AI agents and the user's machine. Stage 1 introduces the layered architecture as named modules with clean contracts, while preserving all existing behavior. Layers wrap the existing `interceptor.js` / `runtime.js` / `analyzer.js` / `distiller.js` implementations rather than rewriting them.
+LocalFirst is built as a **user-side boundary layer** between AI agents and the user's machine. The architecture is layered: each layer has a named module with a clean contract, and policy decisions flow through the canonical pipeline (`adapter → policy → dispatcher → auditor`). Concrete components wrap the implementations in `interceptor.js` / `runtime.js` / `analyzer.js` / `distiller.js` and the per-call defense gates in `outbound-policy.js`.
 
 ## The seven layers
 

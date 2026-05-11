@@ -176,9 +176,7 @@ Each JSONL entry includes:
 
 ## Demos
 
-- [Demo 1: Local tool interception](demos/01-local-interception.md) — file reads with zero cloud tokens
-- [Demo 2: Secret detection and blocking](demos/02-secret-detection.md) — warn and strict modes
-- [Demo 3: Cost ledger and run replay](demos/03-cost-ledger-replay.md) — inspect cost, savings, and event sequence
+- [Cross-protocol governance: same policy.yml governs Claude Code and MCP](docs/demos/mcp-block.md) — end-to-end capture of the same `deny_paths` rule producing identical `BLOCK` rows under both protocols, with both verifiers in agreement.
 
 ---
 

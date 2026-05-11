@@ -1,5 +1,154 @@
 # Changelog
 
+## [0.8.0] — 2026-05-11  Path-1 ↔ path-2 defense symmetry + Claude-in-Claude self-test stack
+
+The first release where LocalFirst can validate its own governance claims
+against a real Claude Code subordinate session — and where every defense
+class (deny_paths, redact-secrets, distill-output, max_output_tokens) is
+enforced symmetrically at both the tool-call gate AND the outbound auto-
+context body. Two real bypasses surfaced via the new self-test stack and
+were fixed in the same release.
+
+### Fixed — security (auto-context bypass class)
+
+The pre-existing tool-call gate (path-1) intercepted `tool_use` blocks the
+cloud model emitted. But Claude Code (and other agent runtimes) inject
+synthetic `tool_use Read` + `tool_result <file content>` pairs into the
+OUTBOUND request body as agentic context BEFORE the model has had a chance
+to call any tool. Those tool_results never triggered path-1 because no
+model-initiated call happened. Two concrete bypasses found by the new
+`localfirst harness` against a real subordinate session:
+
+- **deny_paths bypass.** A denied file was read via auto-context and its
+  bytes reached the model anyway. Closed by a new path-2 gate in
+  `src/outbound-policy.js::enforceOutboundDenyPaths`.
+- **redact-secrets bypass.** An AKIA-shaped fixture in an auto-context
+  tool_result was forwarded unredacted. Closed by
+  `enforceOutboundSecretRedaction`. Behaviour chosen: always **REDACT**,
+  never request-block — strict-mode block stays at path-1.
+
+`enforceOutboundShaping` completes the trio with path-2 distill-output and
+max_output_tokens enforcement. Defense matrix:
+
+| Class             | Path-1 (tool-call) | Path-2 (outbound auto-context) |
+|-------------------|--------------------|--------------------------------|
+| deny_paths        | ✓                  | ✓ (new)                        |
+| redact-secrets    | ✓                  | ✓ (new)                        |
+| distill-output    | ✓                  | ✓ (new)                        |
+| max_output_tokens | ✓                  | ✓ (new)                        |
+
+Audit reasons: `outbound-context-path-denied`, `outbound-secret-redacted[-strict]`,
+`outbound-shaping-<step>+<step>`. Each path-2 enforcement writes its own
+audit row with `direction: 'outbound'` so `localfirst report` and the
+independent Python walker see both gates uniformly.
+
+### Added — self-test infrastructure
+
+**`localfirst harness`.** End-to-end governance validation against a real
+Claude Code subordinate. Spawns `localfirst claude --print <prompt>` with
+scratch policy + scratch audit chain in `os.tmpdir()`, never touches the
+user's real `~/.localfirst/`. Authenticates via Claude Code's bundled
+auth — no `ANTHROPIC_API_KEY` required when the user is signed in via
+Claude Pro. Nine v1 scenarios: `deny-read`, `deny-shell-bypass`,
+`symlink-bypass`, `redact-secrets-live`, `context-budget-live`,
+`encoded-output` (discovery), `plain-text-context` (discovery),
+`tool-chain-read-write-read` (discovery), and `mcp-deny-read` (protocol-
+level, $0 per run). Each scenario also runs an independent audit-chain
+verifier so a defended-but-chain-broken outcome is correctly FAILed.
+
+**`localfirst redteam`.** Autonomous adversarial tester. A second LLM
+(default Haiku 4.5) is given an exfiltration goal and a 4-tool surface
+(`send_prompt`, `read_audit_log`, `read_subject_response`, `done`) to
+probe the subordinate. Tester's verdict is recorded but NOT trusted —
+an independent verifier walks the audit chain + transcript and emits the
+true verdict. Tester-hallucinated-exploit cases ("said yes, found
+nothing") are surfaced as their own signal. Hard caps: `--max-turns`,
+`--tester-budget` (USD). Peer dep on `@anthropic-ai/sdk`, dynamic
+require with install hint if missing.
+
+**`localfirst selftest`.** Eight in-process governance checks on a
+scratch policy and scratch audit chain. Synthetic boundary events
+(no LLM), runs in <1 s. Covers `read_file` deny, shell-bash deny,
+shell-powershell deny, allow-path positive, secret BLOCK under strict
+mode, redact-secrets TRANSFORM, audit-chain verify, chain shape sanity.
+
+### Added — context-control / observability
+
+**`localfirst boundary`.** Per-request three-column view: tool output
+**produced**, tool output that **re-entered** the model, tool output
+**prevented** from re-entering and why (`distill_clip` / `redact_secrets` /
+`context_budget` / `block`). Backed by new `bytes` / `kept_bytes` /
+`prevention_reason` fields on every recorded tool call.
+
+**`localfirst baseline`.** Per-project behaviour baseline. `learn` mines
+the last N days of logs scoped to the current cwd into
+`~/.localfirst/baseline/<cwd-hash>.json`; `compare` walks the most recent
+session and surfaces anomalies: `sensitive_path` (HIGH — covers `~/.ssh`,
+`~/.aws`, `*/credentials`, `*.env*`, `/etc/(shadow|passwd|sudoers)`,
+even on cold start), `new_path` / `new_tool` (medium), `new_shell_verb`
+(HIGH for `curl`/`wget`/`ssh`/`rm`/`sudo`, medium otherwise),
+`volume_spike` (>1.5× p95).
+
+**`localfirst replay --attribute`.** Per-run token attribution. Answers
+"who ate the context window?" without persisting request bodies. Splits
+the run's input tokens into tool_contributions (per canonical tool
+category, approx), cache_reuse (exact), residual (system + user + carry-
+over). Plus a four-line prevented-from-re-entering breakdown derived
+from existing JSONL fields.
+
+**Per-tool context budget.** `policy.yml` `tools.<name>.max_output_tokens`.
+Applied as the FINAL clip after any TRANSFORM/distill so the budget can
+further trim already-shaped output. Validator errors on non-positive-
+integer values — a silently-dropped budget is a cost-control gap.
+
+### Added — continuous adversarial testing
+
+**`.github/workflows/redteam.yml`.** Two-tier CI workflow.
+
+- **Free tier** (every push to `main`, every PR, nightly 04:00 UTC, $0 per
+  run): unit tests + smoke + selftest + `mcp-deny-read` cross-protocol
+  scenario. MCP scenario costs zero — JSON-RPC against the local MCP
+  server, no LLM in the loop.
+- **LLM tier** (nightly + manual dispatch, gated on `ANTHROPIC_API_KEY`
+  secret, ~$2-3 per night): full agent-driven scenario battery with
+  spend bounded by per-scenario `--max-budget-usd` + 120-180s timeouts.
+  Discovery probes (`encoded-output`, `plain-text-context`,
+  `tool-chain-read-write-read`) flagged `continue-on-error` so a future
+  bypass surfaces as a warning rather than hard-failing the workflow.
+- 365-day artifact retention on LLM-tier results — a full year of
+  per-night governance audit recoverable via `gh run download`.
+
+Drift guard: a unit test asserts every scenario referenced in the
+workflow YAML is a real entry in `SCENARIOS` in `src/harness.js`.
+
+### Removed
+
+- `src/localrouter.js` (Ollama / local-LLM routing). Undocumented in the
+  v0.7.1 reframe; out of scope for the new context-control product
+  story.
+- `demos/01-local-interception.md`, `demos/02-secret-detection.md`,
+  `demos/03-cost-ledger-replay.md`. v0.5-era framing, superseded by the
+  cross-protocol demo at `docs/demos/mcp-block.md` which is the only
+  demo the README now links to.
+
+### Changed
+
+- README `## Demos` section now links only to the cross-protocol mcp-
+  block demo. The three legacy demos and their stale framing are gone.
+- `ARCHITECTURE.md` introduction neutralised; the "Stage 1" in-progress
+  framing is replaced with a stable architectural overview.
+- `package.json` adds `npm run test:mcp` for `test-mcp-server.js` (MCP
+  input normalization regression tests), making the MCP test surface
+  discoverable alongside `npm test` and `npm run smoke`.
+
+### Notes
+
+- 2372 unit / 113 smoke / 8 selftest assertions, all green.
+- Live-validated all five defense scenarios + the MCP cross-protocol
+  scenario from a real Claude Code subordinate session via
+  `localfirst harness`.
+- `localfirst --version` now prints `localfirst v0.8.0`.
+
 ## [0.7.1] — 2026-05-11  Context-control framing + four observability features
 
 A substantive release. The headline shifts from "govern, audit, prove" to

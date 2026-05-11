@@ -48,7 +48,7 @@ const { runInspectCli }   = require('./inspect');
 const { runAuditCli }     = require('./audit/verifier');
 const { budgetStatus, fmtBudget, BUDGET_EXCEEDED_EVENT } = require('./budget');
 
-const VERSION = '0.7.1';
+const VERSION = '0.8.0';
 const LOG_SCHEMA_VERSION = 2;
 // Port override via env var (used by `localfirst harness` and redteam to
 // run isolated proxies against scratch audit chains on free ports). Default

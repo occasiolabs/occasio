@@ -21,7 +21,7 @@ on:
     # 04:00 UTC daily — well outside any product release window.
     - cron: '0 4 * * *'
   push:
-    branches: [main, prep/public-push]
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
