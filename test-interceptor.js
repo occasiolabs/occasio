@@ -9939,6 +9939,44 @@ console.log('\n3. runLocally');
     }
   }
 
+  // ── 47. CI workflow — redteam.yml exists and references real scenarios ──
+  // Drift guard: if a scenario is renamed/removed in src/harness.js but the
+  // workflow YAML still names the old one, the nightly job will silently
+  // start failing or running stale scenarios. This test catches the drift
+  // at commit time.
+  {
+    console.log('\n47. CI workflow drift guard');
+    const fsM   = require('fs');
+    const pathM = require('path');
+    const wfPath = pathM.join(__dirname, '.github', 'workflows', 'redteam.yml');
+    assert('redteam.yml: file exists',  fsM.existsSync(wfPath));
+    const wf = fsM.readFileSync(wfPath, 'utf8');
+    assert('redteam.yml: runs on schedule',     /on:[\s\S]+schedule:/.test(wf));
+    assert('redteam.yml: free tier exists',     /free-tier:/.test(wf));
+    assert('redteam.yml: llm tier exists',      /llm-tier:/.test(wf));
+    assert('redteam.yml: gates llm tier on secret',
+      /ANTHROPIC_API_KEY/.test(wf));
+    assert('redteam.yml: references unit tests',          /test-interceptor\.js/.test(wf));
+    assert('redteam.yml: references smoke tests',         /test-smoke\.js/.test(wf));
+    assert('redteam.yml: references selftest',            /localfirst\.js selftest/.test(wf));
+    // Every scenario named in the workflow must be a real scenario in
+    // src/harness.js.
+    const referenced = (wf.match(/--scenario\s+([a-z0-9-]+)/g) || [])
+      .map(s => s.replace(/--scenario\s+/, ''));
+    assert('redteam.yml: at least 5 scenarios referenced', referenced.length >= 5);
+    const { SCENARIOS } = require('./src/harness');
+    for (const name of referenced) {
+      assert(`redteam.yml: scenario "${name}" defined in src/harness.js`,
+        !!SCENARIOS[name]);
+    }
+    // The free tier MUST include the MCP scenario (no LLM cost = always-runnable)
+    assert('redteam.yml: free tier runs mcp-deny-read',
+      /scenario\s+mcp-deny-read/.test(wf));
+    // The discovery probes are flagged advisory (continue-on-error)
+    assert('redteam.yml: discovery probes are advisory',
+      /encoded-output[\s\S]{0,300}continue-on-error|continue-on-error[\s\S]{0,300}encoded-output/.test(wf));
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   const total = passed + failed;

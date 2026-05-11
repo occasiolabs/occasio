@@ -1,0 +1,134 @@
+name: redteam
+
+# Nightly adversarial validation of LocalFirst's defense surface.
+# Runs the harness scenario battery against a real Claude Code
+# subordinate (and the MCP server in protocol-level mode), reports
+# pass/fail per scenario, persists the result for trend tracking.
+#
+# Two tiers:
+#   - Free tier (always-on):    MCP cross-protocol scenarios. $0 per run.
+#     Run on every push to main + PR + nightly schedule.
+#   - LLM tier (key required):  agent-driven scenarios. ~$0.30-$0.50 each.
+#     Run only when ANTHROPIC_API_KEY secret is configured. Default cadence:
+#     nightly + manual dispatch.
+#
+# Cost guard: the LLM tier scenarios are bounded by --max-budget-usd 0.30
+# per scenario inside the harness, plus a hard 120s timeout per scenario.
+# Worst-case nightly bill: ~$2.50 across the full LLM scenario set.
+
+on:
+  schedule:
+    # 04:00 UTC daily — well outside any product release window.
+    - cron: '0 4 * * *'
+  push:
+    branches: [main, prep/public-push]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Which tier to run'
+        type: choice
+        options: [free, llm, both]
+        default: free
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Tier 1: free, always-runnable ─────────────────────────────────────────
+  free-tier:
+    name: 'free tier (MCP, no LLM)'
+    if: github.event_name != 'workflow_dispatch' || inputs.tier != 'llm'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci || npm install
+      - name: Unit tests (always)
+        run: node test-interceptor.js
+      - name: Smoke tests (always)
+        run: node test-smoke.js
+      - name: Self-test (free)
+        run: node bin/localfirst.js selftest
+      - name: Harness — MCP cross-protocol (free)
+        run: node bin/localfirst.js harness --scenario mcp-deny-read --timeout 60
+      - name: Persist result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redteam-free-${{ github.run_id }}
+          path: |
+            ./*.log
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # ── Tier 2: LLM, scenario battery ─────────────────────────────────────────
+  llm-tier:
+    name: 'llm tier (live Claude Code subordinate)'
+    # Only run when an API key secret is configured AND the schedule or
+    # explicit dispatch wants it. PRs from forks won't have the key, so this
+    # job is gated to avoid green-light failures.
+    if: |
+      (github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch') &&
+      (github.event.inputs.tier == 'llm' || github.event.inputs.tier == 'both' || github.event_name == 'schedule')
+    needs: free-tier
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci || npm install
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Verify API key is set
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret not set; LLM-tier jobs cannot run."
+            exit 1
+          fi
+
+      # Each scenario runs with --max-budget-usd inside the harness child
+      # (claude --max-budget-usd 0.30) so spend is bounded even if a future
+      # model goes into a tool-call loop.
+      - name: Harness — deny-read
+        run: node bin/localfirst.js harness --scenario deny-read --timeout 120 --json | tee out-deny-read.json
+      - name: Harness — deny-shell-bypass
+        run: node bin/localfirst.js harness --scenario deny-shell-bypass --timeout 120 --json | tee out-shell.json
+      - name: Harness — redact-secrets-live
+        run: node bin/localfirst.js harness --scenario redact-secrets-live --timeout 120 --json | tee out-redact.json
+      - name: Harness — symlink-bypass
+        run: node bin/localfirst.js harness --scenario symlink-bypass --timeout 120 --json | tee out-symlink.json
+      - name: Harness — context-budget-live
+        run: node bin/localfirst.js harness --scenario context-budget-live --timeout 120 --json | tee out-budget.json
+
+      # Discovery probes are advisory — they can FAIL legitimately if a
+      # future bypass class is exposed. Don't fail the workflow on them;
+      # surface the result.
+      - name: Harness — encoded-output (discovery, advisory)
+        continue-on-error: true
+        run: node bin/localfirst.js harness --scenario encoded-output --timeout 120 --json | tee out-encoded.json
+      - name: Harness — plain-text-context (discovery, advisory)
+        continue-on-error: true
+        run: node bin/localfirst.js harness --scenario plain-text-context --timeout 120 --json | tee out-plain.json
+      - name: Harness — tool-chain-read-write-read (discovery, advisory)
+        continue-on-error: true
+        run: node bin/localfirst.js harness --scenario tool-chain-read-write-read --timeout 180 --json | tee out-chain.json
+
+      - name: Persist all results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redteam-llm-${{ github.run_id }}
+          path: out-*.json
+          retention-days: 365
