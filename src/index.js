@@ -311,6 +311,7 @@ ${col.b(`⚡ LocalFirst v${VERSION}`)}
 ${col.b('Usage:')}
   localfirst claude [args...]   Start Claude with local proxy (intercept + log)
   localfirst demo               10-second proof: see LocalFirst block real secrets
+  localfirst demo attest        End-to-end attestation pipeline against a synthetic audit chain
   localfirst dashboard          Open live dashboard for the running session
   localfirst register           Register shell alias (type 'claude' directly)
   localfirst status             Show session stats and savings breakdown
@@ -639,6 +640,13 @@ if (cmd === 'preflight') {
   const { runPreflightCli } = require('./preflight/cli');
   runPreflightCli(args.slice(1));
   process.exit(0);
+}
+
+if (cmd === 'demo' && args[1] === 'attest') {
+  const { runAttestDemoCli } = require('./demo/attest-demo');
+  runAttestDemoCli(args.slice(2)).then(code => process.exit(code))
+    .catch(e => { process.stderr.write(`[demo attest] ${e.message}\n`); process.exit(1); });
+  return;
 }
 
 if (cmd === 'demo') {

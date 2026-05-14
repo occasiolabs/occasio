@@ -10971,6 +10971,52 @@ console.log('\n3. runLocally');
     }
   }
 
+  // ── demo attest: end-to-end pipeline against synthetic data ─────────────────
+  console.log('\ndemo attest: end-to-end against synthetic chain');
+  {
+    const { buildSyntheticChain } = require('./src/demo/attest-demo');
+    const { buildAttestation }    = require('./src/attest');
+    const { verifyFile }          = require('./src/audit/verifier');
+    const { canonicalize }        = require('./src/attest/canonicalize');
+    const osT   = require('os');
+    const fsT   = require('fs');
+    const pathT = require('path');
+
+    const tmpDir = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'lf-demo-test-'));
+    const chain  = pathT.join(tmpDir, 'pipeline-events.jsonl');
+    const policy = pathT.join(tmpDir, 'policy.yml');
+
+    const runId = buildSyntheticChain(chain, policy);
+    assert('demo attest: synthetic run_id is UUID-shaped',
+      /^[0-9a-f-]{36}$/i.test(runId));
+
+    const ver = verifyFile(chain);
+    assert('demo attest: synthetic chain verifies', ver.ok === true);
+    assert('demo attest: chain has 5 rows', ver.chained === 5);
+
+    const att = buildAttestation({ runId, logFile: chain, policyFile: policy });
+    assert('demo attest: attestation built', att !== null);
+    assert('demo attest: tool_calls = 4 (excl. policy_loaded)',
+      att.execution_summary.tool_calls === 4);
+    assert('demo attest: blocked = 1',
+      att.execution_summary.blocked === 1);
+    assert('demo attest: transformed = 1',
+      att.execution_summary.transformed === 1);
+    assert('demo attest: secrets_redacted = 1',
+      att.execution_summary.secrets_redacted === 1);
+    assert('demo attest: policy.source = user (policy_loaded row present)',
+      att.policy.source === 'user');
+
+    // Canonical round-trip — what the live demo prints as step 4.
+    const reparsed = JSON.parse(JSON.stringify(att));
+    const { signature: _o1, ...expected } = att;
+    const { signature: _o2, ...observed } = reparsed;
+    assert('demo attest: canonical-byte round-trip stable',
+      canonicalize(expected) === canonicalize(observed));
+
+    try { fsT.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+
   // ── anomaly CLI: window parser ──────────────────────────────────────────────
   console.log('\nanomaly: CLI helpers');
   {

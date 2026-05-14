@@ -1,0 +1,45 @@
+# LocalFirst Attest — example GitHub Actions workflow
+#
+# Copy this file to .github/workflows/attest-on-pr.yml in your repo, drop in
+# whatever step actually runs the AI agent, and you have an end-to-end signed
+# attestation pipeline on every PR.
+#
+# See docs/reference-pipeline.md for the explanation and what each step proves.
+
+name: Attest AI-generated PR
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write    # Sigstore keyless via GitHub OIDC
+  checks:    write   # post the PR Check Run
+  contents:  read    # checkout
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2     # so files-changed can diff HEAD^..HEAD
+
+      # ── Your AI-agent step goes here ────────────────────────────────
+      # The only requirement is that the agent runs under LocalFirst so
+      # its tool calls land in ~/.localfirst/pipeline-events.jsonl. Below
+      # is the Claude Code path; substitute as needed.
+      - name: Install LocalFirst + Claude Code
+        run: npm install -g @localfirst-ai/localfirst @anthropic-ai/claude-code
+
+      - name: Run Claude Code under LocalFirst
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: localfirst claude --hardened < .github/agent-prompt.txt
+
+      # ── Produce + sign attestation, post Check Run ──────────────────
+      - name: Attest
+        uses: localfirst-ai/attest-action@v1
+        # All inputs optional — run-id auto-resolves from
+        # ~/.localfirst/session.json. See integrations/attest-action/README.md
+        # for the full input matrix.
