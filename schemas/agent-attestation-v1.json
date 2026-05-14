@@ -47,7 +47,7 @@
     "agent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["platform", "started_at", "ended_at", "wall_time_s"],
+      "required": ["platform", "model", "session_id", "started_at", "ended_at", "wall_time_s"],
       "properties": {
         "platform": {
           "type": "string",
@@ -77,7 +77,7 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["file_hash", "source"],
+      "required": ["file_hash", "file_path", "source", "version", "rules_digest"],
       "properties": {
         "file_hash": {
           "type": "string",
@@ -109,7 +109,7 @@
     "execution_summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tool_calls", "local", "passed", "blocked", "transformed", "secrets_redacted"],
+      "required": ["tool_calls", "local", "passed", "blocked", "transformed", "secrets_redacted", "blocked_events"],
       "properties": {
         "tool_calls":      { "type": "integer", "minimum": 0 },
         "local":           { "type": "integer", "minimum": 0 },
@@ -136,7 +136,7 @@
     "audit_chain": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["genesis", "event_count", "chain_file", "verifier_url"],
+      "required": ["genesis", "first_hash", "last_hash", "event_count", "chain_file", "verifier_url"],
       "properties": {
         "genesis": {
           "type": "string",

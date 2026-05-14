@@ -10121,11 +10121,34 @@ console.log('\n3. runLocally');
     assert('attest: verifier passes after attest', ver.ok === true);
     assert('attest: verifier sees all 5 rows',     ver.chained === 5);
 
-    // ── 6. Schema spot-check: required top-level keys present ──────────────
+    // ── 6. Schema spot-check: required keys at every level present ─────────
+    // Mirrors the `required` arrays in schemas/agent-attestation-v1.json.
+    // Catches drift where the schema asks for a field the producer doesn't
+    // emit (or vice versa) — the bug class that ships subtly-malformed
+    // attestations consumers can't reliably parse.
     for (const k of ['schema_version','predicate_type','subject','agent','policy',
                      'execution_summary','audit_chain','signature']) {
-      assert(`attest: schema requires key "${k}"`, Object.prototype.hasOwnProperty.call(att, k));
+      assert(`attest: top-level required key "${k}"`,
+        Object.prototype.hasOwnProperty.call(att, k));
     }
+    for (const k of ['platform','model','session_id','started_at','ended_at','wall_time_s']) {
+      assert(`attest: agent.${k} present`,
+        Object.prototype.hasOwnProperty.call(att.agent, k));
+    }
+    for (const k of ['file_hash','file_path','source','version','rules_digest']) {
+      assert(`attest: policy.${k} present`,
+        Object.prototype.hasOwnProperty.call(att.policy, k));
+    }
+    for (const k of ['tool_calls','local','passed','blocked','transformed','secrets_redacted','blocked_events']) {
+      assert(`attest: execution_summary.${k} present`,
+        Object.prototype.hasOwnProperty.call(att.execution_summary, k));
+    }
+    for (const k of ['genesis','first_hash','last_hash','event_count','chain_file','verifier_url']) {
+      assert(`attest: audit_chain.${k} present`,
+        Object.prototype.hasOwnProperty.call(att.audit_chain, k));
+    }
+    assert('attest: subject.run_id present',
+      typeof att.subject.run_id === 'string');
 
     // ── 6. Policy-hash fallback marked as 'inferred' ───────────────────────
     // When the run slice contains NO policy_loaded event, the producer must

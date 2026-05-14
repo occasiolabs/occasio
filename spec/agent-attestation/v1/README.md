@@ -6,6 +6,8 @@
 
 **License:** Apache-2.0.
 
+> **Note on URI resolvability.** The predicate type URI above is currently a stable identifier rather than a fetchable resource — a `GET` against it will not return this spec document. (Standard practice for predicate URIs varies: SLSA Provenance and CycloneDX URIs resolve to content today; this one will resolve once a static-site mirror is published at the canonical URL. The identifier is reserved and will not move.) Consumers must compare the URI as a string, not dereference it.
+
 ## What this predicate claims
 
 A signed cryptographic statement about **what an AI coding agent did during a single bounded session**, including every governed tool call, every blocked attempt, every transform applied to a tool result, and the active policy that produced those decisions — all bound to a tamper-evident audit chain.
