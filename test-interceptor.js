@@ -10636,6 +10636,229 @@ console.log('\n3. runLocally');
       summarySafe.includes('[search.sigstore.dev](https://search.sigstore.dev/?logIndex=42)'));
   }
 
+  // ── anomaly detection: window split + detectors ─────────────────────────────
+  console.log('\nanomaly: window split + detectors');
+  {
+    const { runDetectors, splitByWindow, builtinDetectors } = require('./src/anomaly');
+    const denyRate          = require('./src/anomaly/detectors/deny-rate');
+    const fileReadVolume    = require('./src/anomaly/detectors/file-read-volume');
+    const unknownToolInput  = require('./src/anomaly/detectors/unknown-tool-input');
+    const secretRedactRate  = require('./src/anomaly/detectors/secret-redact-rate');
+
+    // Helper: build a synthetic chain row.
+    let counter = 0;
+    function mkRow(opts) {
+      counter++;
+      return {
+        ts: opts.ts || new Date(2026, 0, 1, 12, 0, counter).toISOString(),
+        kind: opts.kind || 'tool_call',
+        tool_name: opts.tool_name || 'Read',
+        action: opts.action || 'PASS',
+        tool_inputs: opts.tool_inputs || {},
+        secrets_redacted: opts.secrets_redacted,
+        hash: opts.hash || ('h' + counter.toString(16).padStart(8, '0').padEnd(64, '0')),
+        run_id: opts.run_id || '00000000-0000-0000-0000-000000000001',
+      };
+    }
+
+    // ── splitByWindow ──────────────────────────────────────────────────────
+    const NOW = new Date('2026-01-01T12:00:00.000Z').getTime();
+    const rowsForSplit = [
+      { ts: '2026-01-01T11:00:00.000Z' },        // 60 min ago → historical
+      { ts: '2026-01-01T11:50:00.000Z' },        // 10 min ago → in window (window=15m)
+      { ts: '2026-01-01T11:59:59.000Z' },        //  1 sec ago → window
+      { ts: '2026-01-01T13:00:00.000Z' },        // future → skipped
+      { ts: 'not-a-date' },                      // garbage → historical
+    ];
+    const split = splitByWindow(rowsForSplit, 15 * 60 * 1000, NOW);
+    assert('splitByWindow: window has 2 rows', split.window.length === 2);
+    assert('splitByWindow: historical has 2 (1 old + 1 garbage)',
+      split.historical.length === 2);
+    assert('splitByWindow: future rows skipped',
+      !split.window.some(r => r.ts === '2026-01-01T13:00:00.000Z'));
+
+    // ── deny-rate: cold-start does not fire on a fresh chain ───────────────
+    {
+      const window     = [];
+      const historical = [];
+      for (let i = 0; i < 5; i++) window.push(mkRow({ action: 'BLOCK' }));
+      // 5 BLOCKs out of 5 window rows = 100% → cold-start medium alert
+      const alerts = denyRate.evaluate(window, historical, { windowMs: 15 * 60 * 1000 });
+      assert('deny-rate cold-start: fires on 100% BLOCK rate',
+        alerts.length === 1 && alerts[0].severity === 'medium');
+    }
+    {
+      // Below MIN_ABSOLUTE → no alert regardless
+      const window = [mkRow({ action: 'BLOCK' }), mkRow({ action: 'BLOCK' })];
+      const alerts = denyRate.evaluate(window, [], { windowMs: 15 * 60 * 1000 });
+      assert('deny-rate: 2 BLOCKs below MIN_ABSOLUTE → no alert',
+        alerts.length === 0);
+    }
+    {
+      // Build 200 historical rows over 100 minutes with 0 BLOCKs, then 10 BLOCKs in window
+      const historical = [];
+      for (let i = 0; i < 200; i++) {
+        historical.push(mkRow({
+          ts: new Date(2026, 0, 1, 10, Math.floor(i / 2)).toISOString(),
+          action: 'PASS',
+        }));
+      }
+      const window = [];
+      for (let i = 0; i < 10; i++) window.push(mkRow({ action: 'BLOCK' }));
+      const alerts = denyRate.evaluate(window, historical, { windowMs: 15 * 60 * 1000 });
+      assert('deny-rate: BLOCKs in window with zero historical → high severity',
+        alerts.length === 1 && alerts[0].severity === 'high');
+    }
+
+    // ── file-read-volume: cold-start ───────────────────────────────────────
+    {
+      const window = [];
+      for (let i = 0; i < 25; i++) {
+        window.push(mkRow({ tool_name: 'Read', tool_inputs: { path: `/x/${i}.js` } }));
+      }
+      const alerts = fileReadVolume.evaluate(window, [], { windowMs: 15 * 60 * 1000 });
+      assert('file-read-volume cold-start: 25 distinct < 3×MIN_ABSOLUTE → no alert',
+        alerts.length === 0);
+    }
+    {
+      const window = [];
+      for (let i = 0; i < 70; i++) {
+        window.push(mkRow({ tool_name: 'Read', tool_inputs: { path: `/x/${i}.js` } }));
+      }
+      const alerts = fileReadVolume.evaluate(window, [], { windowMs: 15 * 60 * 1000 });
+      assert('file-read-volume cold-start: 70 distinct ≥ 3×MIN_ABSOLUTE → medium',
+        alerts.length === 1 && alerts[0].severity === 'medium');
+    }
+    {
+      // History where p95 = 5 distinct reads per window, then window has 30
+      const historical = [];
+      // 10 historical windows × 5 distinct paths each, spread out
+      for (let w = 0; w < 10; w++) {
+        for (let p = 0; p < 5; p++) {
+          historical.push(mkRow({
+            ts: new Date(2026, 0, 1, w, 0).toISOString(),
+            tool_name: 'Read',
+            tool_inputs: { path: `/baseline/w${w}-${p}.js` },
+          }));
+        }
+      }
+      const window = [];
+      for (let i = 0; i < 30; i++) {
+        window.push(mkRow({ tool_name: 'Read', tool_inputs: { path: `/burst/${i}.js` } }));
+      }
+      const alerts = fileReadVolume.evaluate(window, historical, { windowMs: 60 * 60 * 1000 });
+      assert('file-read-volume: 30 distinct vs p95≈5 → alert fires',
+        alerts.length === 1 && (alerts[0].severity === 'medium' || alerts[0].severity === 'high'));
+    }
+
+    // ── unknown-tool-input: cold-start warm-up ─────────────────────────────
+    {
+      const alerts = unknownToolInput.evaluate(
+        [mkRow({ tool_name: 'Bash', tool_inputs: { command: 'ls', cwd: '/x', env: {} } })],
+        [],
+        {});
+      assert('unknown-tool-input: cold-start → no alert',
+        alerts.length === 0);
+    }
+    {
+      const historical = [];
+      for (let i = 0; i < 60; i++) {
+        historical.push(mkRow({ tool_name: 'Bash', tool_inputs: { command: 'ls', cwd: '/x' } }));
+      }
+      // New shape: adds `env` key
+      const window = [mkRow({ tool_name: 'Bash',
+        tool_inputs: { command: 'ls', cwd: '/x', env: { SECRET: 'x' } } })];
+      const alerts = unknownToolInput.evaluate(window, historical, {});
+      assert('unknown-tool-input: novel `env` key triggers high severity',
+        alerts.length === 1 && alerts[0].severity === 'high' &&
+        alerts[0].message.includes('env'));
+    }
+    {
+      const historical = [];
+      for (let i = 0; i < 60; i++) {
+        historical.push(mkRow({ tool_name: 'Read', tool_inputs: { path: '/x' } }));
+      }
+      const window = [mkRow({ tool_name: 'Read', tool_inputs: { path: '/y' } })];
+      // Same shape (path only) → no alert
+      const alerts = unknownToolInput.evaluate(window, historical, {});
+      assert('unknown-tool-input: same shape, different value → no alert',
+        alerts.length === 0);
+    }
+
+    // ── secret-redact-rate: first-leak signal ──────────────────────────────
+    {
+      const historical = [];
+      for (let i = 0; i < 250; i++) historical.push(mkRow({ action: 'PASS' }));
+      const window = [mkRow({ secrets_redacted: 1 })];
+      const alerts = secretRedactRate.evaluate(window, historical, { windowMs: 15 * 60 * 1000 });
+      assert('secret-redact-rate: redaction in window, zero history → high',
+        alerts.length === 1 && alerts[0].severity === 'high');
+    }
+    {
+      // Cold-start with redaction → medium
+      const window = [mkRow({ secrets_redacted: 2 })];
+      const alerts = secretRedactRate.evaluate(window, [], { windowMs: 15 * 60 * 1000 });
+      assert('secret-redact-rate: cold-start with redactions → medium',
+        alerts.length === 1 && alerts[0].severity === 'medium');
+    }
+    {
+      const window = [];
+      const alerts = secretRedactRate.evaluate(window, [], { windowMs: 15 * 60 * 1000 });
+      assert('secret-redact-rate: no redactions → no alert',
+        alerts.length === 0);
+    }
+
+    // ── Runner: aggregates multi-detector output, handles crashing detector ──
+    {
+      const crasher = {
+        id: 'crasher',
+        label: 'Test Crasher',
+        evaluate() { throw new Error('boom'); },
+      };
+      const rowsSynthetic = [];
+      const result = runDetectors({
+        rows: rowsSynthetic,
+        windowMs: 15 * 60 * 1000,
+        now: NOW,
+        detectors: [crasher],
+      });
+      assert('runDetectors: crashing detector becomes a low-severity alert',
+        result.alerts.length === 1 &&
+        result.alerts[0].severity === 'low' &&
+        result.alerts[0].detector_id === 'crasher' &&
+        /boom/.test(result.alerts[0].message));
+    }
+    {
+      // End-to-end: zero rows → zero alerts, valid shape
+      const result = runDetectors({ rows: [], now: NOW });
+      assert('runDetectors: empty chain → no alerts, valid window timestamps',
+        result.alerts.length === 0 &&
+        typeof result.window_start === 'string' &&
+        typeof result.window_end === 'string');
+    }
+    {
+      const list = builtinDetectors();
+      const ids  = list.map(d => d.id).sort();
+      assert('runDetectors: ships exactly 4 built-in detectors',
+        ids.length === 4 &&
+        ids.join(',') === 'deny-rate,file-read-volume,secret-redact-rate,unknown-tool-input');
+    }
+  }
+
+  // ── anomaly CLI: window parser ──────────────────────────────────────────────
+  console.log('\nanomaly: CLI helpers');
+  {
+    const { parseWindow, humanDuration } = require('./src/anomaly/cli');
+    assert('parseWindow: 15m → 900000',     parseWindow('15m') === 15 * 60_000);
+    assert('parseWindow: 30s → 30000',      parseWindow('30s') === 30_000);
+    assert('parseWindow: 2h → 7200000',     parseWindow('2h') === 2 * 3_600_000);
+    assert('parseWindow: bare number → m',  parseWindow('5')   === 5 * 60_000);
+    assert('parseWindow: invalid → default', parseWindow('xyz') === 15 * 60_000);
+    assert('humanDuration: 30s',            humanDuration(30_000) === '30s');
+    assert('humanDuration: 15m',            humanDuration(15 * 60_000) === '15m');
+    assert('humanDuration: 2.5h',           humanDuration(2.5 * 3_600_000) === '2.5h');
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   const total = passed + failed;

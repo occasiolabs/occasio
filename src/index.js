@@ -333,6 +333,7 @@ ${col.b('Usage:')}
   localfirst policy doctor      Cross-reference session logs with policy; surface suggestions
   localfirst audit [verify]     Verify tamper-evident hash chain in pipeline-events.jsonl
   localfirst report             Governance export: file access log, blocked paths, secret events
+  localfirst anomalies          Live anomaly detection over the audit chain (--window 15m, --json)
   localfirst attest --run-id <uuid>  AI-Agent Behavioral Attestation v1: hash-chain commitment + execution summary for one run
                               Add --sign in GitHub Actions (with permissions: id-token: write) for Sigstore keyless signing
   localfirst attest verify <file>   Re-verify a signed attestation: Sigstore bundle + DSSE payload match + audit chain integrity
@@ -610,6 +611,11 @@ if (cmd === 'report') {
   const { runReportCli } = require('./report/index');
   runReportCli(args.slice(1));
   process.exit(0);
+}
+
+if (cmd === 'anomalies' || cmd === 'anomaly') {
+  const { runAnomaliesCli } = require('./anomaly/cli');
+  process.exit(runAnomaliesCli(args.slice(1)));
 }
 
 if (cmd === 'attest') {
