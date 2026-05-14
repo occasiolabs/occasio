@@ -1,91 +1,69 @@
 # LocalFirst
 
-> Control what re-enters the model after every tool call.
+> Cryptographically verifiable behavioral attestation for AI coding agents.
 
-When an AI agent runs a tool — reads a file, runs `grep`, executes a shell command — its output usually goes straight back into the model's next request. Eight hundred lines of `grep` results, a 50k-line log file, a tool result containing an API key: all of it re-enters the context window and is forwarded to the cloud. LocalFirst sits at that boundary on the developer's own machine and decides, per call, **what gets in**.
+When an AI agent writes code in your CI, the question a reviewer or auditor will ask is not *"what did it produce"* — it is *"what did it actually do"*. Which files did it read. Which it was blocked from reading. Which secrets it tried to leak. Which policy was in effect. Whether that record can be trusted six months later.
 
-```powershell
+LocalFirst sits between the agent and the cloud on your own machine, decides every tool call against one human-readable policy, writes a tamper-evident audit chain of every decision, and produces signed attestations that a third party can verify offline using only `cosign` or a 200-line Python script.
+
+```bash
 npm install -g @localfirst-ai/localfirst
-localfirst register   # one-time: alias 'claude' to go through LocalFirst
-claude                # Claude Code, now with LocalFirst active
+
+localfirst demo attest      # End-to-end attestation pipeline (30s, no API key)
+localfirst demo anomalies   # Live EDR detection on a synthetic adversarial chain (5s)
+localfirst harness          # Real Claude Code attacking a denied path — defense holds
 ```
+
+The first two demos run against synthetic data so you can see the full pipeline in under a minute with no external dependencies. The third spawns a real Claude Code subordinate under your Anthropic login (bundled auth — no API key required) and proves the defense end-to-end.
 
 ---
 
-## What it does
+## What it does, in four layers
 
-**Per-tool decision before the result reaches the model.** Every tool call flows through a single decision: `LOCAL` (run in-process on the developer's machine — the call's content is not forwarded to the cloud), `PASS` (forward unchanged), `BLOCK` (return a synthetic refusal — the action never runs), `TRANSFORM` (run, then shape the output: redact secrets, clip long output to a summary). The decision is driven by one human-readable [`policy.yml`](policy-templates/dev-default.yml). Three starter templates ship: `dev-default`, `strict`, `finance`.
+**Layer 1 — Tool-call interception.** A local proxy sits between the agent and the Anthropic API. `Read`, `Glob`, `Grep`, `TodoRead`/`TodoWrite`, and a curated set of read-only shell commands (`cat`, `head`, `git status`, `git log --oneline -N`, `ls`, `find`) run in-process on your machine. The file bytes never enter the outbound request.
 
-**Local execution where it makes sense.** `Read`, `Glob`, `Grep`, `TodoRead`/`TodoWrite`, and a curated set of read-only shell commands (`cat`, `head`, `tail`, `type`, `Get-Content`, `git status`, `git log --oneline -N`, `ls`/`dir`, `find -name`) are handled in-process. The file bytes never enter the outbound request, and the agent gets the result without a cloud round-trip. Routing is per-tool in the same policy file — flip a single line and a tool falls back to `PASS`.
+**Layer 2 — Policy enforcement.** Every tool call hits one decision: `LOCAL` / `PASS` / `BLOCK` / `TRANSFORM`, driven by [`policy.yml`](policy-templates/dev-default.yml). `deny_paths` is enforced on the realpath-resolved absolute path so symlinks and traversal variants resolve to the same denial. `block_secrets_in_tool_results` redacts API keys and JWTs out of any tool output before it re-enters the prompt. Hot-reload: edits to `policy.yml` take effect on the next call, with a `policy_loaded` row written to the audit chain.
 
-**Shape and redact tool output before it re-enters the prompt.** `TRANSFORM` actions chain in security-first order: `redact-secrets` (strips API keys, JWTs, AWS credentials, custom `deny_patterns` regex) runs first; `distill-output` clips noisy tool output (`grep` to 50 lines, `find`/`ls`/`git log` to 100, test-runner output to fail-lines + summary) so the next request to the model carries the relevant subset and not the noise. Both transforms are recorded per row so the difference between what the tool produced and what entered the next request is auditable, not invisible.
+**Layer 3 — Behavioral attestation.** `localfirst attest --run-id <uuid>` produces a self-contained JSON predicate that commits to the full audit-chain slice for one agent session: every tool call, every block, every transform, every redacted secret, plus the active policy's SHA-256 hash and rules digest. `--sign` wraps it in an [in-toto Statement v1](https://github.com/in-toto/attestation) and Sigstore-signs it using GitHub Actions OIDC (no key management). The predicate type URI is [`agent-attestation/v1`](spec/agent-attestation/v1/README.md). Two independent reference verifiers ship — Node (`localfirst attest verify`) and Python ([`docs/attest_verify.py`](docs/attest_verify.py)) — and the test suite asserts they agree byte-for-byte on the same payload.
 
-**Same policy across protocols.** The Claude Code adapter (HTTP proxy on port 8081) and the MCP server (`bin/localfirst-mcp.js`) share one engine. A `deny_paths` rule produces byte-identical `BLOCK` rows for a Claude `Read` and an MCP `read_file` — the [v0.6.5 cross-protocol demo](docs/demos/mcp-block.md) captures both end to end.
+**Layer 4 — Anomaly detection (EDR).** `localfirst anomalies` runs four detectors over a time window of the audit chain: deny-rate spike, file-read-volume burst, previously-unseen tool-input shape, secret-redaction-rate spike. Severity escalates against your historical baseline — a ×500 deviation from normal triggers HIGH; see [`docs/edr-demo.md`](docs/edr-demo.md) for the reproducible defense-in-depth walkthrough.
 
-**Audit chain as the evidence layer.** Every governed call appends one row to `~/.localfirst/pipeline-events.jsonl`, SHA-256-chained to the previous row from a fixed genesis sentinel. `localfirst audit verify` re-walks the chain; a 30-line standalone Python verifier at [`docs/AUDIT.md`](docs/AUDIT.md) does the same without LocalFirst's own code, so a buyer or auditor never has to trust the producer of the log. `localfirst report --days N` aggregates the chain into a buyer-readable summary; the SOC 2 Common-Criteria mapping at [`docs/compliance-mapping.md`](docs/compliance-mapping.md) is the same evidence, framed for compliance reviewers.
+---
+
+## Why now
+
+Three regulatory drivers, all converging on the same requirement: **runtime evidence of AI-agent behavior must be cryptographically verifiable.**
+
+- **EU AI Act Art. 12** mandates comprehensive automated logging of high-risk AI systems. In effect from 2026 for regulated sectors.
+- **NIST AI RMF (GOVERN, MEASURE, MANAGE families)** is becoming required in US Federal procurement and is influencing FedRAMP AI controls.
+- **SOC 2 Common Criteria** are extending to AI-agent controls — auditors at major firms started asking "show me the agent's tool-call log" in 2026 audits.
+
+There is currently no off-the-shelf product producing a signed, third-party-verifiable artifact for what an AI coding agent did inside your CI. LocalFirst fills that gap with an open schema (Apache-2.0) and ships the reference implementations for it.
 
 ---
 
 ## Quickstart
 
-Requires Node.js ≥ 18. Works on Windows, macOS, and Linux.
-
-**Step 1 — Install**
-
-```
-npm install -g @localfirst-ai/localfirst
-```
-
-**Step 2 — Verify your setup**
-
-```
-localfirst doctor
-```
-
-Checks Node version, the `claude` CLI, port availability, Python (for optional context trimming), and your shell profile.
-
-**Step 3 — Initialise a policy file (one-time)**
-
-```
-localfirst policy init
-```
-
-Writes `~/.localfirst/policy.yml` from the `dev-default` template. Use `--template strict` or `--template finance` for a tighter baseline. Inspect or lint it any time with `localfirst policy show` / `localfirst policy validate`.
-
-**Step 4 — Register the `claude` alias (one-time)**
-
-Windows (PowerShell):
-
-```powershell
-localfirst register
-. $PROFILE    # or restart the terminal
-```
-
-macOS / Linux (bash or zsh):
+Requires Node.js ≥ 18. Works on Windows, macOS, Linux.
 
 ```bash
-localfirst register
-source ~/.bashrc   # or ~/.zshrc, depending on your shell
-```
-
-After this, typing `claude` automatically routes through LocalFirst.
-
-**Step 5 — Run Claude**
-
-```
+npm install -g @localfirst-ai/localfirst   # Install
+localfirst doctor                          # Verify setup (Node, claude CLI, port, profile)
+localfirst policy init                     # Write ~/.localfirst/policy.yml (dev-default)
+localfirst register                        # Add 'claude' shell alias (one-time)
 claude "read package.json and tell me the version"
 ```
 
-You'll see a startup banner and per-call interception lines as LocalFirst evaluates each tool call against your policy, runs `LOCAL` calls in-process, and writes every governed call to the tamper-evident audit chain at `~/.localfirst/pipeline-events.jsonl`.
+After the alias is registered, every `claude` invocation routes through LocalFirst transparently. Audit-chain rows accumulate at `~/.localfirst/pipeline-events.jsonl`.
 
-**Step 6 — Inspect the run**
+**Inspect the run:**
 
-```
-localfirst status          # session totals
-localfirst replay          # what happened in this run
-localfirst ledger          # per-request log
-localfirst report --days 1 # governance summary (LOCAL/BLOCK/TRANSFORM counts, chain integrity)
-localfirst audit verify    # re-walk the hash chain end-to-end
+```bash
+localfirst status                  # Session totals
+localfirst replay --detail         # Run-level audit
+localfirst audit verify            # Re-walk the hash chain end-to-end
+localfirst anomalies               # Run EDR detectors over the last 15 minutes
+localfirst attest --run-id <uuid>  # Build a behavioral attestation for one session
 ```
 
 ---
@@ -95,52 +73,87 @@ localfirst audit verify    # re-walk the hash chain end-to-end
 | Command | What it does |
 |---|---|
 | `localfirst claude [args]` | Start Claude Code with LocalFirst proxy active |
-| `localfirst register` | Register `claude` shell alias (PowerShell profile on Windows, `.bashrc` / `.zshrc` on macOS/Linux) |
-| `localfirst doctor` | Check Node, claude CLI, port, Python, shell profile |
-| `localfirst status` | Session totals: requests, tokens, cost, what was intercepted |
-| `localfirst inspect --last N` | Per-request boundary view: what was run locally, what was shaped, what reached the cloud |
-| `localfirst ledger` | Per-request log (`--last N`, `--summary`, `--scope session\|today`) |
-| `localfirst replay` | Run-level audit (`--detail`, `--run <id>`, `--last N`) |
+| `localfirst register` | Register `claude` shell alias |
+| `localfirst doctor` | Setup health-check |
+| `localfirst status` | Session totals + savings breakdown |
+| `localfirst replay` | Run-level audit (`--detail`, `--run <id>`, `--attribute`) |
+| `localfirst inspect` | Per-request cloud-boundary manifest |
+| `localfirst boundary` | Three-column view: produced / re-entered / prevented |
+| `localfirst ledger` | Per-request token ledger |
+| `localfirst distill` | Inspect distilled tool outputs |
 | `localfirst dashboard` | Live browser dashboard at http://localhost:3001 |
-| `localfirst clear` | Reset today's log and session |
-| `localfirst clear --history` | Wipe all historical logs |
-| `localfirst audit verify` | Re-walk the SHA-256 audit chain end to end |
-| `localfirst report --days N` | Governance summary of the audit chain |
-| `localfirst selftest` | Run 8 in-process governance self-checks on a scratch chain |
-| `localfirst policy init` / `show` / `validate` | Authoring loop for `~/.localfirst/policy.yml` |
+| `localfirst audit verify` | Re-walk the SHA-256 audit chain end-to-end |
+| `localfirst report` | Governance summary export (`--days N`, `--format csv`) |
+| `localfirst anomalies` | EDR detection over the audit chain (`--window 15m`, `--json`) |
+| `localfirst attest --run-id <uuid>` | Build a behavioral attestation predicate v1 |
+| `localfirst attest --sign` | Sigstore-sign via GitHub Actions OIDC |
+| `localfirst attest verify <file>` | Re-verify a signed attestation end-to-end |
+| `localfirst policy [show \| validate \| init \| doctor]` | Policy authoring + diagnosis |
+| `localfirst harness` | Run scripted adversarial scenarios against your policy |
+| `localfirst redteam` | Autonomous tester-LLM probes a subject Claude Code session |
+| `localfirst computer-use --dry-run` | Apply a Computer-Use policy to synthetic tool_use blocks |
+| `localfirst demo attest` | End-to-end attestation pipeline against a synthetic chain |
+| `localfirst demo anomalies` | EDR smoke test: synthetic adversarial chain → all 4 detectors |
+| `localfirst selftest` | In-process governance self-checks on a scratch chain |
+| `localfirst baseline [learn \| compare]` | Per-project behavior baseline + drift detection |
+| `localfirst preflight` | Read-only mine of recent activity for policy suggestions |
 
-## Overrides
+Session-level overrides on top of `policy.yml`:
 
-The durable control surface is `~/.localfirst/policy.yml`. Two presets stack on top of it as quick session-level overrides:
-
-| Flag | Effect on top of `policy.yml` |
+| Flag | Effect |
 |---|---|
-| `--preset strict` | Forces `block_secrets_in_tool_results` on for this session — any tool result containing a detected secret is blocked outright |
-| `--preset off` | Disables interception entirely — pure passthrough, log only |
-| `--budget <N>` | Hard cap: once session cost reaches $N, outbound requests return HTTP 402 |
-
-Default behaviour without any flag is the policy file in effect (or `dev-default` semantics if no file exists).
+| `--preset strict` | Forces `block_secrets_in_tool_results` on for the session |
+| `--preset off` | Pure passthrough, log only |
+| `--budget <N>` | Hard cap: HTTP 402 once session cost reaches $N |
+| `--hardened` | Routes Read/Glob/Grep through unified runtime + distill + secret scan |
 
 ---
 
-## How it works
+## Verification
 
-The control point is one decision per tool call: should the call's result be allowed to re-enter the model's next request — and if so, in what shape? Every other piece (`LOCAL`, `BLOCK`, `TRANSFORM`, audit row) is a consequence of that decision.
+Three independent checks, all required for a verified attestation:
 
-For Claude Code, LocalFirst binds a local HTTP proxy on port 8081 and sets `ANTHROPIC_BASE_URL` so the agent's traffic routes through it. For MCP clients, the same policy engine governs `bin/localfirst-mcp.js`. Both protocols share the same pipeline:
+1. **Sigstore signature** — Fulcio certificate chain + Rekor inclusion proof. Verifiable by any sigstore-conformant tool (`cosign verify-blob`, `sigstore-js`, `sigstore-python`).
+2. **DSSE payload ↔ attestation predicate equivalence** — re-decode the in-toto Statement inside the bundle, canonicalise the predicate via [RFC 8785 subset](src/attest/canonicalize.js), compare byte-for-byte with the attestation predicate (minus the `signature` metadata field).
+3. **Audit chain integrity** — SHA-256-walk every `prev_hash → hash` link from the GENESIS sentinel, then assert the attestation's `first_hash` and `last_hash` appear in the chain in the right relative order.
 
-1. **Adapter parse.** The adapter for the calling protocol (`claude-code`, `cline`, or `mcp`) normalises the incoming tool call into a canonical event — `read_file`, `find_files`, `grep`, `shell_bash`, etc.
-2. **Policy evaluation.** The engine consults `~/.localfirst/policy.yml` and returns one of four decisions per call:
-   - `LOCAL` — run in-process on the developer's machine; the call's content is never sent to the cloud.
-   - `PASS` — forward the call to the cloud unchanged.
-   - `BLOCK` — return a synthetic `(blocked by policy)` refusal to the agent; the dangerous action never executes.
-   - `TRANSFORM` — run locally, then apply a named transform (e.g. `redact-secrets`, `distill-output`, or both chained) before the result re-enters the model.
-3. **Path and pattern enforcement.** `deny_paths` (e.g. `~/.ssh`, `~/.aws`) and `allow_paths` are checked on the symlink-resolved absolute path **before** routing, so deny rules cannot be bypassed by a permissive `tools:` block. `deny_patterns` extends the built-in secret scanner with custom regex (internal JWT shapes, ticket IDs, locale PII).
-4. **Dispatch.** `LOCAL` and `TRANSFORM` calls run through the native handler set (file reads, glob, grep, todo, recognised read-only shell commands such as `git status` / `git log`). `BLOCK` returns the synthetic refusal. `PASS` is forwarded to the cloud.
-5. **Audit.** Every governed call appends one row to `~/.localfirst/pipeline-events.jsonl`. Each row carries `prev_hash` and `hash` (SHA-256), chained from a fixed genesis sentinel. `localfirst audit verify` re-walks the chain; `docs/audit_walker.py` is a ~30-line independent Python verifier published for buyers who would rather not trust LocalFirst's own code.
-6. **Hot reload.** Edits to `policy.yml` take effect on the very next tool call — no proxy restart. A `policy_loaded` audit row is written on every load whose file hash changes.
+Two reference verifiers ship side by side and **must agree byte-for-byte** on the same payload (asserted in the test suite as `xlang:` cases):
 
-`localfirst report --days N` aggregates the chain into a buyer-readable summary: per-tool LOCAL / BLOCK / TRANSFORM counts, blocked paths, secrets caught, and the chain-integrity status over the period.
+- **Node**: `localfirst attest verify <file>`
+- **Python**: `python docs/attest_verify.py <file>` — stdlib + optional `sigstore-python`, reuses [`docs/audit_walker.py`](docs/audit_walker.py) for the chain step. See [`docs/python-verifier.md`](docs/python-verifier.md).
+
+A third partial verifier runs in-browser at [`integrations/attest-view/`](integrations/attest-view/) for drag-and-drop inspection of attestation files. Sigstore crypto is deferred to one of the two CLIs above; the browser is honest about that on the page itself.
+
+---
+
+## Architecture
+
+```
+agent (Claude Code / Cline / MCP / Computer Use)
+  │
+  ▼  tool call
+┌──────────────────────────────────────────────────────────────┐
+│  LocalFirst proxy                                            │
+│                                                              │
+│  Layer 1: adapter parse → canonical event                    │
+│  Layer 2: policy decision (LOCAL / PASS / BLOCK / TRANSFORM) │
+│  Layer 2: deny_paths + deny_patterns + secret redaction      │
+│  Layer 2: native dispatch for LOCAL/TRANSFORM tools          │
+│           ──► row appended, SHA-256-chained                  │
+│  Layer 4: anomaly detectors (windowed, on-demand or live)    │
+└──────────────────────────────────────────────────────────────┘
+  │
+  ▼  cloud-bound: only PASS calls, with shaped result if TRANSFORM
+Anthropic API
+
+End of session
+  │
+  ▼  localfirst attest --run-id … --sign
+Layer 3: signed in-toto Statement → Sigstore bundle → GitHub Check Run
+  │
+  ▼  independent verifier
+Node / Python / cosign — all must agree
+```
 
 ---
 
@@ -150,41 +163,45 @@ All data is stored locally at `~/.localfirst/`:
 
 ```
 ~/.localfirst/
-  logs/YYYY-MM-DD.jsonl        # per-request log (schema v2)
-  session.json                 # running session totals + run_id
-  blocked/YYYY-MM-DD-secrets.log  # blocked request audit log
+  pipeline-events.jsonl        # tamper-evident audit chain (SHA-256 linked)
+  policy.yml                   # active policy
+  session.json                 # current run_id, totals
+  logs/YYYY-MM-DD.jsonl        # per-request log
+  baseline/<cwd-hash>.json     # per-project behavior baseline (opt-in)
 ```
 
-Each JSONL entry includes:
-
-| Field | Description |
-|---|---|
-| `event_type` | `cloud_sent` / `local_only` / `blocked` / `trimmed` |
-| `run_id` | UUID for the `localfirst claude` session that produced this entry |
-| `iso` | Full ISO-8601 timestamp |
-| `model` | Model ID from the request |
-| `input_tokens` / `output_tokens` | Provider-reported usage |
-| `cache_read_tokens` / `cache_write_tokens` | Anthropic cache usage |
-| `cost` | Computed cost in USD |
-| `cache_savings` | Dollar savings from cache hits |
-| `lao_cost_saved` | Dollar savings from LAO context trimming |
-| `distill_cost_saved` | Dollar savings from output distillation |
-| `tools_local_count` | Number of tool calls handled locally |
-| `secrets` | Detected secrets (label, line number, redacted snippet) |
+The audit-chain row schema is documented in [`docs/AUDIT.md`](docs/AUDIT.md). Each row carries `prev_hash` and `hash` (SHA-256 hex), with the first row chained from a fixed GENESIS sentinel (64 zeros). `localfirst audit verify` and `docs/audit_walker.py` are independent implementations of the walker.
 
 ---
 
 ## Demos
 
-- [Cross-protocol governance: same policy.yml governs Claude Code and MCP](docs/demos/mcp-block.md) — end-to-end capture of the same `deny_paths` rule producing identical `BLOCK` rows under both protocols, with both verifiers in agreement.
+- [**EDR defense-in-depth**](docs/edr-demo.md) — real Claude Code attacking a denied path under your policy, all blocks held, EDR fires HIGH ×100–×1000 over baseline. Reproducible in <2 minutes.
+- [**Reference Pipeline**](docs/reference-pipeline.md) — PR with AI-agent → GitHub Action signs attestation via Sigstore keyless → Check Run on the PR → independent verification offline.
+- [**Cross-protocol governance**](docs/demos/mcp-block.md) — the same `deny_paths` rule producing identical `BLOCK` rows under Claude Code's HTTP proxy and the MCP server.
+
+---
+
+## Reference
+
+- [`spec/agent-attestation/v1/README.md`](spec/agent-attestation/v1/README.md) — predicate type specification
+- [`schemas/agent-attestation-v1.json`](schemas/agent-attestation-v1.json) — authoritative JSON Schema
+- [`docs/AUDIT.md`](docs/AUDIT.md) — audit-chain row schema and canonical-serialisation rules
+- [`docs/compliance-mapping.md`](docs/compliance-mapping.md) — SOC 2 Common-Criteria mapping
+- [`docs/python-verifier.md`](docs/python-verifier.md) — independent Python verifier
+- [`docs/edr-demo.md`](docs/edr-demo.md) — defense-in-depth walkthrough
+- [`docs/reference-pipeline.md`](docs/reference-pipeline.md) — end-to-end CI pipeline
+- [`integrations/attest-action/`](integrations/attest-action/) — GitHub Action that signs + posts a Check Run
+- [`integrations/attest-view/`](integrations/attest-view/) — static browser viewer for attestation files
 
 ---
 
 ## Requirements
 
-- **Node.js ≥ 18** — `node --version`
-- **Claude Code** — `npm install -g @anthropic-ai/claude-code`
-- **Python 3** (optional) — required for LAO context trimming; `localfirst doctor` will tell you if it's missing
+- **Node.js ≥ 18**
+- **Claude Code** (`npm install -g @anthropic-ai/claude-code`) — or any agent that respects `ANTHROPIC_BASE_URL`
+- **Python 3** (optional) — required for the independent verifier and LAO context trimming
+- **`sigstore-python`** (optional) — adds the cryptographic Sigstore step to the Python verifier
 
 ---
 
