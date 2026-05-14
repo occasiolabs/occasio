@@ -100,7 +100,9 @@ Reference verifiers are available in two languages:
 - **Node:** `localfirst attest verify` (all three steps in one call).
 - **Python:** [`docs/attest_verify.py`](../../../docs/attest_verify.py) (stdlib + optional `sigstore-python`; reuses [`docs/audit_walker.py`](../../../docs/audit_walker.py) for the chain step). See [`docs/python-verifier.md`](../../../docs/python-verifier.md).
 
-Both verifiers must agree pass/fail on the same byte payload. The test suite asserts this byte-for-byte for the unmodified, predicate-tampered, and chain-tampered cases. The Sigstore signature step is independently verifiable by any [sigstore-conformant](https://www.sigstore.dev/) tool — `cosign verify-blob`, `sigstore-js`, or `sigstore-python`.
+**Cross-language invariant.** Both verifiers produce byte-identical canonical forms of the predicate and identical pass/fail decisions for the audit-chain step on the same payload, including for predicate-tampered and chain-tampered inputs. Both canonicalize implementations explicitly reject non-integer numbers so a future schema addition cannot silently introduce divergence. The test suite asserts this under `xlang:` and `xlang-float:` cases.
+
+**Sigstore signature step.** Uses the standard DSSE-wrapped in-toto Statement format. Independently verifiable by any [sigstore-conformant](https://www.sigstore.dev/) tool — `cosign verify-blob`, `sigstore-js`, or `sigstore-python`. The reference test suite mocks the signing path for determinism; a real-OIDC signed-and-verified round-trip requires a GitHub Actions environment with `permissions: id-token: write` and is exercised by the reference Action when used in CI.
 
 ## Compatibility and stability
 

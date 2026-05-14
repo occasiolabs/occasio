@@ -53,12 +53,12 @@ Each check is independent. Skipping any one of them is not the same as a full ve
 ## Round-trip claim
 
 For a payload produced by `localfirst attest --sign` and verified by `localfirst attest verify`, the Python verifier produces the same pass/fail result on:
-- the unmodified payload (both pass)
+- the unmodified payload (both pass on steps 2+3; step 1 requires sigstore-python)
 - a tampered predicate (both fail at step 2)
 - a tampered chain (both fail at step 3)
 - a tampered Sigstore bundle (both fail at step 1; SKIP if sigstore-python not installed)
 
-The test suite covers cases 1, 2, and 3 deterministically. Case 4 requires real Sigstore infrastructure and is covered by the live GitHub Action's own self-check.
+The test suite covers cases 1, 2, and 3 deterministically with the Sigstore step mocked. The cross-language byte-equivalence on the predicate-canonicalization step is asserted via Python-spawn from the Node test runner (`xlang:` and `xlang-float:` test blocks); both implementations reject non-integer numbers so the equivalence cannot be silently broken by adding a float field to a future schema. Case 4 (real Sigstore tamper detection) requires GitHub Actions OIDC infrastructure and is exercised by the live Action's self-verify step in CI, not by the in-process test suite.
 
 ## Install hint for Sigstore step
 
@@ -71,4 +71,4 @@ Versions tracked: `sigstore-python >= 3.0`. The verifier degrades gracefully if 
 ## Limitations
 
 - **Identity pinning is not enforced** by the reference verifier. The default `policy.UnsafeNoOp()` accepts any Fulcio cert. An auditor whose compliance regime requires a specific workflow-ref identity (e.g. `repo:org/repo:ref:refs/heads/main`) should adapt the call to `policy.Identity(...)`. Pattern intentionally exposed: this is a policy decision, not a verifier decision.
-- **The Python canonicalize is a JCS subset**, not full RFC 8785. The deviations are documented inline in `canonicalize.py` and do not affect the v1 schema, which uses only integers and strings.
+- **The Python canonicalize is a JCS subset**, not full RFC 8785. The deviations are documented inline in `canonicalize.py`. Non-integer numbers are explicitly rejected on both sides as a load-bearing cross-language invariant — see `canonicalize.py` and `src/attest/canonicalize.js` for the rationale.

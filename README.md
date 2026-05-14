@@ -117,12 +117,16 @@ Three independent checks, all required for a verified attestation:
 2. **DSSE payload ↔ attestation predicate equivalence** — re-decode the in-toto Statement inside the bundle, canonicalise the predicate via [RFC 8785 subset](src/attest/canonicalize.js), compare byte-for-byte with the attestation predicate (minus the `signature` metadata field).
 3. **Audit chain integrity** — SHA-256-walk every `prev_hash → hash` link from the GENESIS sentinel, then assert the attestation's `first_hash` and `last_hash` appear in the chain in the right relative order.
 
-Two reference verifiers ship side by side and **must agree byte-for-byte** on the same payload (asserted in the test suite as `xlang:` cases):
+Two reference verifiers ship side by side:
 
 - **Node**: `localfirst attest verify <file>`
 - **Python**: `python docs/attest_verify.py <file>` — stdlib + optional `sigstore-python`, reuses [`docs/audit_walker.py`](docs/audit_walker.py) for the chain step. See [`docs/python-verifier.md`](docs/python-verifier.md).
 
-A third partial verifier runs in-browser at [`integrations/attest-view/`](integrations/attest-view/) for drag-and-drop inspection of attestation files. Sigstore crypto is deferred to one of the two CLIs above; the browser is honest about that on the page itself.
+**Cross-language invariant** (asserted in the test suite as `xlang:` and `xlang-float:` cases): both verifiers agree byte-for-byte on the predicate-equivalence and audit-chain steps for the same payload, including tamper-detection cases. Non-integer numbers are rejected by both canonicalize implementations so a future schema cannot silently introduce divergence.
+
+The **Sigstore signature step** uses the standard DSSE-wrapped in-toto Statement format; any sigstore-conformant tool verifies it (`cosign verify-blob`, `sigstore-js`, `sigstore-python`). The test suite mocks the signing path; a real-OIDC end-to-end signed-and-verified round-trip requires a GitHub Actions environment and is exercised by the [`integrations/attest-action/`](integrations/attest-action/) workflow in CI.
+
+A third partial verifier runs in-browser at [`integrations/attest-view/`](integrations/attest-view/) for drag-and-drop inspection. The browser performs the predicate-equivalence and audit-chain steps but defers Sigstore certificate-chain verification to one of the two CLIs (bundling Fulcio/Rekor trust roots in-browser is intentionally not done; the page is explicit about it).
 
 ---
 
