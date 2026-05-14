@@ -2954,36 +2954,40 @@ console.log('\n3. runLocally');
 
   {
     const indexSrc = fs.readFileSync('./src/index.js', 'utf8');
+    // Pricing + compounding-savings live in their own module since v0.8.4.
+    const pricesSrc = fs.readFileSync('./src/cost/prices.js', 'utf8');
 
-    // Old heuristic must be gone
+    // Old heuristic must be gone (was inline in index.js historically)
     assert('calcCrossRequestSavings heuristic removed',
-      !indexSrc.includes('function calcCrossRequestSavings('));
+      !indexSrc.includes('function calcCrossRequestSavings(') &&
+      !pricesSrc.includes('function calcCrossRequestSavings('));
     assert('floor(requests/2) heuristic removed',
-      !indexSrc.includes('Math.floor(requests / 2)'));
+      !indexSrc.includes('Math.floor(requests / 2)') &&
+      !pricesSrc.includes('Math.floor(requests / 2)'));
 
-    // New event-based function must exist
+    // New event-based function must exist (now in prices.js)
     assert('calcCompoundingSavings function defined',
-      indexSrc.includes('function calcCompoundingSavings('));
+      pricesSrc.includes('function calcCompoundingSavings('));
 
     // Must read JSONL and filter by run_id
     assert('calcCompoundingSavings reads from logFile',
-      indexSrc.includes('fs.readFileSync(logFile'));
+      pricesSrc.includes('fs.readFileSync(logFile'));
     assert('calcCompoundingSavings filters by run_id',
-      indexSrc.includes('e.run_id === runId'));
+      pricesSrc.includes('e.run_id === runId'));
 
     // Formula: N - i - 1 subsequent calls per batch
     assert('compounding formula uses N - i - 1',
-      indexSrc.includes('N - i - 1'));
+      pricesSrc.includes('N - i - 1'));
     assert('compounding formula weights by input price',
-      indexSrc.includes('(dt / 1e6) * p.in * subsequent'));
+      pricesSrc.includes('(dt / 1e6) * p.in * subsequent'));
 
     // Returns { savings, carryInstances }
     assert('calcCompoundingSavings returns savings and carryInstances',
-      indexSrc.includes('return { savings, carryInstances }'));
+      pricesSrc.includes('return { savings, carryInstances }'));
 
     // Zero guard for single-request sessions
     assert('compounding zero for N < 2',
-      indexSrc.includes('if (N < 2) return { savings: 0, carryInstances: 0 }'));
+      pricesSrc.includes('if (N < 2) return { savings: 0, carryInstances: 0 }'));
 
     // log_file stored in session.json for cross-day lookups
     assert('session initialization stores log_file',
