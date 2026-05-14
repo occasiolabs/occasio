@@ -59,7 +59,7 @@ const LOG_SCHEMA_VERSION = 2;
 // Port override via env var (used by `occasio harness` and redteam to
 // run isolated proxies against scratch audit chains on free ports). Default
 // is 8081 to preserve existing user-facing behaviour.
-let PORT = parseInt(process.env.LOCALFIRST_PORT, 10) || 8081;
+let PORT = parseInt(process.env.OCCASIO_PORT, 10) || 8081;
 const ANTHROPIC_REAL = 'api.anthropic.com';
 const LOG_DIR      = path.join(os.homedir(), '.occasio');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
@@ -926,7 +926,7 @@ const { createAuditor: _createAuditor } = require('./audit/jsonl-auditor');
 // Audit-file override via env var. Used by `occasio harness` to run
 // against a scratch chain so the user's real ~/.occasio/pipeline-events
 // .jsonl is never touched. When unset, the auditor uses its default location.
-const sessionAuditor = _createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undefined);
+const sessionAuditor = _createAuditor(process.env.OCCASIO_AUDIT_FILE || undefined);
 
 // v0.6.6: register a policy-change listener that emits a `policy_loaded`
 // audit row whenever the active policy hash transitions to a new value

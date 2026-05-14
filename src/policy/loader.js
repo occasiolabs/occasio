@@ -26,10 +26,10 @@ function resolveConfigPath(p) {
   return path.resolve(expanded);
 }
 
-// Default path can be overridden via LOCALFIRST_POLICY_FILE — used by the
+// Default path can be overridden via OCCASIO_POLICY_FILE — used by the
 // harness/redteam commands to point the proxy at a scratch policy.yml so
 // the user's real ~/.occasio/policy.yml is never read.
-const DEFAULT_PATH = process.env.LOCALFIRST_POLICY_FILE
+const DEFAULT_PATH = process.env.OCCASIO_POLICY_FILE
   || path.join(os.homedir(), '.occasio', 'policy.yml');
 
 // Default tool routing matches the pre-Stage-3 hardcoded behavior.

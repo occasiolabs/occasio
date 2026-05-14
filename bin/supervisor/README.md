@@ -38,12 +38,12 @@ rm ~/.config/systemd/user/occasio.service
 
 ## macOS (launchd, user scope)
 
-The plist is a template: replace `{{LOCALFIRST_BIN}}` with the absolute
+The plist is a template: replace `{{OCCASIO_BIN}}` with the absolute
 path to your `occasio` binary first.
 
 ```sh
 LF_BIN="$(command -v occasio)"
-sed "s|{{LOCALFIRST_BIN}}|$LF_BIN|g" com.occasio.proxy.plist.template \
+sed "s|{{OCCASIO_BIN}}|$LF_BIN|g" com.occasio.proxy.plist.template \
   > ~/Library/LaunchAgents/ai.occasio.proxy.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.occasio.proxy.plist
 launchctl print gui/$(id -u)/ai.occasio.proxy

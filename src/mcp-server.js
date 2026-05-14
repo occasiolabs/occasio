@@ -44,7 +44,7 @@ const LOG_FILE = path.join(os.homedir(), '.occasio', 'mcp-experiment.jsonl');
 // Audit-file override via env var (symmetric with the Claude Code proxy
 // in src/index.js). Used by `occasio harness --scenario mcp-*` to
 // keep MCP test traffic out of the user's real ~/.occasio chain.
-let mcpAuditor = createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undefined);
+let mcpAuditor = createAuditor(process.env.OCCASIO_AUDIT_FILE || undefined);
 
 // v0.6.6: emit a policy_loaded row on first policy load and on every
 // hot-reload that changes the policy file's bytes. The MCP server is a

@@ -72,12 +72,12 @@ runs:
       name: Produce signed attestation
       shell: bash
       env:
-        LF_INPUT_RUN_ID:     ${{ inputs.run-id }}
-        LF_INPUT_CHAIN:      ${{ inputs.chain-file }}
-        LF_INPUT_POLICY:     ${{ inputs.policy-file }}
-        LF_INPUT_SIGN:       ${{ inputs.sign }}
-        LF_GITHUB_SHA:       ${{ github.event.pull_request.head.sha || github.sha }}
-        LF_PR_NUMBER:        ${{ github.event.pull_request.number }}
+        OCC_INPUT_RUN_ID:     ${{ inputs.run-id }}
+        OCC_INPUT_CHAIN:      ${{ inputs.chain-file }}
+        OCC_INPUT_POLICY:     ${{ inputs.policy-file }}
+        OCC_INPUT_SIGN:       ${{ inputs.sign }}
+        OCC_GITHUB_SHA:       ${{ github.event.pull_request.head.sha || github.sha }}
+        OCC_PR_NUMBER:        ${{ github.event.pull_request.number }}
       run: node ${{ github.action_path }}/scripts/run-attest.js
 
     # Self-verify the freshly-signed attestation before publishing it as an
@@ -111,9 +111,9 @@ runs:
       env:
         GITHUB_TOKEN:        ${{ inputs.github-token }}
         GITHUB_REPOSITORY:   ${{ github.repository }}
-        LF_HEAD_SHA:         ${{ github.event.pull_request.head.sha || github.sha }}
-        LF_VIEW_BASE_URL:    ${{ inputs.view-base-url }}
-        LF_ATTESTATION_PATH: ${{ steps.attest.outputs.attestation-path }}
-        LF_BUNDLE_PATH:      ${{ steps.attest.outputs.bundle-path }}
-        LF_REKOR_ENTRY:      ${{ steps.attest.outputs.rekor-entry }}
+        OCC_HEAD_SHA:         ${{ github.event.pull_request.head.sha || github.sha }}
+        OCC_VIEW_BASE_URL:    ${{ inputs.view-base-url }}
+        OCC_ATTESTATION_PATH: ${{ steps.attest.outputs.attestation-path }}
+        OCC_BUNDLE_PATH:      ${{ steps.attest.outputs.bundle-path }}
+        OCC_REKOR_ENTRY:      ${{ steps.attest.outputs.rekor-entry }}
       run: node ${{ github.action_path }}/scripts/post-check.js

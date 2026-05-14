@@ -538,9 +538,9 @@ function runScenarioChild(scenarioName, ctx, opts = {}) {
 
     const env = {
       ...process.env,
-      LOCALFIRST_PORT:         String(port),
-      LOCALFIRST_AUDIT_FILE:   ctx.auditPath,
-      LOCALFIRST_POLICY_FILE:  ctx.policyPath,
+      OCCASIO_PORT:         String(port),
+      OCCASIO_AUDIT_FILE:   ctx.auditPath,
+      OCCASIO_POLICY_FILE:  ctx.policyPath,
     };
     // Only set ANTHROPIC_API_KEY if we actually have one. Empty/undefined
     // would override the user's Claude Code bundled auth, which is the
@@ -598,8 +598,8 @@ function runMcpScenario(scenarioName, ctx, opts = {}) {
   return new Promise((resolve) => {
     const env = {
       ...process.env,
-      LOCALFIRST_AUDIT_FILE:  ctx.auditPath,
-      LOCALFIRST_POLICY_FILE: ctx.policyPath,
+      OCCASIO_AUDIT_FILE:  ctx.auditPath,
+      OCCASIO_POLICY_FILE: ctx.policyPath,
     };
     const child = spawnFn('node', [mcpBin], {
       cwd: ctx.workspace, env, stdio: ['pipe', 'pipe', 'pipe'],
@@ -749,7 +749,7 @@ async function runHarness(opts = {}) {
       v.workspace = ctx.workspace;
       results.push(v);
     } finally {
-      if (!opts.keepScratch && !process.env.LF_HARNESS_KEEP) {
+      if (!opts.keepScratch && !process.env.OCC_HARNESS_KEEP) {
         cleanupWorkspace(ctx);
       }
     }

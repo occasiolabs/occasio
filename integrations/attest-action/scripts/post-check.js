@@ -38,10 +38,10 @@ function die(msg, exitCode = 1) {
 async function main() {
   const TOKEN = process.env.GITHUB_TOKEN;
   const REPO  = process.env.GITHUB_REPOSITORY;
-  const SHA   = process.env.LF_HEAD_SHA;
-  const ATT   = process.env.LF_ATTESTATION_PATH;
-  const REK   = process.env.LF_REKOR_ENTRY || '';
-  const VIEW  = (process.env.LF_VIEW_BASE_URL || '').replace(/\/+$/, '');
+  const SHA   = process.env.OCC_HEAD_SHA;
+  const ATT   = process.env.OCC_ATTESTATION_PATH;
+  const REK   = process.env.OCC_REKOR_ENTRY || '';
+  const VIEW  = (process.env.OCC_VIEW_BASE_URL || '').replace(/\/+$/, '');
 
   if (!TOKEN) die('GITHUB_TOKEN missing — set inputs.github-token or grant `checks: write`.');
   if (!REPO || !SHA) die('GITHUB_REPOSITORY / head SHA env vars missing.');

@@ -30,7 +30,7 @@ jobs:
       # its tool calls land in ~/.occasio/pipeline-events.jsonl. Below
       # is the Claude Code path; substitute as needed.
       - name: Install Occasio + Claude Code
-        run: npm install -g @occasio-ai/occasio @anthropic-ai/claude-code
+        run: npm install -g @occasiolabs/occasio @anthropic-ai/claude-code
 
       - name: Run Claude Code under Occasio
         env:
@@ -39,7 +39,7 @@ jobs:
 
       # ── Produce + sign attestation, post Check Run ──────────────────
       - name: Attest
-        uses: occasio-ai/attest-action@v1
+        uses: occasiolabs/attest-action@v1
         # All inputs optional — run-id auto-resolves from
         # ~/.occasio/session.json. See integrations/attest-action/README.md
         # for the full input matrix.

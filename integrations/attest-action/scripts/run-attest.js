@@ -55,7 +55,7 @@ function validFilePath(s)  { return typeof s === 'string' && s.length > 0 && !s.
 
 // ── Resolve run_id ──────────────────────────────────────────────────────────
 function resolveRunId() {
-  const explicit = (process.env.LF_INPUT_RUN_ID || '').trim();
+  const explicit = (process.env.OCC_INPUT_RUN_ID || '').trim();
   if (explicit) {
     if (!validRunId(explicit)) die(`Invalid run-id input: must be a UUID. Got: ${explicit}`);
     return explicit;
@@ -75,7 +75,7 @@ function resolveRunId() {
 function resolveFilesChanged() {
   // Use git diff against the base ref if available. The checkout action's
   // default fetch-depth=1 is fine — diff against HEAD~1 covers the head commit.
-  const headSha = (process.env.LF_GITHUB_SHA || '').trim();
+  const headSha = (process.env.OCC_GITHUB_SHA || '').trim();
   if (!validCommitSha(headSha)) return [];
   const args = ['diff', '--name-only', `${headSha}^..${headSha}`];
   const r = spawnSync('git', args, { encoding: 'utf8' });
@@ -92,10 +92,10 @@ function resolveFilesChanged() {
 // ── Main ────────────────────────────────────────────────────────────────────
 function main() {
   const runId        = resolveRunId();
-  const chainFile    = (process.env.LF_INPUT_CHAIN  || '').trim();
-  const policyFile   = (process.env.LF_INPUT_POLICY || '').trim();
-  const sign         = (process.env.LF_INPUT_SIGN   || 'true').trim().toLowerCase() === 'true';
-  const gitCommit    = (process.env.LF_GITHUB_SHA   || '').trim();
+  const chainFile    = (process.env.OCC_INPUT_CHAIN  || '').trim();
+  const policyFile   = (process.env.OCC_INPUT_POLICY || '').trim();
+  const sign         = (process.env.OCC_INPUT_SIGN   || 'true').trim().toLowerCase() === 'true';
+  const gitCommit    = (process.env.OCC_GITHUB_SHA   || '').trim();
 
   if (chainFile  && !validPath(chainFile))      die(`Invalid chain-file input: ${chainFile}`);
   if (policyFile && !validPath(policyFile))     die(`Invalid policy-file input: ${policyFile}`);

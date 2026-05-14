@@ -647,7 +647,7 @@ no new policy primitives, no CLI surface changes.
 **Supervisor templates under `bin/supervisor/`.**
 - `occasio.service` — systemd unit (user scope), `Restart=always`.
 - `com.occasio.proxy.plist.template` — launchd template (user scope), with
-  `{{LOCALFIRST_BIN}}` placeholder for the absolute binary path.
+  `{{OCCASIO_BIN}}` placeholder for the absolute binary path.
 - `install-windows-task.ps1` — registers a Windows Scheduled Task that runs
   at logon, restarts within 1 minute of exit, scoped to the current user
   (no elevation required).
@@ -1099,4 +1099,4 @@ occasio policy show              # confirm what is actually active
 - Per-request file token breakdown (Level 1), secret details (Level 2), tool runs (Level 3)
 - Session tracking: requests, tokens, cost, intercepted count
 - Live web dashboard on port 3001 (`--dashboard` flag)
-- Local LLM routing to Ollama for simple queries (`LOCALFIRST_MODEL`, `OLLAMA_HOST`)
+- Local LLM routing to Ollama for simple queries (`OCCASIO_MODEL`, `OLLAMA_HOST`)

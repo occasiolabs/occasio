@@ -7724,7 +7724,7 @@ console.log('\n3. runLocally');
     assert('launchd: has Label key',                    launchd.includes('<key>Label</key>'));
     assert('launchd: has KeepAlive=true',               /<key>KeepAlive<\/key>\s*<true\/>/.test(launchd));
     assert('launchd: bundle id ai.occasio.proxy',    launchd.includes('ai.occasio.proxy'));
-    assert('launchd: parametrized with {{LOCALFIRST_BIN}}', launchd.includes('{{LOCALFIRST_BIN}}'));
+    assert('launchd: parametrized with {{OCCASIO_BIN}}', launchd.includes('{{OCCASIO_BIN}}'));
 
     const winps = fsMod.readFileSync(pathMod7.join(supDir, 'install-windows-task.ps1'), 'utf8');
     assert('windows: uses Register-ScheduledTask',      winps.includes('Register-ScheduledTask'));

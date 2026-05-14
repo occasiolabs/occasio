@@ -410,7 +410,7 @@ async function runRedteamCli(args = []) {
     process.stdout.write('\n');
     return result;
   } finally {
-    if (!keepScratch && !process.env.LF_REDTEAM_KEEP) {
+    if (!keepScratch && !process.env.OCC_REDTEAM_KEEP) {
       try { fs.rmSync(ctx.workspace, { recursive: true, force: true }); } catch {}
     }
   }
