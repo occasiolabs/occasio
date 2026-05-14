@@ -312,6 +312,7 @@ ${col.b('Usage:')}
   localfirst claude [args...]   Start Claude with local proxy (intercept + log)
   localfirst demo               10-second proof: see LocalFirst block real secrets
   localfirst demo attest        End-to-end attestation pipeline against a synthetic audit chain
+  localfirst demo anomalies     End-to-end EDR test: synthetic adversarial chain → all 4 detectors
   localfirst dashboard          Open live dashboard for the running session
   localfirst register           Register shell alias (type 'claude' directly)
   localfirst status             Show session stats and savings breakdown
@@ -647,6 +648,11 @@ if (cmd === 'demo' && args[1] === 'attest') {
   runAttestDemoCli(args.slice(2)).then(code => process.exit(code))
     .catch(e => { process.stderr.write(`[demo attest] ${e.message}\n`); process.exit(1); });
   return;
+}
+
+if (cmd === 'demo' && (args[1] === 'anomalies' || args[1] === 'anomaly')) {
+  const { runAnomaliesDemoCli } = require('./demo/anomalies-demo');
+  process.exit(runAnomaliesDemoCli(args.slice(2)));
 }
 
 if (cmd === 'demo') {

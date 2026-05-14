@@ -10971,6 +10971,37 @@ console.log('\n3. runLocally');
     }
   }
 
+  // ── demo anomalies: end-to-end EDR smoke test ───────────────────────────────
+  console.log('\ndemo anomalies: end-to-end EDR against adversarial chain');
+  {
+    const { buildAdversarialChain } = require('./src/demo/anomalies-demo');
+    const { runDetectors }          = require('./src/anomaly');
+    const osT   = require('os');
+    const fsT   = require('fs');
+    const pathT = require('path');
+
+    const tmpDir = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'lf-edr-test-'));
+    const chainFile = pathT.join(tmpDir, 'pipeline-events.jsonl');
+
+    const { nowMs } = buildAdversarialChain(chainFile);
+    const result = runDetectors({ chainFile, windowMs: 15 * 60 * 1000, now: nowMs });
+
+    const fired = new Set(result.alerts.map(a => a.detector_id));
+    assert('demo anomalies: deny-rate fires',          fired.has('deny-rate'));
+    assert('demo anomalies: file-read-volume fires',   fired.has('file-read-volume'));
+    assert('demo anomalies: unknown-tool-input fires', fired.has('unknown-tool-input'));
+    assert('demo anomalies: secret-redact-rate fires', fired.has('secret-redact-rate'));
+    assert('demo anomalies: all alerts at least medium severity',
+      result.alerts.every(a => a.severity === 'medium' || a.severity === 'high'));
+    assert('demo anomalies: deny-rate is high (zero history baseline)',
+      result.alerts.find(a => a.detector_id === 'deny-rate').severity === 'high');
+    assert('demo anomalies: every alert has rows_implicated[0] looking like a hash',
+      result.alerts.every(a => a.rows_implicated.length === 0 ||
+        /^[0-9a-f]{64}$/.test(a.rows_implicated[0])));
+
+    try { fsT.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+
   // ── demo attest: end-to-end pipeline against synthetic data ─────────────────
   console.log('\ndemo attest: end-to-end against synthetic chain');
   {
