@@ -96,6 +96,16 @@ seconds, with no external dependencies:
 - `package.json` description and keywords repositioned around behavioral
   attestation (agent-attestation, sigstore, in-toto, eu-ai-act, edr).
   Discoverable on npm-search for the new buyer audience.
+- `package.json` `files` array now includes `docs/` and `spec/`. The
+  Python verifier (`docs/attest_verify.py`), audit walker, predicate
+  spec, and the EDR / reference-pipeline walkthroughs all ship in the
+  npm tarball — running `localfirst attest verify` after `npm install`
+  no longer requires cloning the GitHub repo for the reference
+  materials.
+- `package.json` `bin` adds `localfirst-mcp` as a first-class command.
+  MCP-server invocation no longer needs the full node_modules path in
+  `mcp_config.json` — `localfirst-mcp` is on `PATH` after global
+  install.
 - README rewritten to lead with the value promise instead of the
   interception technique. Four-layer architecture diagram, runnable
   demos above the fold, "Why now" section linking to EU AI Act / NIST

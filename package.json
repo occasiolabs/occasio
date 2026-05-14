@@ -8,6 +8,8 @@
     "src/",
     "schemas/",
     "policy-templates/",
+    "docs/",
+    "spec/",
     "LICENSE",
     "NOTICE"
   ],
@@ -45,8 +47,9 @@
     "computer-use"
   ],
   "bin": {
-    "localfirst": "bin/localfirst.js",
-    "lf": "bin/localfirst.js"
+    "localfirst":     "bin/localfirst.js",
+    "lf":             "bin/localfirst.js",
+    "localfirst-mcp": "bin/localfirst-mcp.js"
   },
   "engines": {
     "node": ">=18"
