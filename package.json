@@ -20,8 +20,19 @@
     "start": "node bin/localfirst.js"
   },
   "keywords": [
-    "claude", "claude-code", "cline", "anthropic", "proxy", "ai-agents",
-    "governance", "policy", "audit", "privacy", "secrets", "cost", "local"
+    "claude",
+    "claude-code",
+    "cline",
+    "anthropic",
+    "proxy",
+    "ai-agents",
+    "governance",
+    "policy",
+    "audit",
+    "privacy",
+    "secrets",
+    "cost",
+    "local"
   ],
   "bin": {
     "localfirst": "bin/localfirst.js",
@@ -38,5 +49,8 @@
   "bugs": {
     "url": "https://github.com/localfirst-ai/localfirst/issues"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "dependencies": {
+    "sigstore": "^3.1.0"
+  }
 }

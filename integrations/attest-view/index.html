@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<title>LocalFirst Attestation Viewer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>LocalFirst Attestation Viewer</h1>
+  <p class="sub">
+    Predicate type
+    <code>https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1</code>
+  </p>
+</header>
+
+<main>
+  <section id="dropzone" class="dropzone">
+    <p><strong>Drag &amp; drop</strong> the attestation files here</p>
+    <p class="hint">
+      Expected: <code>localfirst-attestation.json</code> +
+      (optionally) <code>localfirst-attestation.sigstore.json</code>.<br>
+      Download both from the workflow run's <em>Artifacts</em> section, then drop them here together.
+    </p>
+    <p>or
+      <label class="filebtn">
+        <input type="file" id="filepick" multiple accept="application/json,.json">
+        choose files…
+      </label>
+    </p>
+  </section>
+
+  <section id="result" hidden>
+
+    <article class="card">
+      <h2>Summary</h2>
+      <table class="kv">
+        <tbody id="summary-table"></tbody>
+      </table>
+    </article>
+
+    <article class="card">
+      <h2>Checks</h2>
+      <ul id="checks-list" class="checks"></ul>
+      <p class="hint">
+        The browser walks the audit chain client-side and re-verifies the DSSE
+        payload matches the attestation. The Sigstore signature is verified
+        by an offline tool (<code>localfirst attest verify</code>) or by
+        opening the Rekor entry below — this page does not perform crypto
+        verification on the cert chain.
+      </p>
+    </article>
+
+    <article class="card" id="blocked-card" hidden>
+      <h2>Blocked attempts</h2>
+      <table class="blocked">
+        <thead><tr><th>Tool</th><th>Target</th><th>Rule</th><th>When</th></tr></thead>
+        <tbody id="blocked-tbody"></tbody>
+      </table>
+    </article>
+
+    <article class="card">
+      <h2>Raw attestation</h2>
+      <pre id="raw-att"></pre>
+    </article>
+
+  </section>
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/localfirst-ai/localfirst">localfirst-ai/localfirst</a> ·
+    Apache-2.0 ·
+    <a href="https://github.com/localfirst-ai/localfirst/blob/main/spec/agent-attestation/v1/README.md">Spec</a>
+  </p>
+</footer>
+
+<script src="viewer.js"></script>
+</body>
+</html>

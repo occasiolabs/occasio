@@ -1,0 +1,104 @@
+name: 'LocalFirst Attest'
+description: >-
+  Produce a Sigstore-signed AI-Agent Behavioral Attestation for a LocalFirst
+  session, upload it as a workflow artifact, and surface a GitHub Check Run
+  on the PR with a human-readable summary.
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  run-id:
+    description: >-
+      LocalFirst run_id. If absent, the action reads it from
+      ~/.localfirst/session.json (the most recent proxy run on the runner).
+    required: false
+    default: ''
+  chain-file:
+    description: 'Path to pipeline-events.jsonl (default: ~/.localfirst/pipeline-events.jsonl).'
+    required: false
+    default: ''
+  policy-file:
+    description: 'Path to policy.yml (default: ~/.localfirst/policy.yml).'
+    required: false
+    default: ''
+  sign:
+    description: 'If "true", Sigstore-sign the attestation via GitHub OIDC.'
+    required: false
+    default: 'true'
+  localfirst-version:
+    description: 'Version of @localfirst-ai/localfirst to install on the runner (default: latest).'
+    required: false
+    default: 'latest'
+  github-token:
+    description: 'Token used to create the Check Run. Defaults to the workflow GITHUB_TOKEN.'
+    required: false
+    default: ${{ github.token }}
+  view-base-url:
+    description: 'Base URL of the View-Evidence page. Used in the Check Run "Details" link.'
+    required: false
+    default: 'https://localfirst-ai.github.io/attest-view'
+
+outputs:
+  attestation-path:
+    description: 'Filesystem path to the written attestation.json'
+    value: ${{ steps.attest.outputs.attestation-path }}
+  bundle-path:
+    description: 'Filesystem path to the written Sigstore bundle (.sigstore.json)'
+    value: ${{ steps.attest.outputs.bundle-path }}
+  check-run-url:
+    description: 'URL of the created GitHub Check Run'
+    value: ${{ steps.check.outputs.check-run-url }}
+  rekor-entry:
+    description: 'Rekor transparency log search URL (if Sigstore-signed)'
+    value: ${{ steps.attest.outputs.rekor-entry }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: '20'
+
+    - name: Install @localfirst-ai/localfirst
+      shell: bash
+      run: |
+        npm install -g "@localfirst-ai/localfirst@${{ inputs.localfirst-version }}"
+        localfirst --version || true
+
+    - id: attest
+      name: Produce signed attestation
+      shell: bash
+      env:
+        LF_INPUT_RUN_ID:     ${{ inputs.run-id }}
+        LF_INPUT_CHAIN:      ${{ inputs.chain-file }}
+        LF_INPUT_POLICY:     ${{ inputs.policy-file }}
+        LF_INPUT_SIGN:       ${{ inputs.sign }}
+        LF_GITHUB_SHA:       ${{ github.event.pull_request.head.sha || github.sha }}
+        LF_PR_NUMBER:        ${{ github.event.pull_request.number }}
+      run: node ${{ github.action_path }}/scripts/run-attest.js
+
+    - name: Upload attestation artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: localfirst-attestation
+        path: |
+          ${{ steps.attest.outputs.attestation-path }}
+          ${{ steps.attest.outputs.bundle-path }}
+        if-no-files-found: error
+        retention-days: 90
+
+    - id: check
+      name: Create LocalFirst Attested Check Run
+      shell: bash
+      env:
+        GITHUB_TOKEN:        ${{ inputs.github-token }}
+        GITHUB_REPOSITORY:   ${{ github.repository }}
+        LF_HEAD_SHA:         ${{ github.event.pull_request.head.sha || github.sha }}
+        LF_VIEW_BASE_URL:    ${{ inputs.view-base-url }}
+        LF_ATTESTATION_PATH: ${{ steps.attest.outputs.attestation-path }}
+        LF_BUNDLE_PATH:      ${{ steps.attest.outputs.bundle-path }}
+        LF_REKOR_ENTRY:      ${{ steps.attest.outputs.rekor-entry }}
+      run: node ${{ github.action_path }}/scripts/post-check.js

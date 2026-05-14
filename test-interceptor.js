@@ -9992,6 +9992,650 @@ console.log('\n3. runLocally');
       /encoded-output[\s\S]{0,300}continue-on-error|continue-on-error[\s\S]{0,300}encoded-output/.test(wf));
   }
 
+  // ── attest: behavioral attestation v1 ──────────────────────────────────────
+  console.log('\nattest: AI-Agent Behavioral Attestation v1');
+  {
+    const osT       = require('os');
+    const fsT       = require('fs');
+    const pathT     = require('path');
+    const crypto    = require('crypto');
+    const { loadRunSlice }    = require('./src/attest/run-slice');
+    const { buildAttestation, SCHEMA_VERSION, PREDICATE_TYPE, GENESIS } = require('./src/attest');
+    const { verifyFile }      = require('./src/audit/verifier');
+
+    // Build a synthetic chain on disk: 5 hash-linked rows covering two run_ids.
+    // We build the chain ourselves so the test is hermetic — no dependency on
+    // a live ~/.localfirst/pipeline-events.jsonl.
+    const tmpDir   = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'lf-attest-test-'));
+    const chainLog = pathT.join(tmpDir, 'pipeline-events.jsonl');
+    const polFile  = pathT.join(tmpDir, 'policy.yml');
+
+    fsT.writeFileSync(polFile,
+      'version: 1\n' +
+      'block_secrets_in_tool_results: true\n' +
+      'deny_paths:\n' +
+      '  - ~/.ssh\n' +
+      '  - ~/.aws\n' +
+      'deny_patterns:\n' +
+      '  internal_jwt: ey[A-Za-z0-9_-]{20,}\n'
+    );
+
+    const RUN_A = '11111111-1111-1111-1111-111111111111';
+    const RUN_B = '22222222-2222-2222-2222-222222222222';
+    let prev = GENESIS;
+    function appendRow(row) {
+      const withPrev = { ...row, prev_hash: prev };
+      const hash = crypto.createHash('sha256').update(JSON.stringify(withPrev), 'utf8').digest('hex');
+      const full = { ...withPrev, hash };
+      fsT.appendFileSync(chainLog, JSON.stringify(full) + '\n');
+      prev = hash;
+      return full;
+    }
+
+    const r1 = appendRow({ ts: '2026-05-12T10:00:00.000Z', run_id: RUN_A, agent: 'localfirst',
+      kind: 'policy_loaded', tool_name: 'policy_loaded', action: 'INFO',
+      tool_inputs: { policy_hash: 'a'.repeat(64), policy_path: polFile, version: 1 },
+      policy_source: 'user' });
+    const r2 = appendRow({ ts: '2026-05-12T10:00:05.000Z', run_id: RUN_A, agent: 'claude-code',
+      kind: 'tool_call', tool_name: 'read_file', action: 'LOCAL',
+      tool_inputs: { path: '/tmp/package.json' }, reason: 'native-handled', secrets_redacted: 0 });
+    const r3 = appendRow({ ts: '2026-05-12T10:00:12.000Z', run_id: RUN_A, agent: 'claude-code',
+      kind: 'tool_call', tool_name: 'read_file', action: 'BLOCK',
+      tool_inputs: { path: '/home/u/.ssh/id_rsa' }, reason: 'path-denied' });
+    const r4 = appendRow({ ts: '2026-05-12T10:00:30.000Z', run_id: RUN_A, agent: 'claude-code',
+      kind: 'tool_call', tool_name: 'shell_bash', action: 'TRANSFORM',
+      tool_inputs: { cmd: 'grep secret .env' }, reason: 'distill', secrets_redacted: 1 });
+    // Foreign row from a different run — MUST be excluded from the slice.
+    const r5 = appendRow({ ts: '2026-05-12T10:05:00.000Z', run_id: RUN_B, agent: 'claude-code',
+      kind: 'tool_call', tool_name: 'read_file', action: 'LOCAL',
+      tool_inputs: { path: '/etc/hosts' } });
+
+    const sha256OfChainBefore = crypto.createHash('sha256')
+      .update(fsT.readFileSync(chainLog)).digest('hex');
+
+    // ── 1. loadRunSlice: filters and exposes hash commitments ──────────────
+    const slice = loadRunSlice(chainLog, RUN_A);
+    assert('run-slice: event_count = 4 (RUN_A, excludes RUN_B)', slice.event_count === 4);
+    assert('run-slice: first_hash = hash of first matching row',  slice.first_hash === r1.hash);
+    assert('run-slice: last_hash = hash of last matching row',    slice.last_hash  === r4.hash);
+    assert('run-slice: foreign row excluded',
+      !slice.events.some(e => e.run_id === RUN_B));
+
+    const sliceEmpty = loadRunSlice(chainLog, 'no-such-run');
+    assert('run-slice: empty slice → event_count 0 + null hashes',
+      sliceEmpty.event_count === 0 && sliceEmpty.first_hash === null && sliceEmpty.last_hash === null);
+
+    // ── 2. buildAttestation: shape, summary, hash commitments ──────────────
+    const att = buildAttestation({ runId: RUN_A, logFile: chainLog, policyFile: polFile });
+    assert('attest: schema_version 1.0.0',           att.schema_version === SCHEMA_VERSION);
+    assert('attest: predicate_type pinned',          att.predicate_type === PREDICATE_TYPE);
+    assert('attest: subject.run_id matches',         att.subject.run_id === RUN_A);
+    assert('attest: agent.platform = claude-code',   att.agent.platform === 'claude-code');
+    assert('attest: agent.started_at = first ts',    att.agent.started_at === r1.ts);
+    assert('attest: agent.ended_at = last ts',       att.agent.ended_at === r4.ts);
+    assert('attest: wall_time_s = 30',               att.agent.wall_time_s === 30);
+
+    assert('attest: signature is null (Phase 0)',    att.signature === null);
+
+    assert('attest: audit_chain.genesis fixed',      att.audit_chain.genesis === GENESIS);
+    assert('attest: audit_chain.first_hash = r1',    att.audit_chain.first_hash === r1.hash);
+    assert('attest: audit_chain.last_hash  = r4',    att.audit_chain.last_hash  === r4.hash);
+    assert('attest: audit_chain.event_count = 4',    att.audit_chain.event_count === 4);
+    assert('attest: chain_file echoed',              att.audit_chain.chain_file === chainLog);
+    assert('attest: verifier_url is a URL',          /^https?:\/\//.test(att.audit_chain.verifier_url));
+
+    // Execution summary: 3 tool_calls (r2,r3,r4 — r1 is policy_loaded, not counted)
+    assert('attest: tool_calls = 3 (excludes policy_loaded)', att.execution_summary.tool_calls === 3);
+    assert('attest: local = 1',                              att.execution_summary.local === 1);
+    assert('attest: blocked = 1',                            att.execution_summary.blocked === 1);
+    assert('attest: transformed = 1',                        att.execution_summary.transformed === 1);
+    assert('attest: secrets_redacted = 1',                   att.execution_summary.secrets_redacted === 1);
+    assert('attest: blocked_events captured',                att.execution_summary.blocked_events.length === 1);
+    assert('attest: blocked_event.rule = path-denied',
+      att.execution_summary.blocked_events[0].rule === 'path-denied');
+    assert('attest: blocked_event.target = the SSH path',
+      att.execution_summary.blocked_events[0].target === '/home/u/.ssh/id_rsa');
+    assert('attest: blocked_event.at_offset_s = 12',
+      att.execution_summary.blocked_events[0].at_offset_s === 12);
+
+    // Policy: sourced from the policy_loaded row inside the slice
+    assert('attest: policy.file_hash from policy_loaded row', att.policy.file_hash === 'a'.repeat(64));
+    assert('attest: policy.file_path echoed',                 att.policy.file_path === polFile);
+    assert('attest: policy.version = 1',                      att.policy.version === 1);
+    assert('attest: rules_digest.deny_paths_count = 2',       att.policy.rules_digest.deny_paths_count === 2);
+    assert('attest: rules_digest.deny_patterns_count = 1',    att.policy.rules_digest.deny_patterns_count === 1);
+    assert('attest: rules_digest.block_secrets = true',       att.policy.rules_digest.block_secrets === true);
+
+    // ── 3. Empty run → null return value (no events) ───────────────────────
+    const attEmpty = buildAttestation({ runId: 'no-such-run', logFile: chainLog, policyFile: polFile });
+    assert('attest: unknown run_id → null', attEmpty === null);
+
+    // ── 4. attest is read-only — chain file bytes unchanged ────────────────
+    const sha256OfChainAfter = crypto.createHash('sha256')
+      .update(fsT.readFileSync(chainLog)).digest('hex');
+    assert('attest: chain file unchanged after build',
+      sha256OfChainAfter === sha256OfChainBefore);
+
+    // ── 5. Verifier still passes after attest (no chain mutation) ──────────
+    const ver = verifyFile(chainLog);
+    assert('attest: verifier passes after attest', ver.ok === true);
+    assert('attest: verifier sees all 5 rows',     ver.chained === 5);
+
+    // ── 6. Schema spot-check: required top-level keys present ──────────────
+    for (const k of ['schema_version','predicate_type','subject','agent','policy',
+                     'execution_summary','audit_chain','signature']) {
+      assert(`attest: schema requires key "${k}"`, Object.prototype.hasOwnProperty.call(att, k));
+    }
+
+    // ── 6. Policy-hash fallback marked as 'inferred' ───────────────────────
+    // When the run slice contains NO policy_loaded event, the producer must
+    // hash the policy file's current bytes — but that file may have been
+    // edited between the run ending and `localfirst attest` running. Mark
+    // the result clearly so downstream verifiers treat it as weaker evidence.
+    {
+      const RUN_NO_POL = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      const noPolFile = pathT.join(tmpDir, 'attest-test-nopol-chain.jsonl');
+      let prev2 = GENESIS;
+      const appendNoPol = (row) => {
+        const withPrev = { ...row, prev_hash: prev2 };
+        const hash = crypto.createHash('sha256').update(JSON.stringify(withPrev), 'utf8').digest('hex');
+        const full = { ...withPrev, hash };
+        fsT.appendFileSync(noPolFile, JSON.stringify(full) + '\n');
+        prev2 = hash;
+        return full;
+      };
+      appendNoPol({ ts: '2026-05-12T11:00:00.000Z', run_id: RUN_NO_POL, agent: 'claude-code',
+        kind: 'tool_call', tool_name: 'Read', action: 'LOCAL' });
+      appendNoPol({ ts: '2026-05-12T11:00:05.000Z', run_id: RUN_NO_POL, agent: 'claude-code',
+        kind: 'tool_call', tool_name: 'Read', action: 'PASS' });
+      // policy.yml exists, but no policy_loaded row references it.
+      const polFileInferred = pathT.join(tmpDir, 'attest-test-inferred-policy.yml');
+      fsT.writeFileSync(polFileInferred,
+        'version: 1\ndeny_paths:\n  - /etc/secret\n');
+      const attInferred = buildAttestation({
+        runId: RUN_NO_POL, logFile: noPolFile, policyFile: polFileInferred });
+      assert('attest: policy.source = "inferred" when no policy_loaded row',
+        attInferred.policy.source === 'inferred');
+      assert('attest: policy.file_hash is the file\'s current bytes (inferred)',
+        /^[0-9a-f]{64}$/.test(attInferred.policy.file_hash) && attInferred.policy.file_hash !== GENESIS);
+      assert('attest: policy.file_path echoed in inferred mode',
+        attInferred.policy.file_path === polFileInferred);
+      // Hand-verify the hash matches the file's actual SHA-256.
+      const cryptoT = require('crypto');
+      const expectedHash = cryptoT.createHash('sha256')
+        .update(fsT.readFileSync(polFileInferred)).digest('hex');
+      assert('attest: inferred file_hash == sha256(policy.yml)',
+        attInferred.policy.file_hash === expectedHash);
+    }
+
+    // Cleanup
+    try { fsT.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+
+  // ── attest: subject.git_commit + subject.files_changed (Phase 2c) ──────────
+  console.log('\nattest: subject.git_commit + files_changed (Phase 2c)');
+  {
+    const osT    = require('os');
+    const fsT    = require('fs');
+    const pathT  = require('path');
+    const crypto = require('crypto');
+    const { buildAttestation } = require('./src/attest');
+
+    const tmpDir   = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'lf-2c-test-'));
+    const chainLog = pathT.join(tmpDir, 'pipeline-events.jsonl');
+    const polFile  = pathT.join(tmpDir, 'policy.yml');
+    fsT.writeFileSync(polFile, 'block_secrets_in_tool_results: true\n');
+
+    const RUN = '44444444-4444-4444-4444-444444444444';
+    let prev = '0'.repeat(64);
+    function appendRow(row) {
+      const withPrev = { ...row, prev_hash: prev };
+      const hash = crypto.createHash('sha256').update(JSON.stringify(withPrev), 'utf8').digest('hex');
+      const full = { ...withPrev, hash };
+      fsT.appendFileSync(chainLog, JSON.stringify(full) + '\n');
+      prev = hash;
+      return full;
+    }
+    appendRow({ ts: '2026-05-12T13:00:00.000Z', run_id: RUN, agent: 'claude-code',
+      kind: 'tool_call', tool_name: 'read_file', action: 'LOCAL',
+      tool_inputs: { path: '/tmp/x' } });
+
+    // (a) Without git context — subject is bare run_id, no extra keys
+    const a0 = buildAttestation({ runId: RUN, logFile: chainLog, policyFile: polFile });
+    assert('2c: subject has run_id', a0.subject.run_id === RUN);
+    assert('2c: no git_commit when not passed',
+      !Object.prototype.hasOwnProperty.call(a0.subject, 'git_commit'));
+    assert('2c: no files_changed when not passed',
+      !Object.prototype.hasOwnProperty.call(a0.subject, 'files_changed'));
+
+    // (b) With gitCommit only
+    const a1 = buildAttestation({ runId: RUN, logFile: chainLog, policyFile: polFile,
+      gitCommit: 'abc1234567890abc1234567890abc1234567890a' });
+    assert('2c: git_commit propagated', a1.subject.git_commit ===
+      'abc1234567890abc1234567890abc1234567890a');
+    assert('2c: no files_changed key when array missing',
+      !Object.prototype.hasOwnProperty.call(a1.subject, 'files_changed'));
+
+    // (c) With filesChanged
+    const a2 = buildAttestation({ runId: RUN, logFile: chainLog, policyFile: polFile,
+      gitCommit: 'deadbeef', filesChanged: ['src/foo.ts', 'src/bar.ts'] });
+    assert('2c: files_changed array preserved order/length',
+      Array.isArray(a2.subject.files_changed)
+        && a2.subject.files_changed.length === 2
+        && a2.subject.files_changed[0] === 'src/foo.ts');
+
+    // (d) Empty filesChanged array → key omitted (clean output)
+    const a3 = buildAttestation({ runId: RUN, logFile: chainLog, policyFile: polFile,
+      gitCommit: 'deadbeef', filesChanged: [] });
+    assert('2c: empty files_changed array omits key',
+      !Object.prototype.hasOwnProperty.call(a3.subject, 'files_changed'));
+
+    // (e) Non-string gitCommit → key omitted (defensive)
+    const a4 = buildAttestation({ runId: RUN, logFile: chainLog, policyFile: polFile,
+      gitCommit: 12345, filesChanged: ['x.ts'] });
+    assert('2c: non-string git_commit ignored',
+      !Object.prototype.hasOwnProperty.call(a4.subject, 'git_commit'));
+
+    try { fsT.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+
+  // ── attest sign + verify (Phase 1, Sigstore mocked) ────────────────────────
+  console.log('\nattest sign + verify (Sigstore mocked)');
+  {
+    const osT    = require('os');
+    const fsT    = require('fs');
+    const pathT  = require('path');
+    const crypto = require('crypto');
+    const { buildAttestation } = require('./src/attest');
+    const { signAttestation, buildInTotoStatement,
+            _decodeIdentity, _extractRekorEntry,
+            DSSE_PAYLOAD_TYPE, PREDICATE_TYPE: SIGN_PREDICATE_TYPE,
+          } = require('./src/attest/sign');
+    const { verifyAttestation } = require('./src/attest/verify');
+
+    // Synthetic chain — minimal slice good enough to attest.
+    const tmpDir   = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'lf-sign-test-'));
+    const chainLog = pathT.join(tmpDir, 'pipeline-events.jsonl');
+    const polFile  = pathT.join(tmpDir, 'policy.yml');
+    fsT.writeFileSync(polFile, 'block_secrets_in_tool_results: true\n');
+
+    const RUN = '33333333-3333-3333-3333-333333333333';
+    let prev = '0'.repeat(64);
+    function appendRow(row) {
+      const withPrev = { ...row, prev_hash: prev };
+      const hash = crypto.createHash('sha256').update(JSON.stringify(withPrev), 'utf8').digest('hex');
+      const full = { ...withPrev, hash };
+      fsT.appendFileSync(chainLog, JSON.stringify(full) + '\n');
+      prev = hash;
+      return full;
+    }
+    appendRow({ ts: '2026-05-12T11:00:00.000Z', run_id: RUN, agent: 'claude-code',
+      kind: 'tool_call', tool_name: 'read_file', action: 'LOCAL',
+      tool_inputs: { path: '/tmp/x' } });
+    appendRow({ ts: '2026-05-12T11:00:10.000Z', run_id: RUN, agent: 'claude-code',
+      kind: 'tool_call', tool_name: 'read_file', action: 'BLOCK',
+      tool_inputs: { path: '/etc/shadow' }, reason: 'path-denied' });
+
+    const attestation = buildAttestation({ runId: RUN, logFile: chainLog, policyFile: polFile });
+
+    // ── 1. in-toto Statement envelope shape ────────────────────────────────
+    const stmt = buildInTotoStatement(attestation);
+    assert('sign: statement _type is in-toto v1',
+      stmt._type === 'https://in-toto.io/Statement/v1');
+    assert('sign: predicateType matches LocalFirst URI',
+      stmt.predicateType === SIGN_PREDICATE_TYPE);
+    assert('sign: subject[0].digest.sha256 = last_hash',
+      stmt.subject[0].digest.sha256 === attestation.audit_chain.last_hash);
+    assert('sign: subject.name encodes run_id',
+      stmt.subject[0].name === `localfirst:run:${RUN}`);
+    assert('sign: predicate omits signature field',
+      !Object.prototype.hasOwnProperty.call(stmt.predicate, 'signature'));
+
+    // ── 2. signAttestation with mocked sigstore (token mode) ──────────────
+    // Realistic OIDC JWT (header.payload.sig) — we only decode the payload.
+    const fakeClaims = { sub: 'repo:localfirst-ai/localfirst:ref:refs/heads/main',
+                         iss: 'https://token.actions.githubusercontent.com',
+                         aud: 'sigstore' };
+    const fakeJwt = [
+      Buffer.from(JSON.stringify({alg:'RS256'})).toString('base64url'),
+      Buffer.from(JSON.stringify(fakeClaims)).toString('base64url'),
+      'fakesignature',
+    ].join('.');
+
+    let capturedPayload = null, capturedPayloadType = null, capturedOpts = null;
+    const fakeBundle = {
+      mediaType: 'application/vnd.dev.sigstore.bundle+json;version=0.2',
+      verificationMaterial: {
+        tlogEntries: [{ logIndex: '12345678', integratedTime: '1717000000' }],
+      },
+      // dsseEnvelope.payload gets filled in by the fake sign below.
+      dsseEnvelope: null,
+    };
+    const fakeSigstore = {
+      async attest(payload, payloadType, opts) {
+        capturedPayload = payload;
+        capturedPayloadType = payloadType;
+        capturedOpts = opts;
+        fakeBundle.dsseEnvelope = {
+          payloadType,
+          payload: payload.toString('base64'),
+          signatures: [{ sig: 'AAAA', keyid: '' }],
+        };
+        return fakeBundle;
+      },
+      async verify(bundle /*, data, opts */) {
+        // Real Sigstore checks crypto. The fake "passes" iff the bundle
+        // is the one we produced (object identity) and the dsseEnvelope is set.
+        if (bundle !== fakeBundle && bundle?.dsseEnvelope?.signatures?.[0]?.sig !== 'AAAA') {
+          throw new Error('mock: unknown bundle');
+        }
+      },
+    };
+
+    const fixedNow = new Date('2026-05-12T12:00:00.000Z');
+    const { bundle, signatureBlock, statementJSON } =
+      await signAttestation(attestation, {
+        oidcToken: fakeJwt, signMode: 'token',
+        sigstoreModule: fakeSigstore,
+        now: () => fixedNow,
+        tlogUpload: false,
+      });
+
+    assert('sign: sigstore.attest received the in-toto Statement payload',
+      capturedPayload instanceof Buffer && capturedPayload.toString('utf8') === statementJSON);
+    assert('sign: sigstore.attest received the DSSE in-toto payloadType',
+      capturedPayloadType === DSSE_PAYLOAD_TYPE);
+    assert('sign: identityToken forwarded to sigstore',
+      capturedOpts && capturedOpts.identityToken === fakeJwt);
+
+    assert('sign: signatureBlock.type is sigstore-cosign-keyless',
+      signatureBlock.type === 'sigstore-cosign-keyless');
+    assert('sign: signatureBlock.identity decoded from JWT.sub',
+      signatureBlock.identity === fakeClaims.sub);
+    assert('sign: signatureBlock.signed_at = fixed now',
+      signatureBlock.signed_at === fixedNow.toISOString());
+    assert('sign: envelope_sha256 commits to statement bytes',
+      signatureBlock.envelope_sha256 ===
+        crypto.createHash('sha256').update(statementJSON, 'utf8').digest('hex'));
+    assert('sign: rekor_entry surfaces logIndex URL',
+      /logIndex=12345678$/.test(signatureBlock.rekor_entry || ''));
+
+    // ── 3. Round-trip via verifyAttestation ───────────────────────────────
+    const signedAtt = { ...attestation, signature: signatureBlock };
+    const attPath = pathT.join(tmpDir, 'att.json');
+    const bunPath = pathT.join(tmpDir, 'att.sigstore.json');
+    fsT.writeFileSync(attPath, JSON.stringify(signedAtt, null, 2));
+    fsT.writeFileSync(bunPath, JSON.stringify(bundle, null, 2));
+
+    const v1 = await verifyAttestation(attPath, bunPath, { sigstoreModule: fakeSigstore });
+    assert('verify: round-trip OK',                       v1.ok === true);
+    assert('verify: sigstore signature check passed',     v1.checks[0].ok === true && v1.checks[0].name === 'sigstore signature');
+    assert('verify: payload-vs-attestation check passed', v1.checks[1].ok === true);
+    assert('verify: audit chain integrity check passed',  v1.checks[2].ok === true);
+    assert('verify: surfaces identity',                   v1.identity === fakeClaims.sub);
+
+    // ── 4. Tamper detection ──────────────────────────────────────────────
+    // 4a. Mutate the attestation predicate AFTER signing → equivalence check fails.
+    const tamperedAtt = { ...signedAtt,
+      execution_summary: { ...signedAtt.execution_summary, blocked: 0 } };
+    fsT.writeFileSync(attPath, JSON.stringify(tamperedAtt, null, 2));
+    const v2 = await verifyAttestation(attPath, bunPath, { sigstoreModule: fakeSigstore });
+    assert('verify: tampered predicate → ok=false',         v2.ok === false);
+    assert('verify: tamper failure is on equivalence step', v2.checks[1].ok === false);
+
+    // 4b. Mutate the chain file AFTER signing → audit chain check fails.
+    fsT.writeFileSync(attPath, JSON.stringify(signedAtt, null, 2));   // restore predicate
+    const origChain = fsT.readFileSync(chainLog, 'utf8');
+    // Flip a single character inside one of the JSON rows (preserves JSON shape,
+    // breaks hash recomputation).
+    fsT.writeFileSync(chainLog, origChain.replace('"LOCAL"', '"PASS_"'));
+    const v3 = await verifyAttestation(attPath, bunPath, { sigstoreModule: fakeSigstore });
+    assert('verify: tampered chain → ok=false', v3.ok === false);
+    assert('verify: failure is on audit-chain step',
+      v3.checks[2] && v3.checks[2].ok === false);
+    fsT.writeFileSync(chainLog, origChain);   // restore
+
+    // 4c. Bundle that fails sigstore.verify (different sig) → first check fails.
+    const badBundle = JSON.parse(JSON.stringify(bundle));
+    badBundle.dsseEnvelope.signatures[0].sig = 'ZZZZ';
+    fsT.writeFileSync(bunPath, JSON.stringify(badBundle, null, 2));
+    const v4 = await verifyAttestation(attPath, bunPath, { sigstoreModule: fakeSigstore });
+    assert('verify: rejected bundle → ok=false', v4.ok === false);
+    assert('verify: failure is on sigstore signature step',
+      v4.checks[0].ok === false);
+
+    // ── 5. Refuse to sign an empty slice ──────────────────────────────────
+    let threw = null;
+    try {
+      buildInTotoStatement({ subject: { run_id: 'x' }, audit_chain: { last_hash: null } });
+    } catch (e) { threw = e; }
+    assert('sign: refuses empty-slice attestation',
+      threw && /last_hash/.test(threw.message));
+
+    // ── 6. Identity-decode resilience ────────────────────────────────────
+    assert('sign: decodeIdentity handles garbage JWT',
+      _decodeIdentity('not.a.jwt') === 'unknown');
+    assert('sign: extractRekorEntry handles missing tlog',
+      _extractRekorEntry({}) === null);
+
+    // ── 7. Canonicalization: byte-stability across key order ───────────────
+    // Verifier must accept a predicate whose keys are in a different order
+    // than the producer's — otherwise pretty-printing/re-serialisation
+    // anywhere in the pipeline silently breaks every existing attestation.
+    {
+      // Test 4c overwrote bunPath with a bad bundle; restore it.
+      fsT.writeFileSync(bunPath, JSON.stringify(bundle, null, 2));
+      const reordered = {
+        signature: signedAtt.signature,
+        generated_at: signedAtt.generated_at,
+        audit_chain: signedAtt.audit_chain,
+        execution_summary: signedAtt.execution_summary,
+        policy: signedAtt.policy,
+        agent: signedAtt.agent,
+        subject: signedAtt.subject,
+        predicate_type: signedAtt.predicate_type,
+        schema_version: signedAtt.schema_version,
+      };
+      fsT.writeFileSync(attPath, JSON.stringify(reordered, null, 2));
+      const vReorder = await verifyAttestation(attPath, bunPath, { sigstoreModule: fakeSigstore });
+      assert('canonicalize: reordered keys still verify (round-trip OK)',
+        vReorder.ok === true);
+      fsT.writeFileSync(attPath, JSON.stringify(signedAtt, null, 2));   // restore
+    }
+
+    // Cleanup
+    try { fsT.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+
+  // ── canonicalize: unit tests ───────────────────────────────────────────────
+  console.log('\ncanonicalize: RFC 8785 subset');
+  {
+    const { canonicalize } = require('./src/attest/canonicalize');
+
+    assert('canonicalize: null',  canonicalize(null) === 'null');
+    assert('canonicalize: true',  canonicalize(true) === 'true');
+    assert('canonicalize: false', canonicalize(false) === 'false');
+    assert('canonicalize: integer', canonicalize(42) === '42');
+    assert('canonicalize: zero',  canonicalize(0)  === '0');
+    assert('canonicalize: string with HTML',
+      canonicalize('<script>') === '"<script>"');
+    assert('canonicalize: empty object', canonicalize({}) === '{}');
+    assert('canonicalize: empty array',  canonicalize([]) === '[]');
+
+    // Key ordering is the whole point.
+    assert('canonicalize: keys sorted lexicographically',
+      canonicalize({ b: 1, a: 2 }) === '{"a":2,"b":1}');
+    assert('canonicalize: nested keys sorted',
+      canonicalize({ outer: { z: 1, a: 2 } }) ===
+        '{"outer":{"a":2,"z":1}}');
+    assert('canonicalize: arrays preserve order',
+      canonicalize([3, 1, 2]) === '[3,1,2]');
+
+    // Two equivalent objects must canonicalize to identical bytes.
+    const obj1 = { a: 1, b: [{ y: 2, x: 1 }] };
+    const obj2 = { b: [{ x: 1, y: 2 }], a: 1 };
+    assert('canonicalize: byte-equal under key reordering',
+      canonicalize(obj1) === canonicalize(obj2));
+
+    // undefined values are dropped (matches JSON.stringify behaviour).
+    assert('canonicalize: undefined values are omitted',
+      canonicalize({ a: 1, b: undefined, c: 3 }) === '{"a":1,"c":3}');
+    // undefined inside arrays becomes null.
+    assert('canonicalize: undefined array elements → null',
+      canonicalize([1, undefined, 3]) === '[1,null,3]');
+
+    // Reject non-finite / unsupported.
+    let threwNaN = null;
+    try { canonicalize(NaN); } catch (e) { threwNaN = e; }
+    assert('canonicalize: NaN throws', threwNaN !== null);
+
+    let threwUndef = null;
+    try { canonicalize(undefined); } catch (e) { threwUndef = e; }
+    assert('canonicalize: top-level undefined throws', threwUndef !== null);
+  }
+
+  // ── attest-action: run-attest validators ───────────────────────────────────
+  // The GitHub Action's run-attest.js script forwards workflow inputs into
+  // `spawnSync('localfirst', [..., value, ...])`. Array-argv is shell-safe
+  // but a value starting with `--` is parsed as a flag, and a comma inside
+  // a filename corrupts --files-changed. These validators are the boundary.
+  console.log('\nattest-action: run-attest input validators');
+  {
+    const { validRunId, validCommitSha, validPath, validFilePath } =
+      require('./integrations/attest-action/scripts/run-attest');
+
+    // run_id must be UUID-shaped.
+    assert('validRunId: accepts canonical UUID',
+      validRunId('11111111-1111-1111-1111-111111111111') === true);
+    assert('validRunId: accepts mixed case',
+      validRunId('aaAAbbBB-cccc-DDDD-eeee-FFFFffff1234') === true);
+    assert('validRunId: rejects too-short',          validRunId('1111') === false);
+    assert('validRunId: rejects non-hex',            validRunId('zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz') === false);
+    assert('validRunId: rejects leading --',         validRunId('--run-id-injection') === false);
+    assert('validRunId: rejects empty',              validRunId('') === false);
+    assert('validRunId: rejects undefined',          validRunId(undefined) === false);
+    assert('validRunId: rejects newline in middle',
+      validRunId('11111111-1111-1111-1111-111111111\n11') === false);
+
+    // git SHA: 7..64 hex.
+    assert('validCommitSha: short SHA-7',  validCommitSha('abc1234') === true);
+    assert('validCommitSha: full SHA-40',  validCommitSha('a'.repeat(40)) === true);
+    assert('validCommitSha: SHA-256',      validCommitSha('a'.repeat(64)) === true);
+    assert('validCommitSha: too short',    validCommitSha('abc') === false);
+    assert('validCommitSha: non-hex',      validCommitSha('zzzzzzz') === false);
+    assert('validCommitSha: leading dash', validCommitSha('-bc1234') === false);
+
+    // Paths: no leading dash, no NUL, no newline.
+    assert('validPath: accepts absolute', validPath('/etc/localfirst/policy.yml') === true);
+    assert('validPath: accepts windows', validPath('C:\\Users\\x\\policy.yml') === true);
+    assert('validPath: rejects leading -', validPath('--evil') === false);
+    assert('validPath: rejects NUL',       validPath('a\0b') === false);
+    assert('validPath: rejects newline',   validPath('a\nb') === false);
+    assert('validPath: rejects empty',     validPath('') === false);
+
+    // File paths: same plus reject commas (for --files-changed encoding).
+    assert('validFilePath: accepts simple', validFilePath('src/index.js') === true);
+    assert('validFilePath: rejects comma',  validFilePath('a,b.txt') === false);
+    assert('validFilePath: rejects leading dash', validFilePath('-rf') === false);
+  }
+
+  // ── attest-action: post-check escapers ─────────────────────────────────────
+  console.log('\nattest-action: post-check escapers');
+  {
+    const { mdCode, mdText, intOr0, safeRekorUrl, buildSummary } =
+      require('./integrations/attest-action/scripts/post-check');
+
+    // mdCode strips/replaces characters that break out of `..` inline code.
+    assert('mdCode: backtick neutralised',
+      !mdCode('echo `id`').includes('`'));
+    assert('mdCode: pipe escaped for GFM table',
+      mdCode('a|b').includes('\\|'));
+    assert('mdCode: newline collapsed',
+      mdCode('a\nb') === 'a b');
+    assert('mdCode: empty for null/undefined',
+      mdCode(null) === '' && mdCode(undefined) === '');
+    assert('mdCode: truncates runaway values',
+      mdCode('x'.repeat(1000)).length <= 256);
+
+    // mdText escapes the full GFM control set.
+    assert('mdText: escapes HTML angle brackets',
+      mdText('<img onerror=x>') === '\\<img onerror=x\\>'
+      || /\\</.test(mdText('<img>')));
+    assert('mdText: escapes link bracket',
+      /\\\[/.test(mdText('[evil](http://x)')));
+    assert('mdText: escapes asterisk',
+      /\\\*/.test(mdText('*x*')));
+    assert('mdText: empty for null',  mdText(null) === '');
+
+    assert('intOr0: numeric string',  intOr0('42') === 42);
+    assert('intOr0: float truncated', intOr0(3.9) === 3);
+    assert('intOr0: NaN → 0',         intOr0('not a number') === 0);
+    assert('intOr0: null → 0',        intOr0(null) === 0);
+    assert('intOr0: undefined → 0',   intOr0(undefined) === 0);
+
+    // safeRekorUrl: whitelist sigstore search domain on https only.
+    assert('safeRekorUrl: accepts canonical',
+      safeRekorUrl('https://search.sigstore.dev/?logIndex=12345')
+        === 'https://search.sigstore.dev/?logIndex=12345');
+    assert('safeRekorUrl: rejects javascript:',
+      safeRekorUrl('javascript:alert(1)') === null);
+    assert('safeRekorUrl: rejects http (plain)',
+      safeRekorUrl('http://search.sigstore.dev/?logIndex=1') === null);
+    assert('safeRekorUrl: rejects different host',
+      safeRekorUrl('https://attacker.example/?logIndex=1') === null);
+    assert('safeRekorUrl: rejects garbage',
+      safeRekorUrl('not a url') === null);
+    assert('safeRekorUrl: rejects non-string',
+      safeRekorUrl(42) === null && safeRekorUrl(null) === null);
+
+    // buildSummary: end-to-end XSS / injection scenarios for the Check Run.
+    const maliciousAtt = {
+      predicate_type: 'normal',
+      schema_version: '1.0.0',
+      subject: { run_id: 'evil`echo|injection' },
+      agent:   { platform: 'claude-code', model: '<script>alert(1)</script>' },
+      policy:  { file_hash: 'a'.repeat(64), source: 'user' },
+      execution_summary: {
+        tool_calls: 'not-a-number', local: 1, passed: 0, blocked: 1, transformed: 0,
+        secrets_redacted: 0,
+        blocked_events: [
+          { tool: 'Bash`rm -rf`', target: 'a|b|c|]injected', rule: '[evil](http://x)', at_offset_s: 'NaN' },
+        ],
+      },
+      audit_chain: { genesis: '0'.repeat(64), first_hash: 'b'.repeat(64),
+                     last_hash: 'c'.repeat(64), event_count: 1, chain_file: '/tmp/x' },
+      signature: null,
+    };
+    const { title, summary } = buildSummary(maliciousAtt, 'javascript:alert(1)');
+
+    assert('buildSummary: title contains numeric counts',
+      title.includes('LocalFirst Attested') && /\d+ calls/.test(title));
+    assert('buildSummary: title strips backticks/etc',
+      !title.includes('`'));
+    // <script> inside a Markdown code-span (`...`) is rendered as literal
+    // text by GFM — the renderer escapes HTML before output. We only need
+    // to ensure the value stays *inside* the code-span (no backticks that
+    // could break out). mdCode strips backticks, so the test is: the value
+    // appears verbatim and there is no unbalanced backtick adjacent.
+    assert('buildSummary: model rendered inside code-span (HTML-safe)',
+      summary.includes('`<script>alert(1)</script>`'));
+    assert('buildSummary: backticks in tool name removed',
+      !summary.includes('`Bash`rm -rf`'));
+    assert('buildSummary: pipe in target escaped to \\|',
+      summary.includes('a\\|b\\|c'));
+    assert('buildSummary: non-Rekor URL not rendered as link',
+      !summary.includes('](javascript:') && summary.includes('non-Rekor URL'));
+    assert('buildSummary: tool_calls coerced to integer (0)',
+      /\*\*0\*\* \(LOCAL/.test(summary));
+    assert('buildSummary: at_offset_s coerced to integer (0s)',
+      /T\+0s/.test(summary));
+
+    // Safe Rekor URL renders as a link.
+    const { summary: summarySafe } = buildSummary(maliciousAtt, 'https://search.sigstore.dev/?logIndex=42');
+    assert('buildSummary: safe Rekor URL renders as link',
+      summarySafe.includes('[search.sigstore.dev](https://search.sigstore.dev/?logIndex=42)'));
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(40)}`);
   const total = passed + failed;

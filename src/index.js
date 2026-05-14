@@ -333,6 +333,9 @@ ${col.b('Usage:')}
   localfirst policy doctor      Cross-reference session logs with policy; surface suggestions
   localfirst audit [verify]     Verify tamper-evident hash chain in pipeline-events.jsonl
   localfirst report             Governance export: file access log, blocked paths, secret events
+  localfirst attest --run-id <uuid>  AI-Agent Behavioral Attestation v1: hash-chain commitment + execution summary for one run
+                              Add --sign in GitHub Actions (with permissions: id-token: write) for Sigstore keyless signing
+  localfirst attest verify <file>   Re-verify a signed attestation: Sigstore bundle + DSSE payload match + audit chain integrity
   localfirst selftest           Run governance self-checks on a scratch chain (does not touch your audit log)
   localfirst report --format csv  CSV export for auditors / SIEM import
   localfirst mcp-experiment     MCP vs. built-in tool adoption stats (experiment)
@@ -607,6 +610,17 @@ if (cmd === 'report') {
   const { runReportCli } = require('./report/index');
   runReportCli(args.slice(1));
   process.exit(0);
+}
+
+if (cmd === 'attest') {
+  const { runAttestCli } = require('./attest');
+  const r = runAttestCli(args.slice(1));
+  if (r && typeof r.then === 'function') {
+    r.then(() => process.exit(0)).catch(() => process.exit(1));
+  } else {
+    process.exit(0);
+  }
+  return;
 }
 
 if (cmd === 'preflight') {

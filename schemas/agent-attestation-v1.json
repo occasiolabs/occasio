@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1",
+  "title": "LocalFirst Agent Behavioral Attestation v1",
+  "description": "Self-contained, schema-validated commitment to a slice of a LocalFirst tamper-evident audit chain. Summarises what an AI coding agent did during one governed session (run_id) — every tool call's decision, blocked attempts, redacted secrets, the active policy's digest, and the first/last hashes of the chain segment that backs the claim. Intended to be later wrapped in an in-toto Statement envelope and signed via Sigstore keyless. v1 carries an unsigned variant (signature: null); subsequent versions populate the signature object.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "predicate_type",
+    "subject",
+    "agent",
+    "policy",
+    "execution_summary",
+    "audit_chain",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "predicate_type": {
+      "type": "string",
+      "const": "https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id"],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "UUID of the LocalFirst proxy run that produced the attested events."
+        },
+        "git_commit": {
+          "type": ["string", "null"],
+          "description": "Reserved for v1.1 — populated when the attestation is bound to a single git commit (set by GitHub Action in Phase 2)."
+        },
+        "files_changed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Reserved for v1.1 — paths modified by the agent during this run."
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "started_at", "ended_at", "wall_time_s"],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "Adapter that produced these events (e.g. 'claude-code', 'cline', 'mcp')."
+        },
+        "model": {
+          "type": ["string", "null"],
+          "description": "Model ID derived from request rows in the chain slice, if available."
+        },
+        "session_id": {
+          "type": ["string", "null"]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "wall_time_s": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file_hash", "source"],
+      "properties": {
+        "file_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the active policy.yml file bytes (sentinel 0*64 if no file was present)."
+        },
+        "file_path": {
+          "type": ["string", "null"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["user", "default", "unknown", "inferred"],
+          "description": "How the file_hash was determined. 'user'/'default'/'unknown' all reflect a policy_loaded event observed inside the run slice. 'inferred' means no such event was found and file_hash was computed from the policy file's current on-disk bytes at attest time — which may differ from what was active during the run. Verifiers SHOULD treat 'inferred' as weaker evidence."
+        },
+        "version": {
+          "type": ["integer", "null"]
+        },
+        "rules_digest": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deny_paths_count":    { "type": "integer", "minimum": 0 },
+            "deny_patterns_count": { "type": "integer", "minimum": 0 },
+            "block_secrets":       { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "execution_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool_calls", "local", "passed", "blocked", "transformed", "secrets_redacted"],
+      "properties": {
+        "tool_calls":      { "type": "integer", "minimum": 0 },
+        "local":           { "type": "integer", "minimum": 0 },
+        "passed":          { "type": "integer", "minimum": 0 },
+        "blocked":         { "type": "integer", "minimum": 0 },
+        "transformed":     { "type": "integer", "minimum": 0 },
+        "secrets_redacted":{ "type": "integer", "minimum": 0 },
+        "blocked_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tool", "rule", "at_offset_s"],
+            "properties": {
+              "tool":        { "type": "string" },
+              "target":      { "type": ["string", "null"] },
+              "rule":        { "type": "string" },
+              "at_offset_s": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "audit_chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["genesis", "event_count", "chain_file", "verifier_url"],
+      "properties": {
+        "genesis": {
+          "type": "string",
+          "const": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "first_hash": {
+          "type": ["string", "null"],
+          "description": "Hash field of the first attested row (null when event_count == 0).",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "last_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "event_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chain_file": {
+          "type": "string"
+        },
+        "verifier_url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "signature": {
+      "description": "Sigstore keyless / cosign signature. v1 Phase-0 attestations are unsigned (null); Phase 1 populates the object.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "identity", "signed_at"],
+          "properties": {
+            "type":             { "type": "string", "enum": ["sigstore-cosign-keyless"] },
+            "identity":         { "type": "string" },
+            "rekor_entry":      { "type": ["string", "null"], "format": "uri" },
+            "signed_at":        { "type": "string", "format": "date-time" },
+            "envelope_sha256":  { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        }
+      ]
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
