@@ -2890,48 +2890,44 @@ console.log('\n3. runLocally');
         return cfLine && !cfLine.includes('cacheSavings');
       })());
 
+    // Status command lives in src/cli/status.js since the index.js decomposition.
+    const statusSrc = fs.readFileSync('./src/cli/status.js', 'utf8');
+
     // Status command — single Saved headline (replaces Without LF + Payload + Context + Cache lines)
     assert('status shows Saved headline',
-      indexSrc.includes('Saved:       $'));
+      statusSrc.includes('Saved:       $'));
     assert('status Saved line includes percent and counterfactual',
-      indexSrc.includes('% off — would have cost $'));
+      statusSrc.includes('% off — would have cost $'));
     assert('status shows compact Breakdown line',
-      indexSrc.includes('Breakdown:'));
+      statusSrc.includes('Breakdown:'));
     assert('status Breakdown uses payload label',
-      indexSrc.includes("'$' + payload") || indexSrc.includes('${payload.toFixed(4)} payload'));
+      statusSrc.includes("'$' + payload") || statusSrc.includes('${payload.toFixed(4)} payload'));
     assert('status Breakdown uses context label',
-      indexSrc.includes('${context.toFixed(4)} context'));
+      statusSrc.includes('${context.toFixed(4)} context'));
     assert('status Breakdown uses cache label',
-      indexSrc.includes('${cacheSav.toFixed(4)} cache'));
+      statusSrc.includes('${cacheSav.toFixed(4)} cache'));
 
     // Status command — plain English coverage line
     assert('status shows Ran locally line',
-      indexSrc.includes('Ran locally: '));
+      statusSrc.includes('Ran locally: '));
 
-    // Old jargon-heavy lines must be gone
+    // Old jargon-heavy lines must be gone (check both files — status.js + index.js)
     assert('status removed Without LF line',
-      !indexSrc.includes('Without LF:'));
+      !indexSrc.includes('Without LF:') && !statusSrc.includes('Without LF:'));
     assert('status removed Payload sub-line',
-      !indexSrc.includes('Payload:  ~$'));
+      !indexSrc.includes('Payload:  ~$') && !statusSrc.includes('Payload:  ~$'));
     assert('status removed exact-cache hedge',
-      !indexSrc.includes('exact: Anthropic prompt cache'));
+      !indexSrc.includes('exact: Anthropic prompt cache') && !statusSrc.includes('exact: Anthropic prompt cache'));
 
-    // Exit summary mirrors status display — same headline shape
+    // Exit summary mirrors status display — same headline shape. After the
+    // status extraction, the status copies live in status.js and the exit
+    // copies remain in index.js — so each source has exactly one occurrence.
     assert('exit summary shows Saved headline',
-      (() => {
-        const matches = indexSrc.match(/Saved:\s+\$/g);
-        return matches && matches.length >= 2;
-      })());
+      indexSrc.match(/Saved:\s+\$/g) && statusSrc.match(/Saved:\s+\$/g));
     assert('exit summary shows Ran locally',
-      (() => {
-        const matches = indexSrc.match(/Ran locally: /g);
-        return matches && matches.length >= 2;
-      })());
+      indexSrc.includes('Ran locally: ') && statusSrc.includes('Ran locally: '));
     assert('exit summary shows Breakdown',
-      (() => {
-        const matches = indexSrc.match(/Breakdown:/g);
-        return matches && matches.length >= 2;
-      })());
+      indexSrc.includes('Breakdown:') && statusSrc.includes('Breakdown:'));
   }
 
   // Formula verification: payload CF = cost + distill + lao (pure arithmetic)
@@ -2993,29 +2989,30 @@ console.log('\n3. runLocally');
     assert('session initialization stores log_file',
       indexSrc.includes('log_file: getLogFile()'));
 
-    // status and exit use s.log_file with getLogFile() fallback
-    assert('display uses s.log_file with fallback',
-      (() => {
-        const matches = indexSrc.match(/s\.log_file \|\| getLogFile\(\)/g);
-        return matches && matches.length >= 2;
-      })());
+    // status (src/cli/status.js) and exit (index.js) both use s.log_file with getLogFile() fallback
+    {
+      const statusSrc = fs.readFileSync('./src/cli/status.js', 'utf8');
+      assert('display uses s.log_file with fallback',
+        /s\.log_file \|\| getLogFile\(\)/.test(indexSrc) &&
+        /s\.log_file \|\| getLogFile\(\)/.test(statusSrc));
+    }
 
     // model tracking still in place
     assert('updateSession captures model from first event',
       indexSrc.includes("if (e.model && !s.model) s.model = e.model"));
 
     // Compounding savings still computed (display now collapsed into Breakdown line)
-    assert('compounding savings still consumed by status',
-      indexSrc.includes('savings: context') && indexSrc.includes('calcCompoundingSavings'));
-    assert('compounding savings still consumed by exit',
-      (() => {
-        const matches = indexSrc.match(/calcCompoundingSavings\(/g);
-        return matches && matches.length >= 2;
-      })());
+    {
+      const statusSrc = fs.readFileSync('./src/cli/status.js', 'utf8');
+      assert('compounding savings still consumed by status',
+        statusSrc.includes('savings: context') && statusSrc.includes('calcCompoundingSavings'));
+      assert('compounding savings still consumed by exit',
+        indexSrc.includes('calcCompoundingSavings(') && statusSrc.includes('calcCompoundingSavings('));
+    }
 
     // broaderCf / broaderCfX
     assert('status broaderCf = cost + totalSav',
-      indexSrc.includes('broaderCf = (s.cost || 0) + totalSav'));
+      fs.readFileSync('./src/cli/status.js', 'utf8').includes('broaderCf = (s.cost || 0) + totalSav'));
     assert('exit summary broaderCfX = cost + totalSavX',
       indexSrc.includes('broaderCfX = (s.cost || 0) + totalSavX'));
   }
@@ -4189,9 +4186,13 @@ console.log('\n3. runLocally');
       indexSrc.includes("require('./proxy/agent-router')"));
     assert('index.js strips x-occasio-agent header before forwarding',
       indexSrc.includes('delete hdrs[AGENT_HEADER]') || indexSrc.includes("delete hdrs['x-occasio-agent']"));
-    assert('help text documents x-occasio-agent header',
-      indexSrc.includes('x-occasio-agent') &&
-      indexSrc.includes('Multi-agent routing'));
+    // Help text lives in src/cli/help.js since the index.js decomposition.
+    {
+      const helpSrc = fs.readFileSync('./src/cli/help.js', 'utf8');
+      assert('help text documents x-occasio-agent header',
+        helpSrc.includes('x-occasio-agent') &&
+        helpSrc.includes('Multi-agent routing'));
+    }
   }
 
   // ── ARCH-14. Tamper-evident audit log (hash chain) ────────────────────────
@@ -4430,7 +4431,8 @@ console.log('\n3. runLocally');
       assert('index.js requires verifier',       indexSrc.includes("require('./audit/verifier')"));
       assert('index.js handles audit command',   indexSrc.includes("cmd === 'audit'"));
       assert('index.js calls runAuditCli',       indexSrc.includes('runAuditCli('));
-      assert('help text includes audit command', indexSrc.includes('occasio audit'));
+      assert('help text includes audit command',
+        fs.readFileSync('./src/cli/help.js', 'utf8').includes('occasio audit'));
     }
   })();
 
@@ -5677,10 +5679,12 @@ console.log('\n3. runLocally');
     // ── 5. Transforms line does not appear when tools_transformed is 0 ────
     // We test the guard condition by checking the source uses the value as a guard.
     {
-      const src = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
-      // Should appear exactly once per output location (status + exit) guarded by the value
-      const occurrences = (src.match(/if \(s\.tools_transformed\)/g) || []).length;
-      assert('status: Transforms guarded in both status+exit', occurrences >= 2);
+      const indexSrc  = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
+      const statusSrc = fsMod.readFileSync(require('path').join(__dirname, 'src', 'cli', 'status.js'), 'utf8');
+      // Guarded once each: in exit (index.js) and in status (cli/status.js).
+      const guard = /if \(s\.tools_transformed\)/;
+      assert('status: Transforms guarded in both status+exit',
+        guard.test(indexSrc) && guard.test(statusSrc));
     }
 
     // ── 6. toolsTransformed computation counts only transformed tools ─────

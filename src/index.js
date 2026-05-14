@@ -257,223 +257,22 @@ const cmd = args[0];
 if (cmd === '--version' || cmd === '-v') { console.log(`occasio v${VERSION}`); process.exit(0); }
 
 if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
-  console.log(`
-${col.b(`⚡ Occasio v${VERSION}`)}
-
-${col.b('Usage:')}
-  occasio claude [args...]   Start Claude with local proxy (intercept + log)
-  occasio demo               10-second proof: see Occasio block real secrets
-  occasio demo attest        End-to-end attestation pipeline against a synthetic audit chain
-  occasio demo anomalies     End-to-end EDR test: synthetic adversarial chain → all 4 detectors
-  occasio dashboard          Open live dashboard for the running session
-  occasio register           Register shell alias (type 'claude' directly)
-  occasio status             Show session stats and savings breakdown
-  occasio doctor             Check setup: Node, claude CLI, port, Python, profile
-  occasio clear              Reset today's log and session data
-  occasio clear --history    Wipe all historical logs
-  occasio ledger             Inspect token ledger (--last N, --summary, --scope session|today)
-  occasio replay             Replay run audit (--last N, --detail, --run <id>, --attribute)
-  occasio distill            Inspect distilled outputs (--last N, --entry <N> for raw)
-  occasio inspect            Cloud-boundary manifest (--last N, --entry N, --run <id>)
-  occasio boundary           Per-request three-column view: produced / re-entered / prevented
-  occasio baseline           Behavior baseline: [learn|show|compare|reset] (per project cwd)
-  occasio harness            Run a real Claude Code session against scratch fixtures and verify governance claims (needs ANTHROPIC_API_KEY)
-  occasio redteam            Autonomous adversarial test — tester LLM probes a subject Claude Code session under Occasio (needs ANTHROPIC_API_KEY + @anthropic-ai/sdk)
-  occasio policy [show]      Show active policy: flags, tool routing, overrides
-  occasio policy show --diff Only values that differ from defaults
-  occasio policy validate    Validate policy.yml and report errors/warnings
-  occasio policy init        Create a starter policy.yml (safe, non-destructive)
-                                Use --template strict|finance for a non-default starter
-  occasio policy doctor      Cross-reference session logs with policy; surface suggestions
-  occasio audit [verify]     Verify tamper-evident hash chain in pipeline-events.jsonl
-  occasio report             Governance export: file access log, blocked paths, secret events
-  occasio anomalies          Live anomaly detection over the audit chain (--window 15m, --json)
-  occasio computer-use       Apply a Computer-Use policy to a JSONL of tool_use blocks (--dry-run --example)
-  occasio attest --run-id <uuid>  AI-Agent Behavioral Attestation v1: hash-chain commitment + execution summary for one run
-                              Add --sign in GitHub Actions (with permissions: id-token: write) for Sigstore keyless signing
-  occasio attest verify <file>   Re-verify a signed attestation: Sigstore bundle + DSSE payload match + audit chain integrity
-  occasio selftest           Run governance self-checks on a scratch chain (does not touch your audit log)
-  occasio report --format csv  CSV export for auditors / SIEM import
-  occasio mcp-experiment     MCP vs. built-in tool adoption stats (experiment)
-
-${col.b('Presets:')}
-  --preset balanced  (default)  Intercept safe reads locally, log all requests
-  --preset strict               Block requests that contain detected secrets
-  --preset off                  Log only — no interception, no blocking
-
-${col.b('Flags:')}
-  --budget <N>                  Block requests once session cost exceeds $N (e.g. --budget 1.00)
-  --hardened                    Route Read/Glob/Grep through unified runtime (distill + secret scan)
-  --block-secrets               Alias for --preset strict
-  --log-only                    Alias for --preset off
-  --dashboard                   Open live dashboard at http://localhost:3001
-  --port <N>                    Proxy port (default: 8081)
-  --verbose                     Print live per-request chatter (off by default — quiet for Claude Code's TUI)
-
-${col.b('Multi-agent routing:')}
-  Default               → Claude Code adapter
-  Header x-occasio-agent: cline → Cline adapter (synthetic; live validation pending)
-
-${col.b('Logs:')} ~/.occasio/logs/YYYY-MM-DD.jsonl
-`);
+  require('./cli/help').run();
   process.exit(0);
 }
 
 if (cmd === 'register') {
-  const shell = process.env.SHELL || '';
-  const isWindows = process.platform === 'win32';
-
-  if (isWindows) {
-    const profileDir  = path.join(os.homedir(), 'Documents', 'PowerShell');
-    const profileFile = path.join(profileDir, 'Microsoft.PowerShell_profile.ps1');
-    const snippet = `\n# Occasio — intercept Claude Code traffic\nfunction claude { occasio claude @args }\n`;
-    const alreadyMarker = 'occasio claude @args';
-    const legacyMarker  = 'occasio --intercept @args';
-    try {
-      if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
-      const existing = fs.existsSync(profileFile) ? fs.readFileSync(profileFile, 'utf8') : '';
-      if (existing.includes(alreadyMarker)) {
-        console.log(col.g('✓ Already registered (PowerShell)'));
-        console.log(col.d('  Type: claude'));
-      } else if (existing.includes(legacyMarker)) {
-        // Upgrade old --intercept form to canonical `occasio claude`
-        const updated = existing.replace(
-          /function claude \{ occasio --intercept @args \}/g,
-          'function claude { occasio claude @args }'
-        );
-        fs.writeFileSync(profileFile, updated);
-        console.log(col.g('✓ Updated to canonical form (occasio claude)'));
-        console.log('');
-        console.log(col.y(`  ⚠  Restart PowerShell — the 'claude' alias is not active yet.`));
-        console.log(col.d(`     Open a new terminal, or run:  . $PROFILE`));
-        console.log('');
-      } else {
-        fs.appendFileSync(profileFile, snippet);
-        console.log(col.g(`✓ Registered in ${profileFile}`));
-        console.log('');
-        console.log(col.y(`  ⚠  Restart PowerShell — the 'claude' alias is not active yet.`));
-        console.log(col.d(`     Open a new terminal, or run:  . $PROFILE`));
-        console.log('');
-      }
-    } catch (e) {
-      console.log(col.r(`✗ Could not write profile: ${e.message}`));
-      console.log(col.d(`  Add manually to your PowerShell profile:\n  function claude { occasio claude @args }`));
-    }
-  } else {
-    const rcFile = (process.env.SHELL || '').includes('zsh')
-      ? path.join(os.homedir(), '.zshrc')
-      : path.join(os.homedir(), '.bashrc');
-    const snippet = `\n# Occasio — intercept Claude Code traffic\nclaude() { occasio claude "$@"; }\n`;
-    const alreadyMarker = 'occasio claude "$@"';
-    const legacyMarker  = 'occasio --intercept "$@"';
-    try {
-      const existing = fs.existsSync(rcFile) ? fs.readFileSync(rcFile, 'utf8') : '';
-      if (existing.includes(alreadyMarker)) {
-        console.log(col.g(`✓ Already registered (${rcFile})`));
-      } else if (existing.includes(legacyMarker)) {
-        const updated = existing.replace(
-          /claude\(\) \{ occasio --intercept "\$@"; \}/g,
-          'claude() { occasio claude "$@"; }'
-        );
-        fs.writeFileSync(rcFile, updated);
-        console.log(col.g(`✓ Updated to canonical form in ${rcFile}`));
-      } else {
-        fs.appendFileSync(rcFile, snippet);
-        console.log(col.g(`✓ Registered in ${rcFile}`));
-      }
-      console.log(col.d('  Run: source ' + rcFile + '  — then type: claude'));
-    } catch (e) {
-      console.log(col.r(`✗ Could not write ${rcFile}: ${e.message}`));
-      console.log(col.d(`  Add manually:\n  claude() { occasio claude "$@"; }`));
-    }
-  }
+  require('./cli/register').run();
   process.exit(0);
 }
 
 if (cmd === 'status' || cmd === 'stats') {
-  let s = null; try { s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch {}
-  console.log(col.b('\n⚡ Occasio\n'));
-  if (!s) { console.log(col.d('  No session data yet. Run: occasio claude\n')); process.exit(0); }
-
-  const cacheSav  = s.cache_savings      || 0;
-  const laoSav    = s.lao_cost_saved     || 0;
-  const distSav   = s.distill_cost_saved || 0;
-  const payload   = laoSav + distSav;
-  const { savings: context } =
-    calcCompoundingSavings(s.run_id, s.log_file || getLogFile(), s.model || '');
-  const totalSav  = payload + context + cacheSav;
-  const broaderCf = (s.cost || 0) + totalSav;
-  const savedPct  = broaderCf > 0.00001 ? Math.round(totalSav / broaderCf * 100) : 0;
-
-  // Headline
-  if (totalSav > 0.00001) {
-    console.log(col.g(`  Saved:       $${totalSav.toFixed(4)}`) +
-      col.d(`  (${savedPct}% off — would have cost $${broaderCf.toFixed(4)})`));
-  } else {
-    console.log(col.d(`  Saved:       $0.0000  (no interceptable tool calls in this session yet)`));
-  }
-  console.log(col.y(`  Cost:        $${s.cost.toFixed(4)}`));
-
-  // Plain-English coverage. Defensive: legacy sessions (pre-multi-round-fix)
-  // may have tools_attempted undercounted relative to tools_local_count.
-  // We clamp the denominator to at least the numerator so the displayed
-  // ratio is always 0–100% and never reads "X of Y < X (>100%)".
-  const localCnt   = s.tools_local_count || 0;
-  const mcpCnt     = s.tools_mcp_count   || 0;
-  const attempted  = s.tools_attempted   || 0;
-  const totalLocal = localCnt + mcpCnt;
-  const denom      = Math.max(attempted, totalLocal);
-  if (denom > 0) {
-    const cpct = Math.round(totalLocal / denom * 100);
-    const cColor = cpct >= 80 ? col.g : cpct >= 50 ? col.y : col.r;
-    console.log(cColor(`  Ran locally: ${totalLocal} of ${denom} tool calls (${cpct}%)`));
-  }
-  if (s.blocked) console.log(col.r(`  Blocked:     ${s.blocked} secrets`));
-  if (s.secrets_redacted) console.log(col.c(`  Redacted:    ${s.secrets_redacted} secret${s.secrets_redacted !== 1 ? 's' : ''} in tool results`));
-  if (s.tools_transformed) console.log(col.c(`  Transforms:  ${s.tools_transformed} tool result${s.tools_transformed !== 1 ? 's' : ''} shaped`));
-  if (s.budget != null) {
-    const pct = Math.min(999, Math.round((s.cost || 0) / s.budget * 100));
-    const budgetStr = fmtBudget(s.cost || 0, s.budget);
-    const budgetColor = pct >= 100 ? col.r : pct >= 80 ? col.y : col.g;
-    console.log(budgetColor(`  Budget:      ${budgetStr}`));
-    if (s.budget_exceeded_count) console.log(col.r(`  BudgetBlk:   ${s.budget_exceeded_count} request(s) blocked`));
-  }
-
-  // Detail
-  console.log(col.d(`  ────`));
-  console.log(col.d(`  Requests:    ${s.requests} · ${(s.input_tokens/1000).toFixed(1)}k tokens in · ${(s.output_tokens/1000).toFixed(1)}k out`));
-  if (totalSav > 0.00001) {
-    const parts = [];
-    if (payload  > 0.00001) parts.push(`$${payload.toFixed(4)} payload`);
-    if (context  > 0.00001) parts.push(`$${context.toFixed(4)} context`);
-    if (cacheSav > 0.00001) parts.push(`$${cacheSav.toFixed(4)} cache`);
-    if (parts.length) console.log(col.d(`  Breakdown:   ${parts.join(' + ')}`));
-  }
-  const tail = [];
-  if (s.mode)  tail.push(`Mode: ${s.mode}`);
-  if (s.start) tail.push(`Since: ${new Date(s.start).toLocaleString()}`);
-  if (tail.length) console.log(col.d(`  ${tail.join('   ·   ')}`));
-  console.log(''); process.exit(0);
+  require('./cli/status').run();
+  process.exit(0);
 }
 
 if (cmd === 'clear') {
-  ensureDirs();
-  const clearAll = args.slice(1).includes('--history');
-  if (clearAll) {
-    const logsDir = path.join(LOG_DIR, 'logs');
-    const blockedDir = path.join(LOG_DIR, 'blocked');
-    let n = 0;
-    for (const dir of [logsDir, blockedDir]) {
-      try { for (const f of fs.readdirSync(dir)) { fs.unlinkSync(path.join(dir, f)); n++; } } catch {}
-    }
-    try { fs.unlinkSync(SESSION_FILE); } catch {}
-    console.log(col.g(`✓ Cleared all history (${n} log files) and session data`));
-  } else {
-    try { fs.unlinkSync(getLogFile()); } catch {}
-    try { fs.unlinkSync(SESSION_FILE); } catch {}
-    console.log(col.g("✓ Cleared today's log and session data"));
-    console.log(col.d('  Use --history to wipe all historical logs'));
-  }
+  require('./cli/clear').run(args.slice(1));
   process.exit(0);
 }
 
