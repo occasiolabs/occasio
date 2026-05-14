@@ -23,7 +23,7 @@
  * synthetic refusal marker.
  *
  * One audit row is written per stripped tool_result, with the same shape
- * the engine writes for tool-call-time BLOCKs, so `localfirst report` and
+ * the engine writes for tool-call-time BLOCKs, so `occasio report` and
  * `audit verify` see them uniformly. The audit reason is
  * `outbound-context-denied` to distinguish it from `path-denied` (which
  * is the tool-call-time path) — both are governance enforcement, but
@@ -36,7 +36,7 @@ const os   = require('os');
 const path = require('path');
 
 const STRIP_MARKER =
-  '[content stripped by LocalFirst outbound deny_paths — file is under a denied path]';
+  '[content stripped by Occasio outbound deny_paths — file is under a denied path]';
 
 // Path normalisation mirrors src/policy/engine.js so deny_paths semantics
 // stay byte-identical across both gates.

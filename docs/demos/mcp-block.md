@@ -2,13 +2,13 @@
 
 **What this demo proves.** The same `policy.yml` that governs Claude Code's `Read` tool also governs an MCP client's `read_file` call, unmodified. A `deny_paths` rule produces a `BLOCK` decision on both protocols, both produce a synthetic refusal to the agent, and both land in the same hash-chained `pipeline-events.jsonl` audit log — distinguishable only by the `protocol` field.
 
-**Status.** Captured against the LocalFirst v0.6.5 MCP server (`bin/localfirst-mcp.js`), driven by a synthetic MCP client invocation. The same code path runs when a real MCP client (Claude Desktop, Cursor, Continue) connects via stdio to `localfirst-mcp` configured in its `mcpServers` list.
+**Status.** Captured against the Occasio v0.6.5 MCP server (`bin/occasio-mcp.js`), driven by a synthetic MCP client invocation. The same code path runs when a real MCP client (Claude Desktop, Cursor, Continue) connects via stdio to `occasio-mcp` configured in its `mcpServers` list.
 
 ---
 
 ## 1. Policy
 
-`~/.localfirst/policy.yml`:
+`~/.occasio/policy.yml`:
 
 ```yaml
 version: 1
@@ -20,7 +20,7 @@ This is the **same** policy file that produced the Slice E `BLOCK` row for the C
 
 ## 2. MCP traffic — drive the server with two tool calls
 
-Two `tools/call` requests, one denied and one allowed, sent through the LocalFirst MCP server with `clientInfo.name: "claude-ai"`:
+Two `tools/call` requests, one denied and one allowed, sent through the Occasio MCP server with `clientInfo.name: "claude-ai"`:
 
 ```
 → tools/call read_file { path: "C:\\Users\\you\\.ssh\\id_rsa"     }   # denied path
@@ -36,7 +36,7 @@ The server's responses, captured from the JSON-RPC stdout stream:
 }}
 
 { "id": 3, "result": {
-    "content": [{ "type": "text", "text": "     1\t# LocalFirst\n     2\t…" }],
+    "content": [{ "type": "text", "text": "     1\t# Occasio\n     2\t…" }],
     "isError": false
 }}
 ```
@@ -69,20 +69,20 @@ The `protocol: "mcp"` field is the proof that this is the same governance pipeli
 ## 4. Chain integrity — both verifiers agree
 
 ```
-$ localfirst audit verify
+$ occasio audit verify
   Rows:  33 total  (33 chained, 0 legacy/unverified)
   ✓ Chain intact  (33 rows verified)
 
-$ python docs/audit_walker.py ~/.localfirst/pipeline-events.jsonl
+$ python docs/audit_walker.py ~/.occasio/pipeline-events.jsonl
   OK: 33 rows verified
 ```
 
 Adding the MCP row to a chain that previously contained only Anthropic-protocol rows did not break either verifier. The independent walker treats `protocol: "mcp"` as just another field; the canonical-serialization rules in `docs/AUDIT.md` are protocol-agnostic.
 
-## 5. `localfirst report` surfaces the MCP block
+## 5. `occasio report` surfaces the MCP block
 
 ```
-$ localfirst report --days 1
+$ occasio report --days 1
 {
   "summary": {
     "paths_blocked": 2,
@@ -105,7 +105,7 @@ Both blocks appear under `blocked_accesses[]`. The first is the Slice E Claude-C
 
 ## What this demo deliberately does not show
 
-- **No third-party MCP server is being forwarded to.** The LocalFirst MCP server (`lf`) implements `read_file` itself. A "transparent forwarder in front of `@modelcontextprotocol/server-filesystem`" is a deferred follow-up; the cross-protocol governance proof stands on its own without it.
+- **No third-party MCP server is being forwarded to.** The Occasio MCP server (`lf`) implements `read_file` itself. A "transparent forwarder in front of `@modelcontextprotocol/server-filesystem`" is a deferred follow-up; the cross-protocol governance proof stands on its own without it.
 - **No second MCP integration.** The same proof would extend to GitHub MCP, Slack MCP, etc.; v0.6.5 deliberately ships only the one path.
 - **No new policy primitives, audit fields, or transforms.** Same policy schema, same audit row shape, same hash algorithm.
 - **No README / GOVERNANCE positioning rewrite yet.** That work is sequenced after this proof exists, not before.
@@ -116,7 +116,7 @@ The demo is reproducible from a clean checkout in under a minute:
 
 ```sh
 # 1. Set the policy
-cat > ~/.localfirst/policy.yml <<'EOF'
+cat > ~/.occasio/policy.yml <<'EOF'
 version: 1
 deny_paths:
   - ~/.ssh
@@ -135,14 +135,14 @@ node -e "
 "
 
 # 3. Inspect the new BLOCK row
-tail -1 ~/.localfirst/pipeline-events.jsonl | python -m json.tool
+tail -1 ~/.occasio/pipeline-events.jsonl | python -m json.tool
 
 # 4. Confirm both verifiers agree
-localfirst audit verify
-python docs/audit_walker.py ~/.localfirst/pipeline-events.jsonl
+occasio audit verify
+python docs/audit_walker.py ~/.occasio/pipeline-events.jsonl
 
 # 5. Confirm the report surfaces it
-localfirst report --days 1 | python -c "import json,sys; print(json.load(sys.stdin)['blocked_accesses'])"
+occasio report --days 1 | python -c "import json,sys; print(json.load(sys.stdin)['blocked_accesses'])"
 ```
 
-For a real-MCP-client capture (Claude Desktop, Cursor, Continue), configure `localfirst-mcp` as an MCP server in the client's config and prompt the agent to read a denied path. The audit row, the verifier output, and the report all behave identically — the only field that changes is `agent`, which carries the client's `clientInfo.name`.
+For a real-MCP-client capture (Claude Desktop, Cursor, Continue), configure `occasio-mcp` as an MCP server in the client's config and prompt the agent to read a denied path. The audit row, the verifier output, and the report all behave identically — the only field that changes is `agent`, which carries the client's `clientInfo.name`.

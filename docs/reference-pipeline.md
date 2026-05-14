@@ -1,6 +1,6 @@
 # Reference Pipeline — from AI-agent PR to cryptographically-attested merge
 
-End-to-end walkthrough of the LocalFirst attestation pipeline. Read top-to-bottom; every step has a copy-paste artefact and an explanation of what it proves.
+End-to-end walkthrough of the Occasio attestation pipeline. Read top-to-bottom; every step has a copy-paste artefact and an explanation of what it proves.
 
 ## What this pipeline is for
 
@@ -15,27 +15,27 @@ Three deliverables land on the PR:
 ## Try it locally in 30 seconds
 
 ```bash
-localfirst demo attest
+occasio demo attest
 ```
 
 This builds a synthetic audit chain, an unsigned attestation, runs the canonical-JSON round-trip check, and previews the Check Run summary. No Sigstore, no GitHub, no API key — just the pipeline working against in-memory data. Use this to validate the build end-to-end before deploying any of the rest.
 
-## Step 1 — your agent runs under LocalFirst
+## Step 1 — your agent runs under Occasio
 
-A LocalFirst session must produce events into `~/.localfirst/pipeline-events.jsonl`. The simplest way is to invoke Claude Code (or any supported agent) through the local proxy:
+A Occasio session must produce events into `~/.occasio/pipeline-events.jsonl`. The simplest way is to invoke Claude Code (or any supported agent) through the local proxy:
 
 ```bash
-localfirst claude --hardened
+occasio claude --hardened
 ```
 
-`--hardened` routes `Read`/`Glob`/`Grep` through the unified runtime so tool calls are intercepted locally, distillation applied, and secret scanning runs on every tool result. The `~/.localfirst/session.json` file gets a fresh `run_id` per session.
+`--hardened` routes `Read`/`Glob`/`Grep` through the unified runtime so tool calls are intercepted locally, distillation applied, and secret scanning runs on every tool result. The `~/.occasio/session.json` file gets a fresh `run_id` per session.
 
 ## Step 2 — produce an attestation locally (sanity check)
 
 After a session ends, run:
 
 ```bash
-localfirst attest --run-id "$(jq -r .run_id ~/.localfirst/session.json)"
+occasio attest --run-id "$(jq -r .run_id ~/.occasio/session.json)"
 ```
 
 This writes `attestation.json` to the cwd. The predicate is unsigned (`signature: null`) — that part lands in the GitHub Action step below. Inspect the predicate; the file is human-readable JSON. The `audit_chain.last_hash` is the commitment: signing it later transitively commits to every event in the slice.
@@ -65,22 +65,22 @@ jobs:
           fetch-depth: 2     # so files-changed can diff HEAD^..HEAD
 
       # ── Your AI-agent step here ────────────────────────────────────
-      # The agent must run under LocalFirst so its tool calls land in
-      # ~/.localfirst/pipeline-events.jsonl. Example with Claude Code:
-      - run: npm i -g @localfirst-ai/localfirst @anthropic-ai/claude-code
-      - run: localfirst claude --hardened < .github/agent-prompt.txt
+      # The agent must run under Occasio so its tool calls land in
+      # ~/.occasio/pipeline-events.jsonl. Example with Claude Code:
+      - run: npm i -g @occasiolabs/occasio @anthropic-ai/claude-code
+      - run: occasio claude --hardened < .github/agent-prompt.txt
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # ── Sign + Check Run ───────────────────────────────────────────
-      - uses: localfirst-ai/attest-action@v1
+      - uses: occasiolabs/attest-action@v1
         # All inputs optional — run_id auto-resolves from session.json,
-        # paths default to ~/.localfirst/*. Defaults are tuned for the
+        # paths default to ~/.occasio/*. Defaults are tuned for the
         # 95% case.
 ```
 
 That's it. The composite Action handles:
-- `localfirst attest --sign` using the workflow's OIDC token (no key management)
+- `occasio attest --sign` using the workflow's OIDC token (no key management)
 - Uploading `attestation.json` + `.sigstore.json` as a workflow artifact (90-day retention)
 - Creating the Check Run via the GitHub API
 
@@ -89,18 +89,18 @@ That's it. The composite Action handles:
 The Check Run lands on the PR as:
 
 ```
-✓ LocalFirst Attested · 47 calls · 2 blocked
+✓ Occasio Attested · 47 calls · 2 blocked
   Claude Opus 4.7 · Policy strict-v2.1 (sha a126…3a)
   Chain ✓ verified · Signature ✓ Sigstore keyless
   [View evidence ↗]   [Artifact ↗]
 ```
 
-Click **View evidence** to open the [viewer](https://localfirst-ai.github.io/attest-view) with the artifact's two JSON files. The viewer runs two browser-side checks (DSSE-payload equivalence + audit-chain replay) and surfaces the Rekor transparency log link for cryptographic verification.
+Click **View evidence** to open the [viewer](https://occasiolabs.github.io/attest-view) with the artifact's two JSON files. The viewer runs two browser-side checks (DSSE-payload equivalence + audit-chain replay) and surfaces the Rekor transparency log link for cryptographic verification.
 
 The viewer **deliberately does not** verify the Sigstore certificate chain in-browser — bundling Fulcio/Rekor trust roots in-browser is a serious build problem we have not solved cheaply, and we are honest about it on the page itself. Offline crypto-verification is one CLI call:
 
 ```bash
-localfirst attest verify localfirst-attestation.json
+occasio attest verify occasio-attestation.json
 ```
 
 That command runs three checks in order, all of which must pass:
@@ -110,18 +110,18 @@ That command runs three checks in order, all of which must pass:
 
 ## Step 5 — what auditors do
 
-Auditors do not need access to the producer's machine. They download the workflow artifact, install LocalFirst (or `cosign`), and verify offline. The signed artifact is portable and self-contained: predicate JSON + Sigstore Bundle + (optionally) the chain file.
+Auditors do not need access to the producer's machine. They download the workflow artifact, install Occasio (or `cosign`), and verify offline. The signed artifact is portable and self-contained: predicate JSON + Sigstore Bundle + (optionally) the chain file.
 
 For a SOC2 audit period the workflow becomes:
-1. Pull all `localfirst-attestation` artifacts from the period (GitHub API)
-2. For each: `localfirst attest verify` and capture the exit code
+1. Pull all `occasio-attestation` artifacts from the period (GitHub API)
+2. For each: `occasio attest verify` and capture the exit code
 3. Aggregate the `execution_summary` data: how many runs, how many blocks, what rules, what files
 
 The audit chain is hash-linked across all of an agent's runs on the same machine; verifying any one slice does not require touching the producer's full log.
 
 ## Compatibility and what's stable
 
-- **Predicate URI** `https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1` is **canonical**. It will not be moved or re-pointed.
+- **Predicate URI** `https://github.com/occasiolabs/occasio/spec/agent-attestation/v1` is **canonical**. It will not be moved or re-pointed.
 - **Required fields** in v1 do not change without bumping the URI to `/v2`.
 - **New optional fields** can land in v1.x (currently reserved: `subject.git_commit`, `subject.files_changed` — already in the schema, populated by the GitHub Action).
 - The **Sigstore Bundle** is the standard `sigstore-bundle+json;version=0.2` shape — works with `cosign`, `sigstore-js`, `sigstore-python`, any future conformant tool.

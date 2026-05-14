@@ -1,6 +1,6 @@
-name: 'LocalFirst Attest'
+name: 'Occasio Attest'
 description: >-
-  Produce a Sigstore-signed AI-Agent Behavioral Attestation for a LocalFirst
+  Produce a Sigstore-signed AI-Agent Behavioral Attestation for a Occasio
   session, upload it as a workflow artifact, and surface a GitHub Check Run
   on the PR with a human-readable summary.
 
@@ -11,24 +11,24 @@ branding:
 inputs:
   run-id:
     description: >-
-      LocalFirst run_id. If absent, the action reads it from
-      ~/.localfirst/session.json (the most recent proxy run on the runner).
+      Occasio run_id. If absent, the action reads it from
+      ~/.occasio/session.json (the most recent proxy run on the runner).
     required: false
     default: ''
   chain-file:
-    description: 'Path to pipeline-events.jsonl (default: ~/.localfirst/pipeline-events.jsonl).'
+    description: 'Path to pipeline-events.jsonl (default: ~/.occasio/pipeline-events.jsonl).'
     required: false
     default: ''
   policy-file:
-    description: 'Path to policy.yml (default: ~/.localfirst/policy.yml).'
+    description: 'Path to policy.yml (default: ~/.occasio/policy.yml).'
     required: false
     default: ''
   sign:
     description: 'If "true", Sigstore-sign the attestation via GitHub OIDC.'
     required: false
     default: 'true'
-  localfirst-version:
-    description: 'Version of @localfirst-ai/localfirst to install on the runner (default: latest).'
+  occasio-version:
+    description: 'Version of @occasiolabs/occasio to install on the runner (default: latest).'
     required: false
     default: 'latest'
   github-token:
@@ -38,7 +38,7 @@ inputs:
   view-base-url:
     description: 'Base URL of the View-Evidence page. Used in the Check Run "Details" link.'
     required: false
-    default: 'https://localfirst-ai.github.io/attest-view'
+    default: 'https://occasiolabs.github.io/attest-view'
 
 outputs:
   attestation-path:
@@ -62,11 +62,11 @@ runs:
       with:
         node-version: '20'
 
-    - name: Install @localfirst-ai/localfirst
+    - name: Install @occasiolabs/occasio
       shell: bash
       run: |
-        npm install -g "@localfirst-ai/localfirst@${{ inputs.localfirst-version }}"
-        localfirst --version || true
+        npm install -g "@occasiolabs/occasio@${{ inputs.occasio-version }}"
+        occasio --version || true
 
     - id: attest
       name: Produce signed attestation
@@ -91,14 +91,14 @@ runs:
       if: inputs.sign == 'true' && steps.attest.outputs.bundle-path != ''
       shell: bash
       run: |
-        localfirst attest verify \
+        occasio attest verify \
           "${{ steps.attest.outputs.attestation-path }}" \
           --bundle "${{ steps.attest.outputs.bundle-path }}"
 
     - name: Upload attestation artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: localfirst-attestation
+        name: occasio-attestation
         path: |
           ${{ steps.attest.outputs.attestation-path }}
           ${{ steps.attest.outputs.bundle-path }}
@@ -106,7 +106,7 @@ runs:
         retention-days: 90
 
     - id: check
-      name: Create LocalFirst Attested Check Run
+      name: Create Occasio Attested Check Run
       shell: bash
       env:
         GITHUB_TOKEN:        ${{ inputs.github-token }}

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * lao.js — LAO context optimization for the LocalFirst proxy.
+ * lao.js — LAO context optimization for the Occasio proxy.
  *
  * Before a request goes to Anthropic, optimizeContext() scores every file
  * already loaded into the conversation (via Read / cat tool_results) against
@@ -21,7 +21,7 @@ const LAO_PY    = path.join(__dirname, 'lao_prep.py');
 const MIN_TOK   = 20_000;
 const TRIM_FRAC = 0.10;   // drop files scoring < 10 % of top score
 const CACHE_TTL = 30_000;
-const PLACEHOLDER = '[content trimmed by LocalFirst LAO — low relevance to current task]';
+const PLACEHOLDER = '[content trimmed by Occasio LAO — low relevance to current task]';
 
 let _cache = { key: '', result: [], ts: 0 };
 

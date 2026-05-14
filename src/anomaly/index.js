@@ -2,7 +2,7 @@
 
 /**
  * anomaly/index.js — runtime anomaly detection over the tamper-evident audit
- * chain (`~/.localfirst/pipeline-events.jsonl`).
+ * chain (`~/.occasio/pipeline-events.jsonl`).
  *
  * Complements src/baseline.js (which does per-project, novelty-based detection
  * over the session log) with **time-windowed rate detectors over the chain**.
@@ -52,7 +52,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const DEFAULT_CHAIN = path.join(os.homedir(), '.localfirst', 'pipeline-events.jsonl');
+const DEFAULT_CHAIN = path.join(os.homedir(), '.occasio', 'pipeline-events.jsonl');
 const DEFAULT_WINDOW_MS = 15 * 60 * 1000;   // 15 minutes
 
 // ── Built-in detectors ──────────────────────────────────────────────────────

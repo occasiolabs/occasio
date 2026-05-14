@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * localfirst preflight — CLI entry point (ARCH-26, read-only).
+ * occasio preflight — CLI entry point (ARCH-26, read-only).
  *
  * Usage:
- *   localfirst preflight               Print opening-move pattern table
- *   localfirst preflight --show        Same (alias for future flag compatibility)
- *   localfirst preflight --days N      Use last N days of logs (default: 30)
- *   localfirst preflight --reset       Clear pattern store (available after ARCH-27)
+ *   occasio preflight               Print opening-move pattern table
+ *   occasio preflight --show        Same (alias for future flag compatibility)
+ *   occasio preflight --days N      Use last N days of logs (default: 30)
+ *   occasio preflight --reset       Clear pattern store (available after ARCH-27)
  */
 
 const os   = require('os');
@@ -59,7 +59,7 @@ function runPreflightCli(args, opts) {
   const displayRoot = projectRoot.replace(os.homedir(), '~');
   const rootLabel   = gitRoot ? 'git root' : 'directory';
 
-  console.log(col.b('\n⚡ LocalFirst — Opening-move patterns\n'));
+  console.log(col.b('\n⚡ Occasio — Opening-move patterns\n'));
 
   // --reset: placeholder until ARCH-27 adds persistent pattern store
   if (reset) {
@@ -79,7 +79,7 @@ function runPreflightCli(args, opts) {
     console.log(col.d(`  No session history found for this project.`));
     if (!proj || proj.totalSessions === 0) {
       console.log(col.d(`  Patterns emerge after ${MIN_SESSIONS_FOR_PATTERN}+ sessions.`));
-      console.log(col.d(`  (cwd tracking requires LocalFirst ≥v0.6.3)\n`));
+      console.log(col.d(`  (cwd tracking requires Occasio ≥v0.6.3)\n`));
     }
     return { ok: true, totalSessions: 0 };
   }
@@ -155,8 +155,8 @@ function runPreflightCli(args, opts) {
 
   console.log('');
   console.log(col.d(`  Patterns learned locally from tool-usage history, not prompt content.`));
-  console.log(col.d(`  Preflight execution is off. Run localfirst with --preflight to enable (coming soon).`));
-  console.log(col.d(`  To reset patterns for this project: localfirst preflight --reset\n`));
+  console.log(col.d(`  Preflight execution is off. Run occasio with --preflight to enable (coming soon).`));
+  console.log(col.d(`  To reset patterns for this project: occasio preflight --reset\n`));
 
   return { ok: true, totalSessions: proj.totalSessions, candidates: candidates.length };
 }

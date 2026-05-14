@@ -21,8 +21,8 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const LOG_FILE     = path.join(os.homedir(), '.localfirst', 'interceptor-debug.log');
-const SESSION_FILE = path.join(os.homedir(), '.localfirst', 'session.json');
+const LOG_FILE     = path.join(os.homedir(), '.occasio', 'interceptor-debug.log');
+const SESSION_FILE = path.join(os.homedir(), '.occasio', 'session.json');
 
 function timeToSeconds(hms) {
   if (!hms) return 0;
@@ -83,7 +83,7 @@ if (!fs.existsSync(LOG_FILE)) {
     process.exit(0);
   }
   if (sessionInterceptedCount > 0) {
-    console.log('LocalFirst git-interception validation check');
+    console.log('Occasio git-interception validation check');
     console.log('─'.repeat(40));
     console.log(`Session intercepted_count : ${sessionInterceptedCount}`);
     console.log('');
@@ -126,7 +126,7 @@ try {
 
 // ── report ────────────────────────────────────────────────────────────────────
 
-console.log('LocalFirst git-interception validation check');
+console.log('Occasio git-interception validation check');
 console.log('─'.repeat(40));
 if (sinceStr) console.log(`Filtering since (${sinceSource}): ${sinceStr}`);
 console.log(`Total log entries checked : ${fresh.length}`);

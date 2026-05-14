@@ -75,7 +75,7 @@ function buildSummary(att, rekorRaw) {
   const signed = !!(att.signature && att.signature.type);
 
   const title = String(
-    `LocalFirst Attested · ${intOr0(sum.tool_calls)} calls · ${intOr0(sum.blocked)} blocked`
+    `Occasio Attested · ${intOr0(sum.tool_calls)} calls · ${intOr0(sum.blocked)} blocked`
   ).slice(0, 255);
 
   const lines = [];
@@ -112,7 +112,7 @@ function buildSummary(att, rekorRaw) {
     lines.push('');
   }
 
-  lines.push(`<sub>Spec: <a href="https://github.com/localfirst-ai/localfirst/blob/main/spec/agent-attestation/v1/README.md">agent-attestation/v1</a> · Independent verifier: <code>localfirst attest verify</code> · Artifacts attached to this workflow run.</sub>`);
+  lines.push(`<sub>Spec: <a href="https://github.com/occasiolabs/occasio/blob/main/spec/agent-attestation/v1/README.md">agent-attestation/v1</a> · Independent verifier: <code>occasio attest verify</code> · Artifacts attached to this workflow run.</sub>`);
 
   return { title, summary: lines.join('\n'), signed };
 }
@@ -138,7 +138,7 @@ async function main() {
     : undefined;
 
   const body = {
-    name:         'LocalFirst Attested',
+    name:         'Occasio Attested',
     head_sha:     SHA,
     status:       'completed',
     // Neutral when unsigned (informational), success when signed. BLOCK events
@@ -158,7 +158,7 @@ async function main() {
       'Accept': 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
-      'User-Agent': 'localfirst-ai-attest-action',
+      'User-Agent': 'occasiolabs-attest-action',
     },
     body: JSON.stringify(body),
   });

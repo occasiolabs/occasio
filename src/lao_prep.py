@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LocalFirst LAO context scorer.
+Occasio LAO context scorer.
 Usage: python lao_prep.py <task> <repo_path>
 Output: JSON array [{path, score, est_tokens}] sorted by score desc.
 No external dependencies — stdlib only.

@@ -3,7 +3,7 @@
 /**
  * boundary.js — per-request "what crossed the boundary" view.
  *
- * Reads existing per-request JSONL entries from ~/.localfirst/logs/ and
+ * Reads existing per-request JSONL entries from ~/.occasio/logs/ and
  * projects each request into a three-column accounting:
  *
  *   produced  — raw bytes/tokens each tool emitted
@@ -20,7 +20,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const LOG_DIR = path.join(os.homedir(), '.localfirst', 'logs');
+const LOG_DIR = path.join(os.homedir(), '.occasio', 'logs');
 
 // Char-per-token ratio used by the analyzer. Approximate; every token
 // figure surfaced by this module is prefixed with '~' in the renderer.
@@ -150,7 +150,7 @@ function renderBoundaryView(view, opts = {}) {
     ? C.d('0 B  ~0t')
     : C.r(fmtBytes(view.totals.prevented_bytes) + '  ~' + view.totals.prevented_tokens + 't')}`);
   lines.push('');
-  lines.push(C.d('  Token figures are approximate (chars/4). Audit chain at') + ' ' + C.d('~/.localfirst/pipeline-events.jsonl'));
+  lines.push(C.d('  Token figures are approximate (chars/4). Audit chain at') + ' ' + C.d('~/.occasio/pipeline-events.jsonl'));
   return lines.join('\n');
 }
 
@@ -221,7 +221,7 @@ function runBoundaryCli(args = []) {
     return { ok: true, count: views.length };
   }
 
-  process.stdout.write('\n' + C.b('LocalFirst Boundary') + '   ' +
+  process.stdout.write('\n' + C.b('Occasio Boundary') + '   ' +
     C.d(`scope: ${scope}  ·  ${all.length} entries  ·  showing ${selected.length}`) + '\n');
   for (const e of selected) {
     const view = buildBoundaryView(e);

@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1",
-  "title": "LocalFirst Agent Behavioral Attestation v1",
-  "description": "Self-contained, schema-validated commitment to a slice of a LocalFirst tamper-evident audit chain. Summarises what an AI coding agent did during one governed session (run_id) — every tool call's decision, blocked attempts, redacted secrets, the active policy's digest, and the first/last hashes of the chain segment that backs the claim. Intended to be later wrapped in an in-toto Statement envelope and signed via Sigstore keyless. v1 carries an unsigned variant (signature: null); subsequent versions populate the signature object.",
+  "$id": "https://github.com/occasiolabs/occasio/spec/agent-attestation/v1",
+  "title": "Occasio Agent Behavioral Attestation v1",
+  "description": "Self-contained, schema-validated commitment to a slice of a Occasio tamper-evident audit chain. Summarises what an AI coding agent did during one governed session (run_id) — every tool call's decision, blocked attempts, redacted secrets, the active policy's digest, and the first/last hashes of the chain segment that backs the claim. Intended to be later wrapped in an in-toto Statement envelope and signed via Sigstore keyless. v1 carries an unsigned variant (signature: null); subsequent versions populate the signature object.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,7 +22,7 @@
     },
     "predicate_type": {
       "type": "string",
-      "const": "https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1"
+      "const": "https://github.com/occasiolabs/occasio/spec/agent-attestation/v1"
     },
     "subject": {
       "type": "object",
@@ -31,7 +31,7 @@
       "properties": {
         "run_id": {
           "type": "string",
-          "description": "UUID of the LocalFirst proxy run that produced the attested events."
+          "description": "UUID of the Occasio proxy run that produced the attested events."
         },
         "git_commit": {
           "type": ["string", "null"],

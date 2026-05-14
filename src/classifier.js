@@ -27,7 +27,7 @@ const GIT_UNSAFE   = new Set(DATA.git_unsafe_subcommands);
 const DANGER_FLAGS = new Set(DATA.dangerous_flags);
 const SHELL_META   = /[;&|`$<>\\]/;
 
-const FEEDBACK_LOG = path.join(os.homedir(), '.localfirst', 'routing-feedback.jsonl');
+const FEEDBACK_LOG = path.join(os.homedir(), '.occasio', 'routing-feedback.jsonl');
 
 /**
  * Decide whether a tool call should be executed locally.

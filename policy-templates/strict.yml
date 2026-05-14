@@ -1,5 +1,5 @@
-# yaml-language-server: $schema=https://localfirst.ai/schemas/localfirst-policy.schema.json
-# LocalFirst policy — strict template
+# yaml-language-server: $schema=https://occasio.ai/schemas/occasio-policy.schema.json
+# Occasio policy — strict template
 #
 # Locked-down posture for deployments where the agent should only ever
 # touch a small, declared set of project paths and never see credentials
@@ -11,8 +11,8 @@
 # both POSIX (~/.ssh) and Windows-style (C:\Users\…\.ssh) deny entries
 # are honoured.
 #
-#   localfirst policy show       — confirm the active policy
-#   localfirst policy validate   — lint this file
+#   occasio policy show       — confirm the active policy
+#   occasio policy validate   — lint this file
 version: 1
 
 # ── Global flags ──────────────────────────────────────────────────────────────

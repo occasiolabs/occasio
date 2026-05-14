@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * localfirst policy init — write a starter ~/.localfirst/policy.yml.
+ * occasio policy init — write a starter ~/.occasio/policy.yml.
  *
  * Safe by default: refuses to overwrite an existing file unless --force is
  * passed explicitly. After writing, prints the file path and suggests the
  * next commands so the user can inspect and validate immediately.
  *
  * Usage:
- *   localfirst policy init                          Write the dev-default starter
- *   localfirst policy init --template strict        Locked-down posture
- *   localfirst policy init --template finance       Finance-oriented deny_patterns
- *   localfirst policy init --force                  Overwrite an existing file
- *   localfirst policy init --file <path>            Write to a custom path
+ *   occasio policy init                          Write the dev-default starter
+ *   occasio policy init --template strict        Locked-down posture
+ *   occasio policy init --template finance       Finance-oriented deny_patterns
+ *   occasio policy init --force                  Overwrite an existing file
+ *   occasio policy init --file <path>            Write to a custom path
  *
  * v0.6.6: starter content is sourced from policy-templates/<name>.yml so the
  * shipped templates are the same files the user can read, copy, and review
  * outside the CLI. Each template carries a $schema directive pointing at the
- * published JSON Schema (schemas/localfirst-policy.schema.json).
+ * published JSON Schema (schemas/occasio-policy.schema.json).
  */
 
 const fs   = require('fs');
@@ -78,7 +78,7 @@ function runInitCli(args, opts = {}) {
     ? args[tplArgIdx + 1]
     : DEFAULT_TEMPLATE;
 
-  console.log(col.b('\n⚡ LocalFirst — Policy Init\n'));
+  console.log(col.b('\n⚡ Occasio — Policy Init\n'));
 
   if (!VALID_TEMPLATES.includes(templateName)) {
     console.log(col.r(`  Unknown template: "${templateName}"\n`));
@@ -108,8 +108,8 @@ function runInitCli(args, opts = {}) {
     console.log(col.y('  Policy file already exists — not overwriting.'));
     console.log(col.d('  Use --force to replace it, or edit the file directly.\n'));
     console.log(col.d('  Next steps:'));
-    console.log(col.d(`    localfirst policy show      — view the current policy`));
-    console.log(col.d(`    localfirst policy validate  — check it for errors`));
+    console.log(col.d(`    occasio policy show      — view the current policy`));
+    console.log(col.d(`    occasio policy validate  — check it for errors`));
     console.log('');
     return { ok: false };
   }
@@ -135,8 +135,8 @@ function runInitCli(args, opts = {}) {
   console.log(col.g(`  ✓  ${verb} ${templateName} policy.`));
   console.log(col.d('     The file references the published JSON Schema for IDE autocomplete.\n'));
   console.log(col.d('  Next steps:'));
-  console.log(col.c(`    localfirst policy show      — view the active policy with annotations`));
-  console.log(col.c(`    localfirst policy validate  — check the file for errors`));
+  console.log(col.c(`    occasio policy show      — view the active policy with annotations`));
+  console.log(col.c(`    occasio policy validate  — check the file for errors`));
   console.log('');
   return { ok: true };
 }

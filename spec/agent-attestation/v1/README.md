@@ -1,6 +1,6 @@
 # AI-Agent Behavioral Attestation v1
 
-**Predicate type URI:** `https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1`
+**Predicate type URI:** `https://github.com/occasiolabs/occasio/spec/agent-attestation/v1`
 
 **Status:** Draft 1 (v1.0.0). Tracked at [`schemas/agent-attestation-v1.json`](../../../schemas/agent-attestation-v1.json).
 
@@ -32,9 +32,9 @@ This predicate is intended to be wrapped in an [in-toto Statement v1](https://gi
 ```jsonc
 {
   "_type": "https://in-toto.io/Statement/v1",
-  "predicateType": "https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1",
+  "predicateType": "https://github.com/occasiolabs/occasio/spec/agent-attestation/v1",
   "subject": [{
-    "name":   "localfirst:run:<uuid>",
+    "name":   "occasio:run:<uuid>",
     "digest": { "sha256": "<last_hash from the run's audit chain slice>" }
   }],
   "predicate": { /* the v1 object below */ }
@@ -99,7 +99,7 @@ A consumer of an attestation must perform three independent checks, in order, al
 Each check is a hard requirement. A consumer that skips any of them is not verifying this predicate.
 
 Reference verifiers are available in two languages:
-- **Node:** `localfirst attest verify` (all three steps in one call).
+- **Node:** `occasio attest verify` (all three steps in one call).
 - **Python:** [`docs/attest_verify.py`](../../../docs/attest_verify.py) (stdlib + optional `sigstore-python`; reuses [`docs/audit_walker.py`](../../../docs/audit_walker.py) for the chain step). See [`docs/python-verifier.md`](../../../docs/python-verifier.md).
 
 **Cross-language invariant.** Both verifiers produce byte-identical canonical forms of the predicate and identical pass/fail decisions for the audit-chain step on the same payload, including for predicate-tampered and chain-tampered inputs. Both canonicalize implementations explicitly reject non-integer numbers so a future schema addition cannot silently introduce divergence. The test suite asserts this under `xlang:` and `xlang-float:` cases.
@@ -130,8 +130,8 @@ Reference verifiers are available in two languages:
 
 ## Reference implementation
 
-The producing CLI, full verifier, JSON Schema, and an independent Python audit-chain walker live in [`localfirst-ai/localfirst`](https://github.com/localfirst-ai/localfirst). The reference Sigstore-signed attestations from that repo's own CI runs serve as conformance examples (Phase 3 of the rollout plan).
+The producing CLI, full verifier, JSON Schema, and an independent Python audit-chain walker live in [`occasiolabs/occasio`](https://github.com/occasiolabs/occasio). The reference Sigstore-signed attestations from that repo's own CI runs serve as conformance examples (Phase 3 of the rollout plan).
 
 ## Authors and contributions
 
-Apache-2.0 licensed. Issues and pull requests at [`localfirst-ai/localfirst`](https://github.com/localfirst-ai/localfirst). Predicate-type submissions to the [in-toto attestation registry](https://github.com/in-toto/attestation) tracking once production usage and external adopters reach the registry's bar.
+Apache-2.0 licensed. Issues and pull requests at [`occasiolabs/occasio`](https://github.com/occasiolabs/occasio). Predicate-type submissions to the [in-toto attestation registry](https://github.com/in-toto/attestation) tracking once production usage and external adopters reach the registry's bar.

@@ -1,24 +1,24 @@
-# LocalFirst — Governance One-Pager
+# Occasio — Governance One-Pager
 
-**For:** Security, compliance, and procurement reviewers evaluating LocalFirst for a pilot.
-**Plain answer:** LocalFirst sits at the AI tool-call boundary on the developer's own machine and controls, per call, what is allowed to re-enter the model's next request. The control surface is one human-readable [`policy.yml`](policy-templates/dev-default.yml); every governed call lands in a tamper-evident hash chain that an independent walker can verify without trusting LocalFirst's own code. The same policy governs Claude Code and MCP traffic identically — the [cross-protocol demo](docs/demos/mcp-block.md) shows the same rule producing the same `BLOCK` rows under both protocols.
+**For:** Security, compliance, and procurement reviewers evaluating Occasio for a pilot.
+**Plain answer:** Occasio sits at the AI tool-call boundary on the developer's own machine and controls, per call, what is allowed to re-enter the model's next request. The control surface is one human-readable [`policy.yml`](policy-templates/dev-default.yml); every governed call lands in a tamper-evident hash chain that an independent walker can verify without trusting Occasio's own code. The same policy governs Claude Code and MCP traffic identically — the [cross-protocol demo](docs/demos/mcp-block.md) shows the same rule producing the same `BLOCK` rows under both protocols.
 
 ---
 
-## What LocalFirst controls
+## What Occasio controls
 
-LocalFirst intercepts every action the AI agent takes (file reads, searches, file writes, shell commands, MCP calls) **before** that action is sent to the cloud model and **before** any of its output is sent back. At that boundary it enforces a single policy file:
+Occasio intercepts every action the AI agent takes (file reads, searches, file writes, shell commands, MCP calls) **before** that action is sent to the cloud model and **before** any of its output is sent back. At that boundary it enforces a single policy file:
 
 - **Routing.** Which actions execute locally on the developer machine vs. are passed to the cloud. By default, file reads, file searches, and recognised read-only shell commands run locally; their content is never transmitted.
 - **Path access.** `deny_paths` blocks reads under sensitive prefixes (e.g. `~/.ssh`, `~/.aws`, credential stores). `allow_paths`, when set, restricts the agent to a closed list of project directories.
 - **Secret containment.** A built-in scanner detects API keys, JWTs, AWS credentials, database URLs, and similar patterns in any tool output and blocks the request before the secret reaches the cloud. `deny_patterns` extends the scanner with your own regexes (internal token formats, ticket IDs, locale-specific PII).
 - **Spend.** A per-session `--budget` is enforced in-process; outbound requests over budget return an HTTP 402 without ever calling the model.
 
-The entire policy lives in one human-readable YAML file at `~/.localfirst/policy.yml`. `localfirst policy validate` lints it; `localfirst policy show` prints the active state with annotations. The published [JSON Schema](schemas/localfirst-policy.schema.json) gives any IDE autocomplete and inline validation, and the package ships three starter templates ([`dev-default`](policy-templates/dev-default.yml), [`strict`](policy-templates/strict.yml), [`finance`](policy-templates/finance.yml)) so a deployment can begin from the posture closest to its compliance baseline.
+The entire policy lives in one human-readable YAML file at `~/.occasio/policy.yml`. `occasio policy validate` lints it; `occasio policy show` prints the active state with annotations. The published [JSON Schema](schemas/occasio-policy.schema.json) gives any IDE autocomplete and inline validation, and the package ships three starter templates ([`dev-default`](policy-templates/dev-default.yml), [`strict`](policy-templates/strict.yml), [`finance`](policy-templates/finance.yml)) so a deployment can begin from the posture closest to its compliance baseline.
 
 ## What the audit trail proves
 
-Every tool call that runs through LocalFirst is appended to a tamper-evident log at `~/.localfirst/pipeline-events.jsonl`. Each entry is hash-chained to the previous entry, starting from a fixed genesis sentinel, so any deletion, reordering, or post-hoc edit is detectable.
+Every tool call that runs through Occasio is appended to a tamper-evident log at `~/.occasio/pipeline-events.jsonl`. Each entry is hash-chained to the previous entry, starting from a fixed genesis sentinel, so any deletion, reordering, or post-hoc edit is detectable.
 
 A real entry from this codebase, captured during a session today:
 
@@ -30,7 +30,7 @@ A real entry from this codebase, captured during a session today:
   "agent": "claude-code",
   "kind": "tool_call",
   "tool_name": "read_file",
-  "tool_inputs": { "path": "C:\\Users\\you\\Desktop\\localfirst\\README.md" },
+  "tool_inputs": { "path": "C:\\Users\\you\\Desktop\\occasio\\README.md" },
   "action": "LOCAL",
   "reason": "ok",
   "policy_source": "default",
@@ -53,7 +53,7 @@ What `tool_inputs` records, and what it deliberately does not:
 
 The omissions are deliberate: a free-form regex or a shell command line is itself a credential-shaped surface, so the audit logs *that* an action happened, not the searchable detail of it. The hash chain still covers every tool-call event by id, timestamp, decision, and reason.
 
-`localfirst audit` re-walks the chain and reports the first inconsistency it finds, or confirms integrity end-to-end. For independent verification — the case where the buyer would rather not trust LocalFirst's own verifier — the row format, hash algorithm, and a 30-line standalone Python walker are published at [`docs/AUDIT.md`](docs/AUDIT.md). Both verifiers are kept byte-for-byte parity-checked at each release.
+`occasio audit` re-walks the chain and reports the first inconsistency it finds, or confirms integrity end-to-end. For independent verification — the case where the buyer would rather not trust Occasio's own verifier — the row format, hash algorithm, and a 30-line standalone Python walker are published at [`docs/AUDIT.md`](docs/AUDIT.md). Both verifiers are kept byte-for-byte parity-checked at each release.
 
 ## How deny policy works
 
@@ -73,7 +73,7 @@ deny_patterns:
   internal-ticket: "INC-[0-9]{6,}"
 ```
 
-Path comparisons are performed on the symlink-resolved absolute path (case-insensitive on Windows). A symlink that points into a denied directory is still denied. A `deny_paths` entry with a typo is reported as a validation **error** by `localfirst policy validate`, never silently dropped — a missing deny entry is treated as a security gap.
+Path comparisons are performed on the symlink-resolved absolute path (case-insensitive on Windows). A symlink that points into a denied directory is still denied. A `deny_paths` entry with a typo is reported as a validation **error** by `occasio policy validate`, never silently dropped — a missing deny entry is treated as a security gap.
 
 ## Worked example — a denied path
 
@@ -105,9 +105,9 @@ The agent attempts to read `~/.ssh/id_rsa`. The dispatcher short-circuits the ca
 
 The same mechanism applies when the built-in or custom secret scanner finds a hit in tool output — the engine returns BLOCK with `reason: "secret in tool result: <label>"`, the agent receives the synthetic refusal, and the audit row is written with `result_kind: "block"`.
 
-## What `localfirst report` produces
+## What `occasio report` produces
 
-A single command summarises the audit log over a chosen window. Real output from this codebase, today, with `localfirst report --days 1` (the run that captured the denied access above):
+A single command summarises the audit log over a chosen window. Real output from this codebase, today, with `occasio report --days 1` (the run that captured the denied access above):
 
 ```json
 {
@@ -141,10 +141,10 @@ A single command summarises the audit log over a chosen window. Real output from
 }
 ```
 
-The `audit_integrity.verified` line is load-bearing: it is the result of re-walking the SHA-256 hash chain over the entire log. A buyer can ask for the raw `pipeline-events.jsonl`, run `localfirst audit verify` (or any independent SHA-256 walker), and confirm the report is truthful row-for-row. The row referenced under `blocked_accesses[0]` is the same row shown in the worked example above; the chain through `prev_hash`/`hash` is what proves it has not been edited after the fact.
+The `audit_integrity.verified` line is load-bearing: it is the result of re-walking the SHA-256 hash chain over the entire log. A buyer can ask for the raw `pipeline-events.jsonl`, run `occasio audit verify` (or any independent SHA-256 walker), and confirm the report is truthful row-for-row. The row referenced under `blocked_accesses[0]` is the same row shown in the worked example above; the chain through `prev_hash`/`hash` is what proves it has not been edited after the fact.
 
 ---
 
-**Posture.** LocalFirst is a local boundary layer. It does not replace your cloud DLP, your endpoint controls, or your IAM. It closes the specific gap that exists today between an AI agent on a developer machine and the cloud model it talks to, and produces evidence — a hash-chained event log and a one-command summary — that closure happened.
+**Posture.** Occasio is a local boundary layer. It does not replace your cloud DLP, your endpoint controls, or your IAM. It closes the specific gap that exists today between an AI agent on a developer machine and the cloud model it talks to, and produces evidence — a hash-chained event log and a one-command summary — that closure happened.
 
-The durable artefact a buyer leaves a pilot with is not the proxy software; it is the policy file. It is YAML, source-controllable, multi-stakeholder-reviewable, and pinned to a published [schema](schemas/localfirst-policy.schema.json) that is stable across v0.6.x. A draft [SOC 2 control mapping](docs/compliance-mapping.md) for the `finance.yml` template is published alongside this document; it deliberately covers only stanzas where the link to a control is directly evidenced by an audit row, and is intended as a starting point for a pilot's compliance review, not a substitute for one.
+The durable artefact a buyer leaves a pilot with is not the proxy software; it is the policy file. It is YAML, source-controllable, multi-stakeholder-reviewable, and pinned to a published [schema](schemas/occasio-policy.schema.json) that is stable across v0.6.x. A draft [SOC 2 control mapping](docs/compliance-mapping.md) for the `finance.yml` template is published alongside this document; it deliberately covers only stanzas where the link to a control is directly evidenced by an audit row, and is intended as a starting point for a pilot's compliance review, not a substitute for one.

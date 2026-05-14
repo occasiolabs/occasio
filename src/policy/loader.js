@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Policy loader — reads ~/.localfirst/policy.yml and returns a typed policy
+ * Policy loader — reads ~/.occasio/policy.yml and returns a typed policy
  * object. Falls back to DEFAULT_POLICY when the file is missing or malformed.
  *
  * Stage 2 schema (intentionally minimal; Stage 3 will widen to rule lists):
@@ -28,9 +28,9 @@ function resolveConfigPath(p) {
 
 // Default path can be overridden via LOCALFIRST_POLICY_FILE — used by the
 // harness/redteam commands to point the proxy at a scratch policy.yml so
-// the user's real ~/.localfirst/policy.yml is never read.
+// the user's real ~/.occasio/policy.yml is never read.
 const DEFAULT_PATH = process.env.LOCALFIRST_POLICY_FILE
-  || path.join(os.homedir(), '.localfirst', 'policy.yml');
+  || path.join(os.homedir(), '.occasio', 'policy.yml');
 
 // Default tool routing matches the pre-Stage-3 hardcoded behavior.
 // Stage 3: keys are CANONICAL tool names (agent-agnostic). Adapters map
@@ -244,7 +244,7 @@ function normalize(parsed) {
       const resolved = [];
       parsed[listKey].forEach((entry, i) => {
         if (typeof entry !== 'string' || !entry.trim()) {
-          process.stderr.write(`[LocalFirst] policy.yml: ${listKey}[${i}] — not a string, entry skipped\n`);
+          process.stderr.write(`[Occasio] policy.yml: ${listKey}[${i}] — not a string, entry skipped\n`);
           return;
         }
         resolved.push(resolveConfigPath(entry.trim()));
@@ -258,14 +258,14 @@ function normalize(parsed) {
     const patterns = [];
     for (const [label, rawPattern] of Object.entries(parsed.deny_patterns)) {
       if (typeof rawPattern !== 'string') {
-        process.stderr.write(`[LocalFirst] policy.yml: deny_patterns.${label} — value must be a string, entry skipped\n`);
+        process.stderr.write(`[Occasio] policy.yml: deny_patterns.${label} — value must be a string, entry skipped\n`);
         continue;
       }
       try {
         const regex = new RegExp(rawPattern);
         patterns.push(Object.freeze({ label, regex }));
       } catch (e) {
-        process.stderr.write(`[LocalFirst] policy.yml: deny_patterns.${label} — invalid RegExp "${rawPattern}", entry skipped\n`);
+        process.stderr.write(`[Occasio] policy.yml: deny_patterns.${label} — invalid RegExp "${rawPattern}", entry skipped\n`);
       }
     }
     merged.deny_patterns = Object.freeze(patterns);
@@ -351,13 +351,13 @@ function _firePolicyChange(filePath, policy, hash, fileWasPresent) {
       });
     } catch (e) {
       // Listener crash must not break the proxy — surface to stderr only.
-      try { process.stderr.write(`[localfirst] policy-change listener threw: ${e.message}\n`); } catch {}
+      try { process.stderr.write(`[occasio] policy-change listener threw: ${e.message}\n`); } catch {}
     }
   }
 }
 
 /**
- * Load ~/.localfirst/policy.yml (or another path), with mtime-based reload.
+ * Load ~/.occasio/policy.yml (or another path), with mtime-based reload.
  *
  * On every call we do one `statSync` to read the file's modification time.
  * If the mtime matches the last read — or the file was absent then and is

@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * localfirst attest — produce an AI-Agent Behavioral Attestation (v1) for a
- * single LocalFirst session (run_id). The output is a self-contained JSON file
+ * occasio attest — produce an AI-Agent Behavioral Attestation (v1) for a
+ * single Occasio session (run_id). The output is a self-contained JSON file
  * that *commits* (via first_hash/last_hash) to a contiguous slice of the
  * tamper-evident audit chain and summarises what happened during the run.
  *
@@ -10,12 +10,12 @@
  * object in an in-toto Statement envelope and Sigstore-sign it.
  *
  * Usage:
- *   localfirst attest --run-id <uuid> [--out <path>] [--log <path>]
+ *   occasio attest --run-id <uuid> [--out <path>] [--log <path>]
  *                     [--policy <path>] [--stdout]
  *
  * Reads (all read-only — never mutates the chain):
- *   ~/.localfirst/pipeline-events.jsonl   (or --log)
- *   ~/.localfirst/policy.yml              (or --policy)
+ *   ~/.occasio/pipeline-events.jsonl   (or --log)
+ *   ~/.occasio/policy.yml              (or --policy)
  *
  * Writes:
  *   ./attestation.json                    (or --out, or stdout with --stdout)
@@ -35,13 +35,13 @@ const { computePolicyHash } = require('../policy/loader');
 
 const SCHEMA_VERSION = '1.0.0';
 const PREDICATE_TYPE =
-  'https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1';
+  'https://github.com/occasiolabs/occasio/spec/agent-attestation/v1';
 const GENESIS = '0'.repeat(64);
 const VERIFIER_URL =
-  'https://github.com/localfirst-ai/localfirst/blob/main/docs/audit_walker.py';
+  'https://github.com/occasiolabs/occasio/blob/main/docs/audit_walker.py';
 
-const DEFAULT_LOG    = path.join(os.homedir(), '.localfirst', 'pipeline-events.jsonl');
-const DEFAULT_POLICY = path.join(os.homedir(), '.localfirst', 'policy.yml');
+const DEFAULT_LOG    = path.join(os.homedir(), '.occasio', 'pipeline-events.jsonl');
+const DEFAULT_POLICY = path.join(os.homedir(), '.occasio', 'policy.yml');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,7 +96,7 @@ function readPolicyRulesDigest(policyFile) {
 function pickAgentMeta(events) {
   let platform = null, model = null, session_id = null;
   for (const e of events) {
-    if (!platform && typeof e.agent === 'string' && e.agent !== 'localfirst') platform = e.agent;
+    if (!platform && typeof e.agent === 'string' && e.agent !== 'occasio') platform = e.agent;
     if (!model && typeof e.model === 'string') model = e.model;
     if (!session_id && typeof e.session_id === 'string') session_id = e.session_id;
     if (platform && model && session_id) break;
@@ -240,11 +240,11 @@ function bool(args, name) { return args.indexOf(name) >= 0; }
 function runAttestCli(args) {
   args = args || [];
 
-  // Subcommand: `localfirst attest verify <file>` → delegate.
+  // Subcommand: `occasio attest verify <file>` → delegate.
   if (args[0] === 'verify') {
     const { runAttestVerifyCli } = require('./verify');
     return runAttestVerifyCli(args.slice(1)).catch(e => {
-      process.stderr.write(`[LocalFirst] attest verify: ${e.message}\n`);
+      process.stderr.write(`[Occasio] attest verify: ${e.message}\n`);
       process.exit(2);
     });
   }
@@ -252,17 +252,17 @@ function runAttestCli(args) {
   if (bool(args, '--help') || bool(args, '-h')) {
     process.stdout.write(
       'Usage:\n' +
-      '  localfirst attest --run-id <uuid> [--out <path>] [--log <path>] [--policy <path>] [--stdout]\n' +
+      '  occasio attest --run-id <uuid> [--out <path>] [--log <path>] [--policy <path>] [--stdout]\n' +
       '                    [--sign] [--sign-mode ci|token] [--oidc-token <jwt>] [--bundle-out <path>]\n' +
       '                    [--git-commit <sha>] [--files-changed <a,b,c>]\n' +
-      '  localfirst attest verify <attestation.json> [--bundle <path>]\n'
+      '  occasio attest verify <attestation.json> [--bundle <path>]\n'
     );
     return;
   }
 
   const runId  = flag(args, '--run-id');
   if (!runId) {
-    process.stderr.write('[LocalFirst] attest: --run-id <uuid> is required\n');
+    process.stderr.write('[Occasio] attest: --run-id <uuid> is required\n');
     process.exit(2);
   }
   const logFile    = flag(args, '--log')    || DEFAULT_LOG;
@@ -284,11 +284,11 @@ function runAttestCli(args) {
   try {
     attestation = buildAttestation({ runId, logFile, policyFile, gitCommit, filesChanged });
   } catch (e) {
-    process.stderr.write(`[LocalFirst] attest: ${e.message}\n`);
+    process.stderr.write(`[Occasio] attest: ${e.message}\n`);
     process.exit(2);
   }
   if (!attestation) {
-    process.stderr.write(`[LocalFirst] attest: no events found for run_id ${runId}\n`);
+    process.stderr.write(`[Occasio] attest: no events found for run_id ${runId}\n`);
     process.stderr.write(`  Checked: ${logFile}\n`);
     process.exit(1);
   }
@@ -321,7 +321,7 @@ function runAttestCli(args) {
       if (signatureBlock.rekor_entry) process.stdout.write(`  rekor:     ${signatureBlock.rekor_entry}\n`);
     })
     .catch(e => {
-      process.stderr.write(`[LocalFirst] attest: signing failed: ${e.message}\n`);
+      process.stderr.write(`[Occasio] attest: signing failed: ${e.message}\n`);
       process.exit(2);
     });
 }
@@ -339,7 +339,7 @@ function emitUnsigned(attestation, out, toStdout, runId) {
     );
     process.stdout.write('  signature: null  ·  use --sign to Sigstore-sign\n');
   } catch (e) {
-    process.stderr.write(`[LocalFirst] attest: cannot write ${out}: ${e.message}\n`);
+    process.stderr.write(`[Occasio] attest: cannot write ${out}: ${e.message}\n`);
     process.exit(2);
   }
 }

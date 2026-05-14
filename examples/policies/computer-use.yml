@@ -1,7 +1,7 @@
-# LocalFirst — Computer-Use sample policy (tech-demo scaffold)
+# Occasio — Computer-Use sample policy (tech-demo scaffold)
 #
 # Apply with:
-#   localfirst computer-use --dry-run --from traffic.jsonl --policy computer-use.yml
+#   occasio computer-use --dry-run --from traffic.jsonl --policy computer-use.yml
 #
 # Status: this policy file describes the *intended* directive set for live
 # Computer-Use interception. The dry-run CLI honours the directives below;

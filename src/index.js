@@ -11,7 +11,7 @@ const os = require('os');
 //
 // Stage 3: multi-agent routing. The proxy supports multiple AI agents via
 // per-request adapter selection. Detection signal: the
-// `x-localfirst-agent` header. Default (header absent or unrecognized)
+// `x-occasio-agent` header. Default (header absent or unrecognized)
 // preserves Claude Code behavior exactly. Every adapter is loaded at startup
 // so its tool-name registration runs before any traffic arrives.
 const claudeCodeAdapter = require('./adapters/claude-code');
@@ -27,7 +27,7 @@ const DEFAULT_AGENT = 'claude-code';
 
 /**
  * Per-request adapter selection. Two signals, in order:
- *   1. `x-localfirst-agent` HTTP header (explicit)
+ *   1. `x-occasio-agent` HTTP header (explicit)
  *   2. content fingerprint of the SSE response (implicit fallback)
  * Fingerprint is critical because some agents (notably Cline in some
  * release versions) don't expose a custom-headers UI, so the explicit
@@ -50,12 +50,12 @@ const { budgetStatus, fmtBudget, BUDGET_EXCEEDED_EVENT } = require('./budget');
 
 const VERSION = '0.8.0';
 const LOG_SCHEMA_VERSION = 2;
-// Port override via env var (used by `localfirst harness` and redteam to
+// Port override via env var (used by `occasio harness` and redteam to
 // run isolated proxies against scratch audit chains on free ports). Default
 // is 8081 to preserve existing user-facing behaviour.
 let PORT = parseInt(process.env.LOCALFIRST_PORT, 10) || 8081;
 const ANTHROPIC_REAL = 'api.anthropic.com';
-const LOG_DIR      = path.join(os.homedir(), '.localfirst');
+const LOG_DIR      = path.join(os.homedir(), '.occasio');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
 // Captured once at process start; stable for the entire session.
 // Used by the preflight miner to group sessions by project root.
@@ -293,8 +293,8 @@ function runDistillCli(cliArgs) {
     const kb   = ((e.rawBytes || 0) / 1024).toFixed(1).padStart(6);
     console.log(`  [${String(idx).padStart(2)}] ${cmd_}  ${col.d(`${kb} KB`)}  ${col.d(e.label || '')}`);
   });
-  console.log(`\n${col.d('  localfirst distill --entry <N>   show raw output for entry N')}`);
-  console.log(`${col.d('  localfirst distill --last <N>    show last N entries')}\n`);
+  console.log(`\n${col.d('  occasio distill --entry <N>   show raw output for entry N')}`);
+  console.log(`${col.d('  occasio distill --last <N>    show last N entries')}\n`);
 }
 
 // ── CLI commands ───────────────────────────────────────────────────────────────
@@ -302,47 +302,47 @@ function runDistillCli(cliArgs) {
 const args = process.argv.slice(2);
 const cmd = args[0];
 
-if (cmd === '--version' || cmd === '-v') { console.log(`localfirst v${VERSION}`); process.exit(0); }
+if (cmd === '--version' || cmd === '-v') { console.log(`occasio v${VERSION}`); process.exit(0); }
 
 if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
   console.log(`
-${col.b(`⚡ LocalFirst v${VERSION}`)}
+${col.b(`⚡ Occasio v${VERSION}`)}
 
 ${col.b('Usage:')}
-  localfirst claude [args...]   Start Claude with local proxy (intercept + log)
-  localfirst demo               10-second proof: see LocalFirst block real secrets
-  localfirst demo attest        End-to-end attestation pipeline against a synthetic audit chain
-  localfirst demo anomalies     End-to-end EDR test: synthetic adversarial chain → all 4 detectors
-  localfirst dashboard          Open live dashboard for the running session
-  localfirst register           Register shell alias (type 'claude' directly)
-  localfirst status             Show session stats and savings breakdown
-  localfirst doctor             Check setup: Node, claude CLI, port, Python, profile
-  localfirst clear              Reset today's log and session data
-  localfirst clear --history    Wipe all historical logs
-  localfirst ledger             Inspect token ledger (--last N, --summary, --scope session|today)
-  localfirst replay             Replay run audit (--last N, --detail, --run <id>, --attribute)
-  localfirst distill            Inspect distilled outputs (--last N, --entry <N> for raw)
-  localfirst inspect            Cloud-boundary manifest (--last N, --entry N, --run <id>)
-  localfirst boundary           Per-request three-column view: produced / re-entered / prevented
-  localfirst baseline           Behavior baseline: [learn|show|compare|reset] (per project cwd)
-  localfirst harness            Run a real Claude Code session against scratch fixtures and verify governance claims (needs ANTHROPIC_API_KEY)
-  localfirst redteam            Autonomous adversarial test — tester LLM probes a subject Claude Code session under LocalFirst (needs ANTHROPIC_API_KEY + @anthropic-ai/sdk)
-  localfirst policy [show]      Show active policy: flags, tool routing, overrides
-  localfirst policy show --diff Only values that differ from defaults
-  localfirst policy validate    Validate policy.yml and report errors/warnings
-  localfirst policy init        Create a starter policy.yml (safe, non-destructive)
+  occasio claude [args...]   Start Claude with local proxy (intercept + log)
+  occasio demo               10-second proof: see Occasio block real secrets
+  occasio demo attest        End-to-end attestation pipeline against a synthetic audit chain
+  occasio demo anomalies     End-to-end EDR test: synthetic adversarial chain → all 4 detectors
+  occasio dashboard          Open live dashboard for the running session
+  occasio register           Register shell alias (type 'claude' directly)
+  occasio status             Show session stats and savings breakdown
+  occasio doctor             Check setup: Node, claude CLI, port, Python, profile
+  occasio clear              Reset today's log and session data
+  occasio clear --history    Wipe all historical logs
+  occasio ledger             Inspect token ledger (--last N, --summary, --scope session|today)
+  occasio replay             Replay run audit (--last N, --detail, --run <id>, --attribute)
+  occasio distill            Inspect distilled outputs (--last N, --entry <N> for raw)
+  occasio inspect            Cloud-boundary manifest (--last N, --entry N, --run <id>)
+  occasio boundary           Per-request three-column view: produced / re-entered / prevented
+  occasio baseline           Behavior baseline: [learn|show|compare|reset] (per project cwd)
+  occasio harness            Run a real Claude Code session against scratch fixtures and verify governance claims (needs ANTHROPIC_API_KEY)
+  occasio redteam            Autonomous adversarial test — tester LLM probes a subject Claude Code session under Occasio (needs ANTHROPIC_API_KEY + @anthropic-ai/sdk)
+  occasio policy [show]      Show active policy: flags, tool routing, overrides
+  occasio policy show --diff Only values that differ from defaults
+  occasio policy validate    Validate policy.yml and report errors/warnings
+  occasio policy init        Create a starter policy.yml (safe, non-destructive)
                                 Use --template strict|finance for a non-default starter
-  localfirst policy doctor      Cross-reference session logs with policy; surface suggestions
-  localfirst audit [verify]     Verify tamper-evident hash chain in pipeline-events.jsonl
-  localfirst report             Governance export: file access log, blocked paths, secret events
-  localfirst anomalies          Live anomaly detection over the audit chain (--window 15m, --json)
-  localfirst computer-use       Apply a Computer-Use policy to a JSONL of tool_use blocks (--dry-run --example)
-  localfirst attest --run-id <uuid>  AI-Agent Behavioral Attestation v1: hash-chain commitment + execution summary for one run
+  occasio policy doctor      Cross-reference session logs with policy; surface suggestions
+  occasio audit [verify]     Verify tamper-evident hash chain in pipeline-events.jsonl
+  occasio report             Governance export: file access log, blocked paths, secret events
+  occasio anomalies          Live anomaly detection over the audit chain (--window 15m, --json)
+  occasio computer-use       Apply a Computer-Use policy to a JSONL of tool_use blocks (--dry-run --example)
+  occasio attest --run-id <uuid>  AI-Agent Behavioral Attestation v1: hash-chain commitment + execution summary for one run
                               Add --sign in GitHub Actions (with permissions: id-token: write) for Sigstore keyless signing
-  localfirst attest verify <file>   Re-verify a signed attestation: Sigstore bundle + DSSE payload match + audit chain integrity
-  localfirst selftest           Run governance self-checks on a scratch chain (does not touch your audit log)
-  localfirst report --format csv  CSV export for auditors / SIEM import
-  localfirst mcp-experiment     MCP vs. built-in tool adoption stats (experiment)
+  occasio attest verify <file>   Re-verify a signed attestation: Sigstore bundle + DSSE payload match + audit chain integrity
+  occasio selftest           Run governance self-checks on a scratch chain (does not touch your audit log)
+  occasio report --format csv  CSV export for auditors / SIEM import
+  occasio mcp-experiment     MCP vs. built-in tool adoption stats (experiment)
 
 ${col.b('Presets:')}
   --preset balanced  (default)  Intercept safe reads locally, log all requests
@@ -360,9 +360,9 @@ ${col.b('Flags:')}
 
 ${col.b('Multi-agent routing:')}
   Default               → Claude Code adapter
-  Header x-localfirst-agent: cline → Cline adapter (synthetic; live validation pending)
+  Header x-occasio-agent: cline → Cline adapter (synthetic; live validation pending)
 
-${col.b('Logs:')} ~/.localfirst/logs/YYYY-MM-DD.jsonl
+${col.b('Logs:')} ~/.occasio/logs/YYYY-MM-DD.jsonl
 `);
   process.exit(0);
 }
@@ -374,9 +374,9 @@ if (cmd === 'register') {
   if (isWindows) {
     const profileDir  = path.join(os.homedir(), 'Documents', 'PowerShell');
     const profileFile = path.join(profileDir, 'Microsoft.PowerShell_profile.ps1');
-    const snippet = `\n# LocalFirst — intercept Claude Code traffic\nfunction claude { localfirst claude @args }\n`;
-    const alreadyMarker = 'localfirst claude @args';
-    const legacyMarker  = 'localfirst --intercept @args';
+    const snippet = `\n# Occasio — intercept Claude Code traffic\nfunction claude { occasio claude @args }\n`;
+    const alreadyMarker = 'occasio claude @args';
+    const legacyMarker  = 'occasio --intercept @args';
     try {
       if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
       const existing = fs.existsSync(profileFile) ? fs.readFileSync(profileFile, 'utf8') : '';
@@ -384,13 +384,13 @@ if (cmd === 'register') {
         console.log(col.g('✓ Already registered (PowerShell)'));
         console.log(col.d('  Type: claude'));
       } else if (existing.includes(legacyMarker)) {
-        // Upgrade old --intercept form to canonical `localfirst claude`
+        // Upgrade old --intercept form to canonical `occasio claude`
         const updated = existing.replace(
-          /function claude \{ localfirst --intercept @args \}/g,
-          'function claude { localfirst claude @args }'
+          /function claude \{ occasio --intercept @args \}/g,
+          'function claude { occasio claude @args }'
         );
         fs.writeFileSync(profileFile, updated);
-        console.log(col.g('✓ Updated to canonical form (localfirst claude)'));
+        console.log(col.g('✓ Updated to canonical form (occasio claude)'));
         console.log('');
         console.log(col.y(`  ⚠  Restart PowerShell — the 'claude' alias is not active yet.`));
         console.log(col.d(`     Open a new terminal, or run:  . $PROFILE`));
@@ -405,23 +405,23 @@ if (cmd === 'register') {
       }
     } catch (e) {
       console.log(col.r(`✗ Could not write profile: ${e.message}`));
-      console.log(col.d(`  Add manually to your PowerShell profile:\n  function claude { localfirst claude @args }`));
+      console.log(col.d(`  Add manually to your PowerShell profile:\n  function claude { occasio claude @args }`));
     }
   } else {
     const rcFile = (process.env.SHELL || '').includes('zsh')
       ? path.join(os.homedir(), '.zshrc')
       : path.join(os.homedir(), '.bashrc');
-    const snippet = `\n# LocalFirst — intercept Claude Code traffic\nclaude() { localfirst claude "$@"; }\n`;
-    const alreadyMarker = 'localfirst claude "$@"';
-    const legacyMarker  = 'localfirst --intercept "$@"';
+    const snippet = `\n# Occasio — intercept Claude Code traffic\nclaude() { occasio claude "$@"; }\n`;
+    const alreadyMarker = 'occasio claude "$@"';
+    const legacyMarker  = 'occasio --intercept "$@"';
     try {
       const existing = fs.existsSync(rcFile) ? fs.readFileSync(rcFile, 'utf8') : '';
       if (existing.includes(alreadyMarker)) {
         console.log(col.g(`✓ Already registered (${rcFile})`));
       } else if (existing.includes(legacyMarker)) {
         const updated = existing.replace(
-          /claude\(\) \{ localfirst --intercept "\$@"; \}/g,
-          'claude() { localfirst claude "$@"; }'
+          /claude\(\) \{ occasio --intercept "\$@"; \}/g,
+          'claude() { occasio claude "$@"; }'
         );
         fs.writeFileSync(rcFile, updated);
         console.log(col.g(`✓ Updated to canonical form in ${rcFile}`));
@@ -432,7 +432,7 @@ if (cmd === 'register') {
       console.log(col.d('  Run: source ' + rcFile + '  — then type: claude'));
     } catch (e) {
       console.log(col.r(`✗ Could not write ${rcFile}: ${e.message}`));
-      console.log(col.d(`  Add manually:\n  claude() { localfirst claude "$@"; }`));
+      console.log(col.d(`  Add manually:\n  claude() { occasio claude "$@"; }`));
     }
   }
   process.exit(0);
@@ -440,8 +440,8 @@ if (cmd === 'register') {
 
 if (cmd === 'status' || cmd === 'stats') {
   let s = null; try { s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch {}
-  console.log(col.b('\n⚡ LocalFirst\n'));
-  if (!s) { console.log(col.d('  No session data yet. Run: localfirst claude\n')); process.exit(0); }
+  console.log(col.b('\n⚡ Occasio\n'));
+  if (!s) { console.log(col.d('  No session data yet. Run: occasio claude\n')); process.exit(0); }
 
   const cacheSav  = s.cache_savings      || 0;
   const laoSav    = s.lao_cost_saved     || 0;
@@ -603,10 +603,10 @@ if (cmd === 'policy') {
     process.exit(0);
   }
   console.error(col.r(`Unknown policy subcommand: ${sub}`));
-  console.error(col.d('  Usage: localfirst policy [show] [--diff]'));
-  console.error(col.d('         localfirst policy validate [--file path]'));
-  console.error(col.d('         localfirst policy init [--template dev-default|strict|finance] [--force] [--file path]'));
-  console.error(col.d('         localfirst policy doctor [--days N]'));
+  console.error(col.d('  Usage: occasio policy [show] [--diff]'));
+  console.error(col.d('         occasio policy validate [--file path]'));
+  console.error(col.d('         occasio policy init [--template dev-default|strict|finance] [--force] [--file path]'));
+  console.error(col.d('         occasio policy doctor [--days N]'));
   process.exit(1);
 }
 
@@ -673,7 +673,7 @@ if (cmd === 'demo') {
       name: 'config.yml',
       content: [
         'app:',
-        '  name: localfirst-demo',
+        '  name: occasio-demo',
         '  database:',
         '    url: postgres://admin:hunter2hunter2@db.internal:5432/prod',
         '  port: 5432',
@@ -709,7 +709,7 @@ if (cmd === 'demo') {
     },
   ];
 
-  console.log(col.b('\n⚡ LocalFirst — secret-block demo\n'));
+  console.log(col.b('\n⚡ Occasio — secret-block demo\n'));
   console.log(col.d(`  Simulating a Claude Code session that reads ${FIXTURES.length} files.`));
   console.log(col.d(`  Running the real scanner — same code path that fires on every tool result.\n`));
 
@@ -745,9 +745,9 @@ if (cmd === 'mcp-experiment' || cmd === 'mcp-stats') {
 if (cmd === 'dashboard') {
   require('./dashboard');
   const url = 'http://localhost:3001';
-  process.stderr.write(col.b('\n⚡ LocalFirst Dashboard\n\n'));
+  process.stderr.write(col.b('\n⚡ Occasio Dashboard\n\n'));
   process.stderr.write(`  ${col.c(url)}\n`);
-  process.stderr.write(col.d('  Reads from the running session in ~/.localfirst/session.json\n\n'));
+  process.stderr.write(col.d('  Reads from the running session in ~/.occasio/session.json\n\n'));
   require('child_process').exec(
     process.platform === 'win32' ? `start ${url}` :
     process.platform === 'darwin' ? `open ${url}` : `xdg-open ${url}`,
@@ -764,7 +764,7 @@ if (cmd === 'doctor' || cmd === 'check') {
     const ok  = (label, detail) => process.stderr.write(col.g(`  ✓ ${label}`) + (detail ? col.d(` — ${detail}`) : '') + '\n');
     const bad = (label, hint)   => { process.stderr.write(col.r(`  ✗ ${label}`) + (hint ? col.d(` — ${hint}`) : '') + '\n'); allOk = false; };
 
-    process.stderr.write(col.b('\n⚡ LocalFirst doctor\n\n'));
+    process.stderr.write(col.b('\n⚡ Occasio doctor\n\n'));
 
     // 1. Node.js version
     const [nodeMajor] = process.versions.node.split('.').map(Number);
@@ -822,8 +822,8 @@ if (cmd === 'doctor' || cmd === 'check') {
       const pFile = path.join(os.homedir(), 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1');
       try {
         const src = fs.existsSync(pFile) ? fs.readFileSync(pFile, 'utf8') : '';
-        if (src.includes('localfirst claude @args')) ok('PowerShell profile', 'registered');
-        else bad('PowerShell profile', 'not registered — run: localfirst register');
+        if (src.includes('occasio claude @args')) ok('PowerShell profile', 'registered');
+        else bad('PowerShell profile', 'not registered — run: occasio register');
       } catch { bad('PowerShell profile', 'cannot read profile'); }
 
       // Check execution policy — Restricted prevents profile scripts from running.
@@ -913,12 +913,12 @@ const pendingToolInjections  = new Map();   // tool_use_id → distilled content
 
 // Stage 1 architecture: production tool dispatch runs through the canonical
 // pipeline. Each Read/Glob/Grep/TodoWrite/TodoRead tool call records one
-// audit row to ~/.localfirst/pipeline-events.jsonl. The legacy daily ledger
+// audit row to ~/.occasio/pipeline-events.jsonl. The legacy daily ledger
 // remains the source of truth for cost/usage; this file complements it with
 // per-event tracing and is the foundation for Stage 2's tamper-evident log.
 const { createAuditor: _createAuditor } = require('./audit/jsonl-auditor');
-// Audit-file override via env var. Used by `localfirst harness` to run
-// against a scratch chain so the user's real ~/.localfirst/pipeline-events
+// Audit-file override via env var. Used by `occasio harness` to run
+// against a scratch chain so the user's real ~/.occasio/pipeline-events
 // .jsonl is never touched. When unset, the auditor uses its default location.
 const sessionAuditor = _createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undefined);
 
@@ -934,9 +934,9 @@ const sessionAuditor = _createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undef
     const status = sessionAuditor.recordPolicyLoaded(change);
     if (status && status.ok === false) {
       const dropped = status.droppedRow ? JSON.stringify(status.droppedRow) : '(no row attached)';
-      process.stderr.write(`\n${col.r('[localfirst][audit-fatal]')} policy_loaded write failed: ${status.error?.message}\n`);
-      process.stderr.write(`${col.r('[localfirst][audit-fatal] dropped row:')} ${dropped}\n`);
-      process.stderr.write(`${col.r('[localfirst][audit-fatal] proxy aborting; supervisor will restart.')}\n`);
+      process.stderr.write(`\n${col.r('[occasio][audit-fatal]')} policy_loaded write failed: ${status.error?.message}\n`);
+      process.stderr.write(`${col.r('[occasio][audit-fatal] dropped row:')} ${dropped}\n`);
+      process.stderr.write(`${col.r('[occasio][audit-fatal] proxy aborting; supervisor will restart.')}\n`);
       try { server && server.close && server.close(); } catch {}
       setTimeout(() => process.exit(1), 250);
     }
@@ -961,7 +961,7 @@ fs.writeFileSync(SESSION_FILE, JSON.stringify({
   mode, start: new Date().toISOString(),
 }));
 
-process.stderr.write(col.b(`\n⚡ LocalFirst v${VERSION}\n`));
+process.stderr.write(col.b(`\n⚡ Occasio v${VERSION}\n`));
 const modeLabel = mode === 'block_secrets' ? col.r('block-secrets')
                 : mode === 'hardened'      ? col.c('hardened')
                 : col.d(mode);
@@ -982,9 +982,9 @@ if (budget !== null) {
 }
 const isFirstRun = !fs.existsSync(path.join(LOG_DIR, '.registered'));
 if (isFirstRun) {
-  process.stderr.write(col.g(`\n  Your traffic is now routing through LocalFirst.\n`));
-  process.stderr.write(col.d(`  Run ${col.b('localfirst register')} to alias 'claude' directly (one-time).\n`));
-  process.stderr.write(col.d(`  Run ${col.b('localfirst doctor')} to verify your setup.\n`));
+  process.stderr.write(col.g(`\n  Your traffic is now routing through Occasio.\n`));
+  process.stderr.write(col.d(`  Run ${col.b('occasio register')} to alias 'claude' directly (one-time).\n`));
+  process.stderr.write(col.d(`  Run ${col.b('occasio doctor')} to verify your setup.\n`));
   fs.mkdirSync(LOG_DIR, { recursive: true });
   fs.writeFileSync(path.join(LOG_DIR, '.registered'), '');
 }
@@ -1019,7 +1019,7 @@ const server = http.createServer((req, res) => {
         files      = fileTokens.map(f => f.name);
         secrets    = scanSecrets(body.toString());          // Level 2
 
-        const rp = path.join(process.cwd(), '.localfirst', 'rules.json');
+        const rp = path.join(process.cwd(), '.occasio', 'rules.json');
         if (fs.existsSync(rp)) {
           try {
             const rules = JSON.parse(fs.readFileSync(rp, 'utf8'));
@@ -1054,7 +1054,7 @@ const server = http.createServer((req, res) => {
           writeLog(blockedEntry);
           updateSession(blockedEntry);
           res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: { type: 'blocked', reason: secrets.length ? secrets[0].label : 'rule', by: 'LocalFirst' } }));
+          res.end(JSON.stringify({ error: { type: 'blocked', reason: secrets.length ? secrets[0].label : 'rule', by: 'Occasio' } }));
           return;
         }
       } catch {}
@@ -1062,7 +1062,7 @@ const server = http.createServer((req, res) => {
 
     // ── Budget enforcement (Stage 2: policy-driven BLOCK) ─────────────────────
     // The decision-to-block is produced by policy.evaluateRequest, which
-    // reads ~/.localfirst/policy.yml's `block_requests_over_budget` rule.
+    // reads ~/.occasio/policy.yml's `block_requests_over_budget` rule.
     // Side effects (verbose print, JSONL log, session counter) stay here as
     // observability/state concerns, separate from the policy decision.
     if (isMsg && budget !== null) {
@@ -1072,7 +1072,7 @@ const server = http.createServer((req, res) => {
         const ts  = new Date().toTimeString().slice(0, 8);
         const iso = new Date().toISOString();
         process.stderr.write(`\n${col.d(ts)} ${col.r('🚫 BUDGET EXCEEDED')} — $${sessionCost.toFixed(4)} of $${budget.toFixed(4)} spent this session\n`);
-        process.stderr.write(col.d(`  Reset: localfirst clear  |  Increase: restart with --budget ${(budget * 2).toFixed(4)}\n`));
+        process.stderr.write(col.d(`  Reset: occasio clear  |  Increase: restart with --budget ${(budget * 2).toFixed(4)}\n`));
         const bEntry = {
           v: LOG_SCHEMA_VERSION, iso, ts, run_id: currentRunId,
           event_type: BUDGET_EXCEEDED_EVENT,
@@ -1167,7 +1167,7 @@ const server = http.createServer((req, res) => {
         if (outboundResult.strips.length > 0) {
           b.messages = outboundResult.messages;
           // Emit one BLOCK audit row per stripped tool_result, mirroring the
-          // tool-call-time gate's shape so `localfirst report` aggregates
+          // tool-call-time gate's shape so `occasio report` aggregates
           // both paths uniformly under blocked_accesses[].
           const { makeBoundaryEvent } = require('./core/boundary-event');
           for (const strip of outboundResult.strips) {
@@ -1330,7 +1330,7 @@ const server = http.createServer((req, res) => {
 
     const hdrs = { ...req.headers, host: ANTHROPIC_REAL, 'content-length': forwardBody.length };
     delete hdrs['accept-encoding'];
-    // Strip LocalFirst-internal routing header so it never leaves the machine.
+    // Strip Occasio-internal routing header so it never leaves the machine.
     delete hdrs[AGENT_HEADER];
     const pr = https.request({ hostname: ANTHROPIC_REAL, port: 443, path: req.url, method: req.method, headers: hdrs }, pres => {
       const rc = []; pres.on('data', c => rc.push(c));
@@ -1429,9 +1429,9 @@ const server = http.createServer((req, res) => {
             // exists without a matching audit row.
             if (e && e.name === 'AuditWriteError') {
               const dropped = e.droppedRow ? JSON.stringify(e.droppedRow) : '(no row attached)';
-              process.stderr.write(`\n${col.r('[localfirst][audit-fatal]')} ${e.message}\n`);
-              process.stderr.write(`${col.r('[localfirst][audit-fatal] dropped row:')} ${dropped}\n`);
-              process.stderr.write(`${col.r('[localfirst][audit-fatal] proxy aborting; supervisor will restart.')}\n`);
+              process.stderr.write(`\n${col.r('[occasio][audit-fatal]')} ${e.message}\n`);
+              process.stderr.write(`${col.r('[occasio][audit-fatal] dropped row:')} ${dropped}\n`);
+              process.stderr.write(`${col.r('[occasio][audit-fatal] proxy aborting; supervisor will restart.')}\n`);
               try { server && server.close && server.close(); } catch {}
               setTimeout(() => process.exit(1), 250);
               return;
@@ -1571,7 +1571,7 @@ const server = http.createServer((req, res) => {
                 process.stderr.write(col.r(`\n  🚫 Budget limit reached: $${sessionCost.toFixed(4)} of $${budget.toFixed(4)} — next request will be blocked.\n`));
               } else {
                 process.stderr.write(col.y(`\n  ⚠  Budget at ${pctStr}%: $${sessionCost.toFixed(4)} of $${budget.toFixed(4)}\n`));
-                process.stderr.write(col.d(`     Next request will be blocked at $${budget.toFixed(4)}. Reset: localfirst clear\n`));
+                process.stderr.write(col.d(`     Next request will be blocked at $${budget.toFixed(4)}. Reset: occasio clear\n`));
               }
             }
           }

@@ -4,8 +4,8 @@
 /**
  * run-attest.js — invoked by action.yml step `attest`.
  *
- * Resolves inputs, locates the run_id (input → ~/.localfirst/session.json
- * fallback), invokes `localfirst attest --sign ...` and emits Action outputs
+ * Resolves inputs, locates the run_id (input → ~/.occasio/session.json
+ * fallback), invokes `occasio attest --sign ...` and emits Action outputs
  * for the next step.
  *
  * Pure Node, no npm deps beyond Node 20's stdlib.
@@ -29,10 +29,10 @@ function die(msg) {
   process.exit(1);
 }
 
-const LF_HOME = path.join(os.homedir(), '.localfirst');
+const LF_HOME = path.join(os.homedir(), '.occasio');
 
 // ── Input validators ────────────────────────────────────────────────────────
-// Any string that flows into `spawnSync('localfirst', [..., value, ...])` must
+// Any string that flows into `spawnSync('occasio', [..., value, ...])` must
 // be whitelisted. spawnSync with an array argv is shell-safe — but a value
 // that begins with `--` is still treated as a flag by the child, and a value
 // that contains a comma corrupts our --files-changed encoding. Validate at
@@ -68,7 +68,7 @@ function resolveRunId() {
       return j.run_id;
     }
   } catch { /* fall through */ }
-  die(`No run-id input and ${sess} not readable. Pass run-id explicitly, or run a LocalFirst session before this action.`);
+  die(`No run-id input and ${sess} not readable. Pass run-id explicitly, or run a Occasio session before this action.`);
 }
 
 // ── Resolve files-changed from the PR (best effort) ─────────────────────────
@@ -102,8 +102,8 @@ function main() {
   if (gitCommit  && !validCommitSha(gitCommit)) die(`Invalid github SHA: ${gitCommit}`);
 
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-  const outPath   = path.join(workspace, 'localfirst-attestation.json');
-  const bunPath   = path.join(workspace, 'localfirst-attestation.sigstore.json');
+  const outPath   = path.join(workspace, 'occasio-attestation.json');
+  const bunPath   = path.join(workspace, 'occasio-attestation.sigstore.json');
 
   const args = [
     'attest',
@@ -118,9 +118,9 @@ function main() {
   if (files.length) args.push('--files-changed', files.join(','));
   if (sign) args.push('--sign');
 
-  process.stdout.write(`[attest-action] localfirst ${args.join(' ')}\n`);
-  const r = spawnSync('localfirst', args, { encoding: 'utf8', stdio: 'inherit' });
-  if (r.status !== 0) die(`localfirst attest failed (exit ${r.status})`);
+  process.stdout.write(`[attest-action] occasio ${args.join(' ')}\n`);
+  const r = spawnSync('occasio', args, { encoding: 'utf8', stdio: 'inherit' });
+  if (r.status !== 0) die(`occasio attest failed (exit ${r.status})`);
 
   out('attestation-path', outPath);
   out('bundle-path',      sign ? bunPath : '');

@@ -306,7 +306,7 @@ assert('isInterceptable: git -C <path> push 2>&1 → NOT interceptable',
 // ── 2g. Slice D-2 — compound &&-chains (Bash) and ;-chains (PowerShell) ────────
 console.log('\n2g. Slice D-2 — compound git chains');
 
-const ROOT = __dirname;  // localfirst repo root (real git repo)
+const ROOT = __dirname;  // occasio repo root (real git repo)
 
 // ── isEchoSegment ─────────────────────────────────────────────────────────────
 assert('isEchoSegment: echo "---" → true',  isEchoSegment('echo "---"'));
@@ -1234,7 +1234,7 @@ console.log('\n3. runLocally');
   const d1 = distill('grep -r foo src/', longGrep);
   assert('long grep: distilled',           d1.distilled);
   assert('long grep: content is shorter',  d1.content.length < longGrep.length);
-  assert('long grep: note appended',       d1.content.includes('[LocalFirst:'));
+  assert('long grep: note appended',       d1.content.includes('[Occasio:'));
   assert('long grep: savedTokens > 0',     d1.savedTokens > 0);
   assert('long grep: label set',           d1.label.includes('grep'));
   assert('long grep: rawBytes preserved',  d1.rawBytes === Buffer.byteLength(longGrep, 'utf8'));
@@ -1256,7 +1256,7 @@ console.log('\n3. runLocally');
   const longLs = Array.from({ length: LS_MAX_LINES + 10 }, (_, i) => `file${i}.txt`).join('\n');
   const d4 = distill('ls -la', longLs);
   assert('long ls: distilled',             d4.distilled);
-  assert('long ls: note present',          d4.content.includes('[LocalFirst:'));
+  assert('long ls: note present',          d4.content.includes('[Occasio:'));
 
   // distill: git log exceeds GIT_LOG_MAX_LINES
   const longGitLog = Array.from({ length: GIT_LOG_MAX_LINES + 5 }, (_, i) => `abc${i} commit message ${i}`).join('\n');
@@ -1427,7 +1427,7 @@ console.log('\n3. runLocally');
   const dt1 = distill('jest', longTestOutput);
   assert('test over threshold: distilled',      dt1.distilled);
   assert('test over threshold: rawContent set', dt1.rawContent === longTestOutput);
-  assert('test over threshold: note appended',  dt1.content.includes('[LocalFirst:'));
+  assert('test over threshold: note appended',  dt1.content.includes('[Occasio:'));
   assert('test over threshold: savedTokens>0',  dt1.savedTokens > 0);
   assert('test over threshold: label set',      dt1.label.includes('test'));
 
@@ -2413,7 +2413,7 @@ console.log('\n3. runLocally');
     assert('PS Get-Content with $env: → handleable',
       isPowerShellNativeHandleable('Get-Content "$env:USERPROFILE\\\\readme.md"'));
     assert('PS Get-ChildItem with $env: → handleable',
-      isPowerShellNativeHandleable('Get-ChildItem "$env:USERPROFILE\\\\.localfirst"'));
+      isPowerShellNativeHandleable('Get-ChildItem "$env:USERPROFILE\\\\.occasio"'));
     assert('PS Test-Path with $env: → handleable',
       isPowerShellNativeHandleable('Test-Path "$env:USERPROFILE\\\\file.txt"'));
 
@@ -2434,7 +2434,7 @@ console.log('\n3. runLocally');
   assert('isInterceptable PS Get-Content $env:USERPROFILE → true',
     isInterceptable(psBlk('Get-Content "$env:USERPROFILE\\\\file.txt"')));
   assert('isInterceptable PS Get-ChildItem $env:USERPROFILE → true',
-    isInterceptable(psBlk('Get-ChildItem "$env:USERPROFILE\\\\.localfirst"')));
+    isInterceptable(psBlk('Get-ChildItem "$env:USERPROFILE\\\\.occasio"')));
   assert('isInterceptable PS Test-Path $env:USERPROFILE → true',
     isInterceptable(psBlk('Test-Path "$env:USERPROFILE\\\\file.txt"')));
 
@@ -2718,9 +2718,9 @@ console.log('\n3. runLocally');
       fs.unlinkSync(fakeSession);
     }
 
-    // SESSION_FILE export: correct path under ~/.localfirst/
+    // SESSION_FILE export: correct path under ~/.occasio/
     {
-      assert('session.js SESSION_FILE includes .localfirst', SESSION_FILE.includes('.localfirst'));
+      assert('session.js SESSION_FILE includes .occasio', SESSION_FILE.includes('.occasio'));
       assert('session.js SESSION_FILE ends with session.json', SESSION_FILE.endsWith('session.json'));
     }
 
@@ -3518,7 +3518,7 @@ console.log('\n3. runLocally');
     const { makeBoundaryEvent } = require('./src/core/boundary-event');
     const { LOCAL } = require('./src/core/decision');
 
-    const tmp = path.join(os.tmpdir(), `localfirst-arch5-${Date.now()}.jsonl`);
+    const tmp = path.join(os.tmpdir(), `occasio-arch5-${Date.now()}.jsonl`);
     const auditor = createAuditor(tmp);
 
     const ev = makeBoundaryEvent({
@@ -3579,7 +3579,7 @@ console.log('\n3. runLocally');
     assert('arch6: adapter produced one event', events.length === 1);
 
     // Auditor writes to a tmp file so we can inspect the audit trail end-to-end.
-    const tmp = path.join(os.tmpdir(), `localfirst-arch6-${Date.now()}.jsonl`);
+    const tmp = path.join(os.tmpdir(), `occasio-arch6-${Date.now()}.jsonl`);
     const auditor = createAuditor(tmp);
 
     // Run the canonical end-to-end flow with default layers.
@@ -4024,7 +4024,7 @@ console.log('\n3. runLocally');
     // call (no network in tests).
     const fs = require('fs');
     const os = require('os');
-    const auditPath = path.join(os.tmpdir(), `localfirst-arch12-${Date.now()}.jsonl`);
+    const auditPath = path.join(os.tmpdir(), `occasio-arch12-${Date.now()}.jsonl`);
     const { createAuditor } = require('./src/audit/jsonl-auditor');
     const auditor = createAuditor(auditPath);
 
@@ -4081,7 +4081,7 @@ console.log('\n3. runLocally');
     const cline      = require('./src/adapters/cline');
     const adapters   = { 'claude-code': claudeCode, 'cline': cline };
 
-    assert('HEADER_NAME = x-localfirst-agent', HEADER_NAME === 'x-localfirst-agent');
+    assert('HEADER_NAME = x-occasio-agent', HEADER_NAME === 'x-occasio-agent');
 
     // No header → default
     const r1 = selectAdapter({}, adapters, 'claude-code');
@@ -4089,20 +4089,20 @@ console.log('\n3. runLocally');
     assert('no header → adapter is claude-code',  r1.adapter === claudeCode);
 
     // Header explicitly cline → cline adapter
-    const r2 = selectAdapter({ 'x-localfirst-agent': 'cline' }, adapters, 'claude-code');
+    const r2 = selectAdapter({ 'x-occasio-agent': 'cline' }, adapters, 'claude-code');
     assert('header cline → cline adapter',        r2.agentId === 'cline' && r2.source === 'header');
     assert('header cline → adapter is cline',     r2.adapter === cline);
 
     // Case + whitespace insensitivity
-    const r3 = selectAdapter({ 'x-localfirst-agent': '  CLINE  ' }, adapters, 'claude-code');
+    const r3 = selectAdapter({ 'x-occasio-agent': '  CLINE  ' }, adapters, 'claude-code');
     assert('header trimmed + lowercased',         r3.agentId === 'cline' && r3.adapter === cline);
 
     // Unknown agent header → fall back to default (don't error)
-    const r4 = selectAdapter({ 'x-localfirst-agent': 'made-up-agent' }, adapters, 'claude-code');
+    const r4 = selectAdapter({ 'x-occasio-agent': 'made-up-agent' }, adapters, 'claude-code');
     assert('unknown header → default claude-code', r4.agentId === 'claude-code' && r4.source === 'default');
 
     // Non-string header value → default
-    const r5 = selectAdapter({ 'x-localfirst-agent': 42 }, adapters, 'claude-code');
+    const r5 = selectAdapter({ 'x-occasio-agent': 42 }, adapters, 'claude-code');
     assert('non-string header value → default',   r5.agentId === 'claude-code' && r5.source === 'default');
 
     // Missing default → error (configuration bug)
@@ -4167,7 +4167,7 @@ console.log('\n3. runLocally');
       fp2.agentId === 'claude-code' && fp2.source === 'default');
 
     // Header beats fingerprint (explicit overrides implicit)
-    const fp3 = selectAdapter({ 'x-localfirst-agent': 'claude-code' }, adapters, 'claude-code',
+    const fp3 = selectAdapter({ 'x-occasio-agent': 'claude-code' }, adapters, 'claude-code',
       { sseBody: sseCline, registry: toolNamesReg });
     assert('explicit header beats fingerprint',
       fp3.agentId === 'claude-code' && fp3.source === 'header');
@@ -4176,17 +4176,17 @@ console.log('\n3. runLocally');
     const fp4 = selectAdapter({}, adapters, 'claude-code');
     assert('no fingerprint inputs → default',     fp4.agentId === 'claude-code' && fp4.source === 'default');
 
-    // index.js wiring: x-localfirst-agent header is documented in help text
+    // index.js wiring: x-occasio-agent header is documented in help text
     const fs = require('fs');
     const indexSrc = fs.readFileSync(path.join(__dirname, 'src', 'index.js'), 'utf8');
     assert('index.js loads cline adapter',
       indexSrc.includes("require('./adapters/cline')"));
     assert('index.js uses agent-router selectAdapter',
       indexSrc.includes("require('./proxy/agent-router')"));
-    assert('index.js strips x-localfirst-agent header before forwarding',
-      indexSrc.includes('delete hdrs[AGENT_HEADER]') || indexSrc.includes("delete hdrs['x-localfirst-agent']"));
-    assert('help text documents x-localfirst-agent header',
-      indexSrc.includes('x-localfirst-agent') &&
+    assert('index.js strips x-occasio-agent header before forwarding',
+      indexSrc.includes('delete hdrs[AGENT_HEADER]') || indexSrc.includes("delete hdrs['x-occasio-agent']"));
+    assert('help text documents x-occasio-agent header',
+      indexSrc.includes('x-occasio-agent') &&
       indexSrc.includes('Multi-agent routing'));
   }
 
@@ -4426,7 +4426,7 @@ console.log('\n3. runLocally');
       assert('index.js requires verifier',       indexSrc.includes("require('./audit/verifier')"));
       assert('index.js handles audit command',   indexSrc.includes("cmd === 'audit'"));
       assert('index.js calls runAuditCli',       indexSrc.includes('runAuditCli('));
-      assert('help text includes audit command', indexSrc.includes('localfirst audit'));
+      assert('help text includes audit command', indexSrc.includes('occasio audit'));
     }
   })();
 
@@ -4677,7 +4677,7 @@ console.log('\n3. runLocally');
       assert('distill: long → distilled=true', r.distilled === true);
       assert('distill: long → savedTokens > 0', r.savedTokens > 0);
       assert('distill: long → content shorter', r.content.length < long.length);
-      assert('distill: long → note appended', r.content.includes('[LocalFirst:'));
+      assert('distill: long → note appended', r.content.includes('[Occasio:'));
       assert('distill: long → rawContent set', r.rawContent === long);
     }
 
@@ -5220,8 +5220,8 @@ console.log('\n3. runLocally');
     }
   })();
 
-  // ── ARCH-19. localfirst policy show ──────────────────────────────────────
-  console.log('\nARCH-19. localfirst policy show');
+  // ── ARCH-19. occasio policy show ──────────────────────────────────────
+  console.log('\nARCH-19. occasio policy show');
 
   await (async () => {
     const { runPolicyCli, KNOWN_TRANSFORMS, formatToolEntry, isToolOverride } =
@@ -5429,7 +5429,7 @@ console.log('\n3. runLocally');
     // ── 18. help text includes policy command ─────────────────────────────
     {
       const idxSrc = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
-      assert('help text: policy show listed', idxSrc.includes('localfirst policy'));
+      assert('help text: policy show listed', idxSrc.includes('occasio policy'));
     }
 
     // ── 19. show.js exports are complete ─────────────────────────────────
@@ -5882,7 +5882,7 @@ console.log('\n3. runLocally');
     loader._resetCache();
   })();
 
-  // ── ARCH-23. localfirst policy validate ───────────────────────────────────
+  // ── ARCH-23. occasio policy validate ───────────────────────────────────
   (() => {
     const { validatePolicy, runValidateCli, KNOWN_TOP_LEVEL, KNOWN_TRANSFORMS, KNOWN_CLASSIFIERS, VALID_ACTIONS } = require('./src/policy/validate');
     const pLoader = require('./src/policy/loader');
@@ -5890,7 +5890,7 @@ console.log('\n3. runLocally');
     const osTmp   = require('os').tmpdir();
     const pathMod = require('path');
 
-    console.log('\nARCH-23. localfirst policy validate');
+    console.log('\nARCH-23. occasio policy validate');
 
     // Helper: capture console.log output
     function capture(fn) {
@@ -6129,7 +6129,7 @@ console.log('\n3. runLocally');
     }
   })();
 
-  // ── ARCH-24. localfirst policy init ───────────────────────────────────────
+  // ── ARCH-24. occasio policy init ───────────────────────────────────────
   (() => {
     const { runInitCli, STARTER_POLICY } = require('./src/policy/init');
     const { validatePolicy }             = require('./src/policy/validate');
@@ -6138,7 +6138,7 @@ console.log('\n3. runLocally');
     const osTmp   = require('os').tmpdir();
     const pathMod = require('path');
 
-    console.log('\nARCH-24. localfirst policy init');
+    console.log('\nARCH-24. occasio policy init');
 
     function capture(fn) {
       const lines = [];
@@ -6204,7 +6204,7 @@ console.log('\n3. runLocally');
       assert('init: starter has budget flag',               STARTER_POLICY.includes('block_requests_over_budget'));
       assert('init: starter has tools: example (commented)', STARTER_POLICY.includes('# tools:'));
       assert('init: starter mentions available transforms',  STARTER_POLICY.includes('redact-secrets') && STARTER_POLICY.includes('distill-output'));
-      assert('init: starter mentions --force',               STARTER_POLICY.includes('localfirst policy init') || true); // hint is in CLI output
+      assert('init: starter mentions --force',               STARTER_POLICY.includes('occasio policy init') || true); // hint is in CLI output
     }
 
     // ── 6. Generated flags match DEFAULT_POLICY values ────────────────────
@@ -6260,7 +6260,7 @@ console.log('\n3. runLocally');
     }
   })();
 
-  // ── ARCH-25. localfirst policy doctor ────────────────────────────────────
+  // ── ARCH-25. occasio policy doctor ────────────────────────────────────
   (() => {
     const { runDoctorCli, readRecentLogs, aggregate, buildSuggestions } = require('./src/policy/doctor');
     const pLoader  = require('./src/policy/loader');
@@ -6268,7 +6268,7 @@ console.log('\n3. runLocally');
     const pathMod  = require('path');
     const osTmp    = require('os').tmpdir();
 
-    console.log('\nARCH-25. localfirst policy doctor');
+    console.log('\nARCH-25. occasio policy doctor');
 
     function capture(fn) {
       const lines = [];
@@ -7540,7 +7540,7 @@ console.log('\n3. runLocally');
     // ── Case D: report's filter would surface paths_blocked > 0 ──────────────
     // Instead of running the full report CLI (which reads a fixed path), we
     // exercise the same predicate that report/index.js uses on the rows we
-    // wrote. This proves the audit shape is what `localfirst report` consumes.
+    // wrote. This proves the audit shape is what `occasio report` consumes.
     {
       const { auditFile } = await runWithFreshAuditor(
         () => makeBatchSSE([
@@ -7699,7 +7699,7 @@ console.log('\n3. runLocally');
       assert('A5: index.js handles AuditWriteError by name',
         indexSrc.includes("e.name === 'AuditWriteError'"));
       assert('A5: index.js logs [audit-fatal] marker',
-        indexSrc.includes('[localfirst][audit-fatal]'));
+        indexSrc.includes('[occasio][audit-fatal]'));
       assert('A5: index.js exits non-zero on audit-fatal',
         indexSrc.includes('process.exit(1)'));
       assert('A5: index.js closes the listening server before exit',
@@ -7715,15 +7715,15 @@ console.log('\n3. runLocally');
     const supDir   = pathMod7.join(__dirname, 'bin', 'supervisor');
 
     assert('supervisor: dir exists',                    fsMod.existsSync(supDir));
-    const systemd = fsMod.readFileSync(pathMod7.join(supDir, 'localfirst.service'), 'utf8');
+    const systemd = fsMod.readFileSync(pathMod7.join(supDir, 'occasio.service'), 'utf8');
     assert('systemd: has [Service]',                    systemd.includes('[Service]'));
-    assert('systemd: ExecStart references localfirst',  /ExecStart=.*localfirst/.test(systemd));
+    assert('systemd: ExecStart references occasio',  /ExecStart=.*occasio/.test(systemd));
     assert('systemd: Restart=always',                   systemd.includes('Restart=always'));
 
-    const launchd = fsMod.readFileSync(pathMod7.join(supDir, 'com.localfirst.proxy.plist.template'), 'utf8');
+    const launchd = fsMod.readFileSync(pathMod7.join(supDir, 'com.occasio.proxy.plist.template'), 'utf8');
     assert('launchd: has Label key',                    launchd.includes('<key>Label</key>'));
     assert('launchd: has KeepAlive=true',               /<key>KeepAlive<\/key>\s*<true\/>/.test(launchd));
-    assert('launchd: bundle id ai.localfirst.proxy',    launchd.includes('ai.localfirst.proxy'));
+    assert('launchd: bundle id ai.occasio.proxy',    launchd.includes('ai.occasio.proxy'));
     assert('launchd: parametrized with {{LOCALFIRST_BIN}}', launchd.includes('{{LOCALFIRST_BIN}}'));
 
     const winps = fsMod.readFileSync(pathMod7.join(supDir, 'install-windows-task.ps1'), 'utf8');
@@ -7965,12 +7965,12 @@ console.log('\n3. runLocally');
     }
 
     // ── Case F: existing mcp-experiment.jsonl logging is unbroken ──────────
-    // Regression guard: the adoption-stats log at ~/.localfirst/mcp-experiment.jsonl
+    // Regression guard: the adoption-stats log at ~/.occasio/mcp-experiment.jsonl
     // is a separate concern from the governance audit chain. Confirm a call
     // still writes to it. (We use the real path; the test snapshots size
     // before and after, then trims the additions.)
     {
-      const expFile = pathMod9.join(osMod9.homedir(), '.localfirst', 'mcp-experiment.jsonl');
+      const expFile = pathMod9.join(osMod9.homedir(), '.occasio', 'mcp-experiment.jsonl');
       let before = '';
       try { before = fsMod.readFileSync(expFile, 'utf8'); } catch {}
       await driveMcp('read_file', { path: allowedFile33 }, [], 'claude-ai');
@@ -7998,16 +7998,16 @@ console.log('\n3. runLocally');
     const repoRoot = __dirname;
 
     // ── A. JSON Schema is published, valid, and matches the validator ───────
-    const SCHEMA_PATH = pathMod10.join(__dirname, 'schemas', 'localfirst-policy.schema.json');
+    const SCHEMA_PATH = pathMod10.join(__dirname, 'schemas', 'occasio-policy.schema.json');
     assert('schema file exists', fsMod.existsSync(SCHEMA_PATH));
     const schema = JSON.parse(fsMod.readFileSync(SCHEMA_PATH, 'utf8'));
-    assert('schema has $id', typeof schema['$id'] === 'string' && schema['$id'].includes('localfirst-policy.schema.json'));
-    // Drift guard: $id must use the published localfirst-ai host and must not
+    assert('schema has $id', typeof schema['$id'] === 'string' && schema['$id'].includes('occasio-policy.schema.json'));
+    // Drift guard: $id must use the published occasiolabs host and must not
     // accidentally reference a pre-rename org name. Pattern is intentionally
     // permissive on the published host and strict on legacy host names.
-    assert('schema $id uses the published localfirst host',
-      /localfirst\.ai|localfirst-ai/.test(schema['$id']) &&
-      !/(github\.com\/[A-Z][a-zA-Z]+\/localfirst)/.test(schema['$id']));
+    assert('schema $id uses the published occasio host',
+      /occasio\.ai|occasiolabs/.test(schema['$id']) &&
+      !/(github\.com\/[A-Z][a-zA-Z]+\/occasio)/.test(schema['$id']));
     assert('schema has $defs.toolEntry', schema['$defs'] && schema['$defs'].toolEntry);
 
     const { KNOWN_TOP_LEVEL } = require('./src/policy/validate');
@@ -8039,7 +8039,7 @@ console.log('\n3. runLocally');
       assert(`template ${name}: has $schema directive`,
         body.includes('yaml-language-server: $schema='));
       assert(`template ${name}: schema directive uses correct URL`,
-        body.includes('localfirst.ai/schemas/localfirst-policy.schema.json'));
+        body.includes('occasio.ai/schemas/occasio-policy.schema.json'));
       const parsed = loaderS.parse(body);
       const { errors, warnings } = validatePolicy(parsed);
       assert(`template ${name}: parses to a non-empty object`,
@@ -8048,7 +8048,7 @@ console.log('\n3. runLocally');
       assert(`template ${name}: validates with 0 warnings`, warnings.length === 0);
     }
 
-    // ── C. localfirst policy init --template <name> wires correctly ─────────
+    // ── C. occasio policy init --template <name> wires correctly ─────────
     {
       const tmp = pathMod10.join(osMod10.tmpdir(), `lf-34-strict-${Date.now()}.yml`);
       const r = runInitCli(['--template', 'strict', '--file', tmp], { loader: loaderS, fs: fsMod });
@@ -8197,7 +8197,7 @@ console.log('\n3. runLocally');
     assert('README links to compliance-mapping.md',                   readmeSrc.includes('docs/compliance-mapping.md'));
     assert('README links to dev-default.yml template',                readmeSrc.includes('policy-templates/dev-default.yml'));
 
-    assert('GOVERNANCE links to schema',                              govSrc.includes('schemas/localfirst-policy.schema.json'));
+    assert('GOVERNANCE links to schema',                              govSrc.includes('schemas/occasio-policy.schema.json'));
     assert('GOVERNANCE links to dev-default/strict/finance templates',
       govSrc.includes('dev-default.yml') && govSrc.includes('strict.yml') && govSrc.includes('finance.yml'));
     assert('GOVERNANCE links to compliance-mapping.md',               govSrc.includes('docs/compliance-mapping.md'));
@@ -8350,11 +8350,11 @@ console.log('\n3. runLocally');
     try { fsMod35.rmSync(tmpRoot, { recursive: true, force: true }); } catch {}
   }
 
-  // ── 36. `localfirst selftest` regression coverage ────────────────────────
+  // ── 36. `occasio selftest` regression coverage ────────────────────────
   // Guard that the user-facing self-test command exercises every claim it
   // advertises. Runs the module silently and asserts on the result object.
   {
-    console.log('\n36. localfirst selftest');
+    console.log('\n36. occasio selftest');
     const { runSelfTest } = require('./src/selftest');
     const result = await runSelfTest({ silent: true });
     assert('selftest result has ok flag',                typeof result.ok === 'boolean');
@@ -8372,11 +8372,11 @@ console.log('\n3. runLocally');
     }
   }
 
-  // ── 37. localfirst boundary — per-request three-column view ──────────────
+  // ── 37. occasio boundary — per-request three-column view ──────────────
   // Builder + renderer for the "what re-entered the model" claim. Backs the
   // public README headline with a verifiable per-request accounting.
   {
-    console.log('\n37. localfirst boundary');
+    console.log('\n37. occasio boundary');
     const { buildBoundaryView, renderBoundaryView } = require('./src/boundary');
 
     // Empty entry → null
@@ -8925,13 +8925,13 @@ console.log('\n3. runLocally');
     }
   }
 
-  // ── 41. localfirst harness — workspace + verification (no real spawn) ───
+  // ── 41. occasio harness — workspace + verification (no real spawn) ───
   // Unit coverage for the parts that don't require an actual Anthropic API
   // call: scratch workspace setup, audit-row reading, assertion helpers,
   // verifyScenario aggregation, and renderResult output shape. The real
   // child-spawn is exercised manually by the user.
   {
-    console.log('\n41. localfirst harness');
+    console.log('\n41. occasio harness');
     const fsM = require('fs');
     const pathM = require('path');
     const {
@@ -9093,12 +9093,12 @@ console.log('\n3. runLocally');
     }
   }
 
-  // ── 42. localfirst redteam — tester loop + verifier (no real SDK call) ──
+  // ── 42. occasio redteam — tester loop + verifier (no real SDK call) ──
   // Unit coverage for the autonomous tester loop using a mock Anthropic
   // client and a mock sendPromptFn. The real @anthropic-ai/sdk is never
   // required at test time.
   {
-    console.log('\n42. localfirst redteam');
+    console.log('\n42. occasio redteam');
     const fsM = require('fs');
     const {
       GOALS, TESTER_TOOLS, verifyDefense, runTesterLoop, dispatchTesterTool,
@@ -9340,7 +9340,7 @@ console.log('\n3. runLocally');
   // ── 43. Outbound deny_paths enforcement (path-2 defense) ─────────────────
   // Strip pre-baked tool_result content from outbound bodies when the
   // source file path is under deny_paths. Regression coverage for the
-  // Claude Code auto-context bypass discovered live by `localfirst
+  // Claude Code auto-context bypass discovered live by `occasio
   // harness --scenario deny-read`.
   {
     console.log('\n43. Outbound deny_paths enforcement (path-2)');
@@ -9420,7 +9420,7 @@ console.log('\n3. runLocally');
       // tool_result content replaced with marker
       const tr = r.messages[1].content[0];
       assert('outbound deny: content replaced',       tr.content === STRIP_MARKER);
-      assert('outbound deny: marker present',         tr.content.includes('LocalFirst'));
+      assert('outbound deny: marker present',         tr.content.includes('Occasio'));
       assert('outbound deny: secret bytes gone',      !tr.content.includes('TOP-SECRET-MARKER'));
     }
 
@@ -9973,7 +9973,7 @@ console.log('\n3. runLocally');
       /ANTHROPIC_API_KEY/.test(wf));
     assert('redteam.yml: references unit tests',          /test-interceptor\.js/.test(wf));
     assert('redteam.yml: references smoke tests',         /test-smoke\.js/.test(wf));
-    assert('redteam.yml: references selftest',            /localfirst\.js selftest/.test(wf));
+    assert('redteam.yml: references selftest',            /occasio\.js selftest/.test(wf));
     // Every scenario named in the workflow must be a real scenario in
     // src/harness.js.
     const referenced = (wf.match(/--scenario\s+([a-z0-9-]+)/g) || [])
@@ -10005,7 +10005,7 @@ console.log('\n3. runLocally');
 
     // Build a synthetic chain on disk: 5 hash-linked rows covering two run_ids.
     // We build the chain ourselves so the test is hermetic — no dependency on
-    // a live ~/.localfirst/pipeline-events.jsonl.
+    // a live ~/.occasio/pipeline-events.jsonl.
     const tmpDir   = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'lf-attest-test-'));
     const chainLog = pathT.join(tmpDir, 'pipeline-events.jsonl');
     const polFile  = pathT.join(tmpDir, 'policy.yml');
@@ -10032,7 +10032,7 @@ console.log('\n3. runLocally');
       return full;
     }
 
-    const r1 = appendRow({ ts: '2026-05-12T10:00:00.000Z', run_id: RUN_A, agent: 'localfirst',
+    const r1 = appendRow({ ts: '2026-05-12T10:00:00.000Z', run_id: RUN_A, agent: 'occasio',
       kind: 'policy_loaded', tool_name: 'policy_loaded', action: 'INFO',
       tool_inputs: { policy_hash: 'a'.repeat(64), policy_path: polFile, version: 1 },
       policy_source: 'user' });
@@ -10153,7 +10153,7 @@ console.log('\n3. runLocally');
     // ── 6. Policy-hash fallback marked as 'inferred' ───────────────────────
     // When the run slice contains NO policy_loaded event, the producer must
     // hash the policy file's current bytes — but that file may have been
-    // edited between the run ending and `localfirst attest` running. Mark
+    // edited between the run ending and `occasio attest` running. Mark
     // the result clearly so downstream verifiers treat it as weaker evidence.
     {
       const RUN_NO_POL = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -10305,18 +10305,18 @@ console.log('\n3. runLocally');
     const stmt = buildInTotoStatement(attestation);
     assert('sign: statement _type is in-toto v1',
       stmt._type === 'https://in-toto.io/Statement/v1');
-    assert('sign: predicateType matches LocalFirst URI',
+    assert('sign: predicateType matches Occasio URI',
       stmt.predicateType === SIGN_PREDICATE_TYPE);
     assert('sign: subject[0].digest.sha256 = last_hash',
       stmt.subject[0].digest.sha256 === attestation.audit_chain.last_hash);
     assert('sign: subject.name encodes run_id',
-      stmt.subject[0].name === `localfirst:run:${RUN}`);
+      stmt.subject[0].name === `occasio:run:${RUN}`);
     assert('sign: predicate omits signature field',
       !Object.prototype.hasOwnProperty.call(stmt.predicate, 'signature'));
 
     // ── 2. signAttestation with mocked sigstore (token mode) ──────────────
     // Realistic OIDC JWT (header.payload.sig) — we only decode the payload.
-    const fakeClaims = { sub: 'repo:localfirst-ai/localfirst:ref:refs/heads/main',
+    const fakeClaims = { sub: 'repo:occasiolabs/occasio:ref:refs/heads/main',
                          iss: 'https://token.actions.githubusercontent.com',
                          aud: 'sigstore' };
     const fakeJwt = [
@@ -10499,7 +10499,7 @@ console.log('\n3. runLocally');
       const att    = buildAttestation({ runId, logFile: chain, policyFile: policy });
 
       // Build a synthetic-but-correctly-shaped Sigstore bundle: the DSSE
-      // payload IS what `localfirst attest --sign` would have signed. The
+      // payload IS what `occasio attest --sign` would have signed. The
       // signature itself is a placeholder ('xxxx') so sigstore-python's
       // crypto check will fail (expected); the byte-equivalence step
       // succeeds iff the canonical-JSON implementations agree.
@@ -10690,7 +10690,7 @@ console.log('\n3. runLocally');
 
   // ── attest-action: run-attest validators ───────────────────────────────────
   // The GitHub Action's run-attest.js script forwards workflow inputs into
-  // `spawnSync('localfirst', [..., value, ...])`. Array-argv is shell-safe
+  // `spawnSync('occasio', [..., value, ...])`. Array-argv is shell-safe
   // but a value starting with `--` is parsed as a flag, and a comma inside
   // a filename corrupts --files-changed. These validators are the boundary.
   console.log('\nattest-action: run-attest input validators');
@@ -10720,7 +10720,7 @@ console.log('\n3. runLocally');
     assert('validCommitSha: leading dash', validCommitSha('-bc1234') === false);
 
     // Paths: no leading dash, no NUL, no newline.
-    assert('validPath: accepts absolute', validPath('/etc/localfirst/policy.yml') === true);
+    assert('validPath: accepts absolute', validPath('/etc/occasio/policy.yml') === true);
     assert('validPath: accepts windows', validPath('C:\\Users\\x\\policy.yml') === true);
     assert('validPath: rejects leading -', validPath('--evil') === false);
     assert('validPath: rejects NUL',       validPath('a\0b') === false);
@@ -10803,7 +10803,7 @@ console.log('\n3. runLocally');
     const { title, summary } = buildSummary(maliciousAtt, 'javascript:alert(1)');
 
     assert('buildSummary: title contains numeric counts',
-      title.includes('LocalFirst Attested') && /\d+ calls/.test(title));
+      title.includes('Occasio Attested') && /\d+ calls/.test(title));
     assert('buildSummary: title strips backticks/etc',
       !title.includes('`'));
     // <script> inside a Markdown code-span (`...`) is rendered as literal

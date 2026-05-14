@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * inspect.js — Cloud-boundary manifest for LocalFirst log entries.
+ * inspect.js — Cloud-boundary manifest for Occasio log entries.
  *
  * Answers per-request:
  *   - What exactly reached Anthropic?
@@ -19,7 +19,7 @@ const path = require('path');
 const os   = require('os');
 const { readDayLog, readSessionEntries } = require('./ledger');
 
-const LOG_DIR      = path.join(os.homedir(), '.localfirst');
+const LOG_DIR      = path.join(os.homedir(), '.occasio');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
 
 const col = {
@@ -65,7 +65,7 @@ function buildBoundaryFacts(entry) {
     cache_write_tokens:      entry.cache_write_tokens || 0,
     cache_savings:           entry.cache_savings || 0,
 
-    // Files in context (names + approximate token counts — estimated by LocalFirst analyzer)
+    // Files in context (names + approximate token counts — estimated by Occasio analyzer)
     files_in_context:        entry.file_tokens   || [],
 
     // How many messages were in the outbound request (exact — from request body)
@@ -149,7 +149,7 @@ function renderCloudSent(facts) {
       const cmd = (t.cmd || '?').slice(0, 48);
       console.log(`    ${cmd.padEnd(50)}  ${col.y('✂ ' + (t.distillLabel || 'distilled'))}`);
     }
-    console.log(col.d(`    Full output saved locally. Run: ${col.b('localfirst distill')}  to view.`));
+    console.log(col.d(`    Full output saved locally. Run: ${col.b('occasio distill')}  to view.`));
   }
 }
 
@@ -166,7 +166,7 @@ function renderLocalOnly(facts) {
       console.log(`    ${cmd.padEnd(48)} ${col.d(sz)}${nat}${dis}`);
     }
     console.log(col.d(`\n    Note: "local" means execution happened on this machine (not in Claude Code's`));
-    console.log(col.d(`    subprocess). Tool results were forwarded to Anthropic in LocalFirst's follow-up call.`));
+    console.log(col.d(`    subprocess). Tool results were forwarded to Anthropic in Occasio's follow-up call.`));
   }
 
   if (facts.input_tokens > 0 || facts.output_tokens > 0) {
@@ -183,7 +183,7 @@ function renderLocalOnly(facts) {
     for (const t of dist) {
       console.log(`    ${(t.cmd || '?').slice(0, 48).padEnd(50)}  ${col.y('✂ ' + (t.distillLabel || ''))}`);
     }
-    console.log(col.d(`    Run: ${col.b('localfirst distill')}  to view raw output.`));
+    console.log(col.d(`    Run: ${col.b('occasio distill')}  to view raw output.`));
   }
 }
 
@@ -212,7 +212,7 @@ function renderBudgetExceeded(facts) {
     const overage = (facts.budget_spent || 0) - facts.budget_limit;
     if (overage > 0) console.log(col.d(`    Over by:       $${overage.toFixed(4)}`));
   }
-  console.log(col.d(`    Reset: localfirst clear  |  Increase: restart with --budget N`));
+  console.log(col.d(`    Reset: occasio clear  |  Increase: restart with --budget N`));
 }
 
 // ── Main entry renderer ────────────────────────────────────────────────────────
@@ -279,7 +279,7 @@ function runInspectCli(args) {
     : todayEntries;
 
   if (!entries.length) {
-    console.log(col.d(`\n  No log entries yet. Run: localfirst claude\n`));
+    console.log(col.d(`\n  No log entries yet. Run: occasio claude\n`));
     return;
   }
 
@@ -291,7 +291,7 @@ function runInspectCli(args) {
       console.log(col.r(`  No entry at index ${n} (${entries.length} total in scope).`));
       return;
     }
-    console.log(col.b(`\n⚡ LocalFirst Inspect  —  Entry ${n + 1} of ${entries.length}`));
+    console.log(col.b(`\n⚡ Occasio Inspect  —  Entry ${n + 1} of ${entries.length}`));
     printBoundaryEntry(entries[n], n + 1, entries.length);
     return;
   }
@@ -306,7 +306,7 @@ function runInspectCli(args) {
       return;
     }
     const shortId = runFilter.slice(0, 8);
-    console.log(col.b(`\n⚡ LocalFirst Inspect  —  Run ${shortId}  (${runEntries.length} event${runEntries.length === 1 ? '' : 's'})`));
+    console.log(col.b(`\n⚡ Occasio Inspect  —  Run ${shortId}  (${runEntries.length} event${runEntries.length === 1 ? '' : 's'})`));
     runEntries.forEach((e, i) => printBoundaryEntry(e, i + 1, runEntries.length));
     return;
   }
@@ -317,7 +317,7 @@ function runInspectCli(args) {
   const slice       = entries.slice(-limit);
   const offset      = entries.length - slice.length;
 
-  console.log(col.b(`\n⚡ LocalFirst Inspect`));
+  console.log(col.b(`\n⚡ Occasio Inspect`));
   console.log(col.d(`   scope: ${scope}  ·  ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}  ·  showing last ${slice.length}\n`));
 
   slice.forEach((e, i) => printBoundaryEntry(e, offset + i + 1, entries.length));

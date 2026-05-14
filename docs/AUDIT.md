@@ -1,8 +1,8 @@
-# LocalFirst — Audit Log Format and Independent Verification
+# Occasio — Audit Log Format and Independent Verification
 
-**Audience.** Security / compliance reviewers and platform engineers who need to verify LocalFirst's audit trail without trusting LocalFirst's own verifier.
+**Audience.** Security / compliance reviewers and platform engineers who need to verify Occasio's audit trail without trusting Occasio's own verifier.
 
-**Promise.** Every governed tool call writes one row to `~/.localfirst/pipeline-events.jsonl`. Each row is hash-chained to the previous row using SHA-256, starting from a fixed genesis sentinel. Any post-hoc edit, reordering, or deletion within the chain is detectable by re-walking the file. This document specifies the row format and the canonical-serialization rules precisely enough that an independent walker (a small Python script, included) reproduces the verification end-to-end.
+**Promise.** Every governed tool call writes one row to `~/.occasio/pipeline-events.jsonl`. Each row is hash-chained to the previous row using SHA-256, starting from a fixed genesis sentinel. Any post-hoc edit, reordering, or deletion within the chain is detectable by re-walking the file. This document specifies the row format and the canonical-serialization rules precisely enough that an independent walker (a small Python script, included) reproduces the verification end-to-end.
 
 ---
 
@@ -25,7 +25,7 @@ Field semantics:
 |---|---|---|
 | `ts` | string (ISO-8601) | Event timestamp from the boundary event. |
 | `event_id` | string (UUID) | Unique per event. |
-| `session_id` | string | Stable per LocalFirst session. |
+| `session_id` | string | Stable per Occasio session. |
 | `run_id` | string | Stable per agent run. |
 | `agent` | string | Canonical agent id (e.g. `claude-code`). |
 | `protocol` | string | Wire protocol (e.g. `anthropic-http`). |
@@ -82,10 +82,10 @@ That is the value of `hash`. The `prev_hash` of the next row equals this `hash`.
 
 ## 4. Independent walker
 
-A standalone Python script, [`audit_walker.py`](audit_walker.py), implements the verification with no LocalFirst dependencies — only `hashlib`, `json`, `sys` from the standard library. To run it:
+A standalone Python script, [`audit_walker.py`](audit_walker.py), implements the verification with no Occasio dependencies — only `hashlib`, `json`, `sys` from the standard library. To run it:
 
 ```sh
-python3 docs/audit_walker.py ~/.localfirst/pipeline-events.jsonl
+python3 docs/audit_walker.py ~/.occasio/pipeline-events.jsonl
 ```
 
 Expected output for an intact chain:
@@ -96,11 +96,11 @@ OK: 31 rows verified
 
 If any row's `prev_hash` does not match the previous row's `hash`, or any row's recomputed hash does not match its stored `hash`, the script exits non-zero with a `MISMATCH at line N: …` message identifying the first inconsistency.
 
-## 5. Parity with LocalFirst's own verifier
+## 5. Parity with Occasio's own verifier
 
-LocalFirst ships its own verifier (`localfirst audit verify`). For audit credibility, both must agree on the same file. Parity is checked at every release; v0.6.4 is verified to agree on the maintainer's 31-row reference log.
+Occasio ships its own verifier (`occasio audit verify`). For audit credibility, both must agree on the same file. Parity is checked at every release; v0.6.4 is verified to agree on the maintainer's 31-row reference log.
 
-If you find a row where `audit_walker.py` and `localfirst audit verify` disagree, that is a bug. Open an issue with the row line number and we will treat it as audit-credibility-critical (i.e. fix-before-next-release).
+If you find a row where `audit_walker.py` and `occasio audit verify` disagree, that is a bug. Open an issue with the row line number and we will treat it as audit-credibility-critical (i.e. fix-before-next-release).
 
 ## 6. What this proves and does not prove
 
@@ -115,6 +115,6 @@ If you find a row where `audit_walker.py` and `localfirst audit verify` disagree
 
 ## 7. Stability commitment
 
-The audit row schema and field-order list in §1 are part of LocalFirst's stable surface. They will not change incompatibly across v0.6.x. Any future field will be added in a way that does not invalidate existing rows or re-walks of the chain.
+The audit row schema and field-order list in §1 are part of Occasio's stable surface. They will not change incompatibly across v0.6.x. Any future field will be added in a way that does not invalidate existing rows or re-walks of the chain.
 
 `audit_walker.py` in this repository is the canonical reference. If your verifier produces different bytes on the same input, your verifier is wrong, not the spec.

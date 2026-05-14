@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * dashboard.js — LocalFirst web dashboard on port 3001.
+ * dashboard.js — Occasio web dashboard on port 3001.
  *
  * Serves a single-page HTML dashboard that receives live updates
  * via Server-Sent Events pushed from the proxy's /api/session endpoint.
@@ -17,7 +17,7 @@ const os   = require('os');
 
 const DASHBOARD_PORT = 3001;
 const PROXY_PORT     = 8081;
-const LOG_DIR      = path.join(os.homedir(), '.localfirst');
+const LOG_DIR      = path.join(os.homedir(), '.occasio');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
 
 function todayLogFile() {
@@ -120,7 +120,7 @@ function getDashboardHtml() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LocalFirst Dashboard</title>
+<title>Occasio Dashboard</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -374,7 +374,7 @@ tr.detail-row td { padding: 0; border-bottom: 1px solid #333; }
 <body>
 
 <header>
-  <h1>⚡ <span>LocalFirst</span> Dashboard</h1>
+  <h1>⚡ <span>Occasio</span> Dashboard</h1>
   <div class="header-right">
     <div class="scope-toggle">
       <button class="scope-btn active" id="scope-session" onclick="setScope('session')">Session</button>
@@ -458,7 +458,7 @@ tr.detail-row td { padding: 0; border-bottom: 1px solid #333; }
     </tr>
   </thead>
   <tbody id="rows">
-    <tr><td colspan="7" class="empty">Waiting for LocalFirst proxy…</td></tr>
+    <tr><td colspan="7" class="empty">Waiting for Occasio proxy…</td></tr>
   </tbody>
 </table>
 
@@ -720,7 +720,7 @@ tr.detail-row td { padding: 0; border-bottom: 1px solid #333; }
       document.getElementById('hero-saved').textContent =
         'Saved $'+totalSaved.toFixed(4)+' this session — '+savedPct+'% off';
       document.getElementById('hero-sub').textContent =
-        'Would have cost $'+broaderCf.toFixed(4)+' without LocalFirst';
+        'Would have cost $'+broaderCf.toFixed(4)+' without Occasio';
       hero.style.display = 'block';
     } else {
       hero.style.display = 'none';
@@ -752,7 +752,7 @@ tr.detail-row td { padding: 0; border-bottom: 1px solid #333; }
 
     if (!displayEntries.length) {
       document.getElementById('rows').innerHTML =
-        '<tr><td colspan="7" class="empty">Waiting for LocalFirst proxy…</td></tr>';
+        '<tr><td colspan="7" class="empty">Waiting for Occasio proxy…</td></tr>';
       document.getElementById('footer').textContent = '';
       ['i-peak','i-ctx','i-proj'].forEach(id => document.getElementById(id).textContent='—');
       document.getElementById('graph-wrap').style.display='none';
@@ -855,7 +855,7 @@ tr.detail-row td { padding: 0; border-bottom: 1px solid #333; }
     };
 
     es.onmessage = ({ data }) => {
-      try { lastPayload = JSON.parse(data); render(lastPayload); } catch (err) { console.error('[LocalFirst]', err); }
+      try { lastPayload = JSON.parse(data); render(lastPayload); } catch (err) { console.error('[Occasio]', err); }
     };
 
     es.onerror = () => {

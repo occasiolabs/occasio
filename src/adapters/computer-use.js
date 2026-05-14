@@ -9,7 +9,7 @@
  * a small set of computer-use-specific deny directives. It is intentionally
  * decoupled from the live proxy adapter — wiring it into the request path
  * (so a real Computer-Use session is policed in real time) requires an
- * Anthropic API key for validation and lives behind the `localfirst
+ * Anthropic API key for validation and lives behind the `occasio
  * computer-use` CLI as a dry-run demo until then.
  *
  * Why a separate adapter at all
@@ -37,10 +37,10 @@
  *   str_replace_editor               → file editing (out of scope here;
  *                                       handled by existing Read/Edit path)
  *
- * Decision codes match the rest of LocalFirst: ALLOW | BLOCK | TRANSFORM.
+ * Decision codes match the rest of Occasio: ALLOW | BLOCK | TRANSFORM.
  *
  * NOT YET DONE (explicit deferrals — track at the call sites):
- *   - Live proxy adapter wiring (needs `x-localfirst-agent: computer-use`
+ *   - Live proxy adapter wiring (needs `x-occasio-agent: computer-use`
  *     header routing and tool-result injection back into the SSE stream).
  *     Today the proxy only knows Claude Code; the Cline adapter is
  *     synthetic; computer-use will be the third live adapter.

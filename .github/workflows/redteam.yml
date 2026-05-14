@@ -1,6 +1,6 @@
 name: redteam
 
-# Nightly adversarial validation of LocalFirst's defense surface.
+# Nightly adversarial validation of Occasio's defense surface.
 # Runs the harness scenario battery against a real Claude Code
 # subordinate (and the MCP server in protocol-level mode), reports
 # pass/fail per scenario, persists the result for trend tracking.
@@ -52,9 +52,9 @@ jobs:
       - name: Smoke tests (always)
         run: node test-smoke.js
       - name: Self-test (free)
-        run: node bin/localfirst.js selftest
+        run: node bin/occasio.js selftest
       - name: Harness — MCP cross-protocol (free)
-        run: node bin/localfirst.js harness --scenario mcp-deny-read --timeout 60
+        run: node bin/occasio.js harness --scenario mcp-deny-read --timeout 60
       - name: Persist result
         if: always()
         uses: actions/upload-artifact@v5
@@ -102,28 +102,28 @@ jobs:
       # (claude --max-budget-usd 0.30) so spend is bounded even if a future
       # model goes into a tool-call loop.
       - name: Harness — deny-read
-        run: node bin/localfirst.js harness --scenario deny-read --timeout 120 --json | tee out-deny-read.json
+        run: node bin/occasio.js harness --scenario deny-read --timeout 120 --json | tee out-deny-read.json
       - name: Harness — deny-shell-bypass
-        run: node bin/localfirst.js harness --scenario deny-shell-bypass --timeout 120 --json | tee out-shell.json
+        run: node bin/occasio.js harness --scenario deny-shell-bypass --timeout 120 --json | tee out-shell.json
       - name: Harness — redact-secrets-live
-        run: node bin/localfirst.js harness --scenario redact-secrets-live --timeout 120 --json | tee out-redact.json
+        run: node bin/occasio.js harness --scenario redact-secrets-live --timeout 120 --json | tee out-redact.json
       - name: Harness — symlink-bypass
-        run: node bin/localfirst.js harness --scenario symlink-bypass --timeout 120 --json | tee out-symlink.json
+        run: node bin/occasio.js harness --scenario symlink-bypass --timeout 120 --json | tee out-symlink.json
       - name: Harness — context-budget-live
-        run: node bin/localfirst.js harness --scenario context-budget-live --timeout 120 --json | tee out-budget.json
+        run: node bin/occasio.js harness --scenario context-budget-live --timeout 120 --json | tee out-budget.json
 
       # Discovery probes are advisory — they can FAIL legitimately if a
       # future bypass class is exposed. Don't fail the workflow on them;
       # surface the result.
       - name: Harness — encoded-output (discovery, advisory)
         continue-on-error: true
-        run: node bin/localfirst.js harness --scenario encoded-output --timeout 120 --json | tee out-encoded.json
+        run: node bin/occasio.js harness --scenario encoded-output --timeout 120 --json | tee out-encoded.json
       - name: Harness — plain-text-context (discovery, advisory)
         continue-on-error: true
-        run: node bin/localfirst.js harness --scenario plain-text-context --timeout 120 --json | tee out-plain.json
+        run: node bin/occasio.js harness --scenario plain-text-context --timeout 120 --json | tee out-plain.json
       - name: Harness — tool-chain-read-write-read (discovery, advisory)
         continue-on-error: true
-        run: node bin/localfirst.js harness --scenario tool-chain-read-write-read --timeout 180 --json | tee out-chain.json
+        run: node bin/occasio.js harness --scenario tool-chain-read-write-read --timeout 180 --json | tee out-chain.json
 
       - name: Persist all results
         if: always()

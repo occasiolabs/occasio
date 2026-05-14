@@ -1,4 +1,4 @@
-/* LocalFirst Attestation Viewer — client-side, no build step.
+/* Occasio Attestation Viewer — client-side, no build step.
  *
  * Two non-crypto verifications happen in the browser:
  *
@@ -13,12 +13,12 @@
  * Sigstore certificate-chain verification is DELIBERATELY not done here —
  * it requires bundling fulcio/rekor trust roots in-browser, which is a
  * serious build problem. Phase 2 instead surfaces the Rekor entry URL and
- * defers crypto-cert verification to `localfirst attest verify` or
+ * defers crypto-cert verification to `occasio attest verify` or
  * cosign / sigstore-python. The page is honest about that — see Checks.
  */
 
 const PREDICATE_TYPE =
-  'https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1';
+  'https://github.com/occasiolabs/occasio/spec/agent-attestation/v1';
 const DSSE_PAYLOAD_TYPE = 'application/vnd.in-toto+json';
 const GENESIS = '0'.repeat(64);
 
@@ -132,7 +132,7 @@ async function ingestFiles(fileList) {
   state.attestation = null; state.bundle = null; state.chain = null;
   await Promise.all([...fileList].map(ingestFile));
   if (state.attestation) render();
-  else alert('No attestation file found. Expected JSON with predicate_type set to the LocalFirst URI.');
+  else alert('No attestation file found. Expected JSON with predicate_type set to the Occasio URI.');
 }
 
 // ── Drag & drop wiring ──────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ function pushSigstoreCheck() {
   }
   // We DON'T verify the cert chain in-browser. Be explicit.
   pushCheck('sigstore signature (offline)', 'pend',
-    'cert/rekor verification deferred to `localfirst attest verify` or cosign');
+    'cert/rekor verification deferred to `occasio attest verify` or cosign');
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────

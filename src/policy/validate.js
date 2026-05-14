@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * localfirst policy validate — parse ~/.localfirst/policy.yml and report
+ * occasio policy validate — parse ~/.occasio/policy.yml and report
  * every issue that would cause silent failures at runtime.
  *
  * Two severity levels:
@@ -13,8 +13,8 @@
  *   1  — at least one error
  *
  * Usage:
- *   localfirst policy validate
- *   localfirst policy validate --file /path/to/policy.yml
+ *   occasio policy validate
+ *   occasio policy validate --file /path/to/policy.yml
  */
 
 const fs   = require('fs');
@@ -257,7 +257,7 @@ function runValidateCli(args, opts = {}) {
   } catch { /* file absent or unreadable */ }
 
   // Header
-  console.log(col.b('\n⚡ LocalFirst — Policy Validate\n'));
+  console.log(col.b('\n⚡ Occasio — Policy Validate\n'));
   const fileStatus = fileExists
     ? `${filePath}  ${col.g('(loaded)')}`
     : `${col.d(filePath)}  ${col.d('(not found)')}`;

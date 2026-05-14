@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://localfirst.ai/schemas/localfirst-policy.schema.json",
-  "title": "LocalFirst Policy",
-  "description": "Schema for ~/.localfirst/policy.yml — the single document that governs how LocalFirst handles tool calls and tool results. Authoritative reference: src/policy/loader.js (parser) and src/policy/validate.js (linter). Stable across v0.6.x.",
+  "$id": "https://occasio.ai/schemas/occasio-policy.schema.json",
+  "title": "Occasio Policy",
+  "description": "Schema for ~/.occasio/policy.yml — the single document that governs how Occasio handles tool calls and tool results. Authoritative reference: src/policy/loader.js (parser) and src/policy/validate.js (linter). Stable across v0.6.x.",
   "type": "object",
   "additionalProperties": false,
   "properties": {

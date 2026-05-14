@@ -1,14 +1,14 @@
-# Python verifier — cross-language verification of LocalFirst attestations
+# Python verifier — cross-language verification of Occasio attestations
 
 A second reference implementation of the [`agent-attestation/v1`](../spec/agent-attestation/v1/README.md) verifier, written in Python and depending only on the stdlib + optional `sigstore-python`. Lives alongside `audit_walker.py` (which it reuses for the chain step).
 
 ## Why this exists
 
-A predicate type whose verification is only feasible in the language that produced it is not a standard — it is one vendor's artifact. The Python verifier proves that LocalFirst attestations are **language-independent** and can be re-verified by any auditor in their environment of choice.
+A predicate type whose verification is only feasible in the language that produced it is not a standard — it is one vendor's artifact. The Python verifier proves that Occasio attestations are **language-independent** and can be re-verified by any auditor in their environment of choice.
 
 This is the proof artifact for the OpenSSF / in-toto Attestation Registry submission. The same predicate JSON + Sigstore bundle is verified pass/fail by:
 
-- `localfirst attest verify` (Node)
+- `occasio attest verify` (Node)
 - `python docs/attest_verify.py` (Python)
 - The browser viewer at [`integrations/attest-view/`](../integrations/attest-view/) (in-browser, partial — Sigstore crypto is deferred to one of the two above)
 
@@ -28,7 +28,7 @@ The Python `canonicalize` and the JS `canonicalize` must stay in lockstep. The t
 
 ```bash
 # Verify a signed attestation pair end-to-end
-python docs/attest_verify.py path/to/localfirst-attestation.json
+python docs/attest_verify.py path/to/occasio-attestation.json
 
 # Explicit bundle path (default: <attestation>.sigstore.json sidecar)
 python docs/attest_verify.py path/to/att.json --bundle path/to/bundle.json
@@ -52,7 +52,7 @@ Each check is independent. Skipping any one of them is not the same as a full ve
 
 ## Round-trip claim
 
-For a payload produced by `localfirst attest --sign` and verified by `localfirst attest verify`, the Python verifier produces the same pass/fail result on:
+For a payload produced by `occasio attest --sign` and verified by `occasio attest verify`, the Python verifier produces the same pass/fail result on:
 - the unmodified payload (both pass on steps 2+3; step 1 requires sigstore-python)
 - a tampered predicate (both fail at step 2)
 - a tampered chain (both fail at step 3)

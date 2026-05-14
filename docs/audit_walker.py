@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Independent walker for LocalFirst's pipeline-events.jsonl audit log.
+Independent walker for Occasio's pipeline-events.jsonl audit log.
 
-Re-walks the SHA-256 hash chain without using any LocalFirst code, so the
-audit-trail integrity claim does not depend on trusting LocalFirst's own
+Re-walks the SHA-256 hash chain without using any Occasio code, so the
+audit-trail integrity claim does not depend on trusting Occasio's own
 verifier. See docs/AUDIT.md for the row schema and the canonical-
 serialization rules this script implements.
 
 Usage:
-    python3 audit_walker.py ~/.localfirst/pipeline-events.jsonl
+    python3 audit_walker.py ~/.occasio/pipeline-events.jsonl
 
 Exit code 0 on success, 1 on first inconsistency or I/O error.
 """

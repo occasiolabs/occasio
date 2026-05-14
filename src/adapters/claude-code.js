@@ -241,7 +241,7 @@ async function runToolLoop({
       bodyLen: initialSse.length,
       preview: initialSse.toString('utf8').slice(0, 200),
     };
-    fs.appendFileSync(path.join(os.homedir(), '.localfirst', 'interceptor-debug.log'), JSON.stringify(dbg) + '\n');
+    fs.appendFileSync(path.join(os.homedir(), '.occasio', 'interceptor-debug.log'), JSON.stringify(dbg) + '\n');
   }
 
   if (initialStop !== 'tool_use') return { intercepted: false, toolsAttempted: 0, fallbackReasons: [] };
@@ -299,7 +299,7 @@ async function runToolLoop({
         .map(b => (b.input?.command || '').trim())
         .filter(Boolean);
       fs.appendFileSync(
-        path.join(os.homedir(), '.localfirst', 'interceptor-debug.log'),
+        path.join(os.homedir(), '.occasio', 'interceptor-debug.log'),
         JSON.stringify({
           ts: new Date().toTimeString().slice(0, 8),
           fallback: partialBatch ? 'partial batch' : 'tool not handled',
@@ -398,7 +398,7 @@ async function runToolLoop({
     messages = [...messages, { role: 'user', content: toolResults }];
 
     // Stage 2: secret-scan-on-tool-results runs through the policy engine.
-    // The engine reads ~/.localfirst/policy.yml and emits PASS or BLOCK.
+    // The engine reads ~/.occasio/policy.yml and emits PASS or BLOCK.
     // Legacy `mode === 'block_secrets'` semantics are preserved by passing
     // the mode into the evaluator.
     const policy = require('../policy/engine');

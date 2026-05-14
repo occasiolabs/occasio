@@ -13,7 +13,7 @@
  * field) are preserved as-is; the chain starts at GENESIS from the first
  * hash-bearing row.
  *
- * Verification: see src/audit/verifier.js / `localfirst audit verify`.
+ * Verification: see src/audit/verifier.js / `occasio audit verify`.
  */
 
 const fs     = require('fs');
@@ -22,7 +22,7 @@ const os     = require('os');
 const crypto = require('crypto');
 const { normalizeToolInputsForAudit } = require('./input-normalizer');
 
-const DEFAULT_LOG = path.join(os.homedir(), '.localfirst', 'pipeline-events.jsonl');
+const DEFAULT_LOG = path.join(os.homedir(), '.occasio', 'pipeline-events.jsonl');
 
 // Sentinel prev_hash for the first row in a chain (64 zero hex digits).
 const GENESIS = '0'.repeat(64);
@@ -137,7 +137,7 @@ function createAuditor(filePath = DEFAULT_LOG) {
       event_id:      crypto.randomUUID(),
       session_id:    undefined,
       run_id:        undefined,
-      agent:         'localfirst',
+      agent:         'occasio',
       protocol:      'internal',
       direction:     'inbound',
       kind:          'policy_loaded',

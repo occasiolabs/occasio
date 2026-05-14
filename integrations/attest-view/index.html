@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
-<title>LocalFirst Attestation Viewer</title>
+<title>Occasio Attestation Viewer</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <h1>LocalFirst Attestation Viewer</h1>
+  <h1>Occasio Attestation Viewer</h1>
   <p class="sub">
     Predicate type
-    <code>https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1</code>
+    <code>https://github.com/occasiolabs/occasio/spec/agent-attestation/v1</code>
   </p>
 </header>
 
@@ -20,8 +20,8 @@
   <section id="dropzone" class="dropzone">
     <p><strong>Drag &amp; drop</strong> the attestation files here</p>
     <p class="hint">
-      Expected: <code>localfirst-attestation.json</code> +
-      (optionally) <code>localfirst-attestation.sigstore.json</code>.<br>
+      Expected: <code>occasio-attestation.json</code> +
+      (optionally) <code>occasio-attestation.sigstore.json</code>.<br>
       Download both from the workflow run's <em>Artifacts</em> section, then drop them here together.
     </p>
     <p>or
@@ -47,7 +47,7 @@
       <p class="hint">
         The browser walks the audit chain client-side and re-verifies the DSSE
         payload matches the attestation. The Sigstore signature is verified
-        by an offline tool (<code>localfirst attest verify</code>) or by
+        by an offline tool (<code>occasio attest verify</code>) or by
         opening the Rekor entry below — this page does not perform crypto
         verification on the cert chain.
       </p>
@@ -71,9 +71,9 @@
 
 <footer>
   <p>
-    <a href="https://github.com/localfirst-ai/localfirst">localfirst-ai/localfirst</a> ·
+    <a href="https://github.com/occasiolabs/occasio">occasiolabs/occasio</a> ·
     Apache-2.0 ·
-    <a href="https://github.com/localfirst-ai/localfirst/blob/main/spec/agent-attestation/v1/README.md">Spec</a>
+    <a href="https://github.com/occasiolabs/occasio/blob/main/spec/agent-attestation/v1/README.md">Spec</a>
   </p>
 </footer>
 

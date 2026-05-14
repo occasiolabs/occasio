@@ -1,12 +1,12 @@
 # Validation Evidence
 
-LocalFirst is built on an evidence-driven loop. Every interception path is live-validated against real Claude Code traffic before it counts as supported. This document records what was validated, when, and how — so anyone can reproduce or audit the claims.
+Occasio is built on an evidence-driven loop. Every interception path is live-validated against real Claude Code traffic before it counts as supported. This document records what was validated, when, and how — so anyone can reproduce or audit the claims.
 
 ## Methodology
 
 Each slice follows the same loop:
 
-1. **Observe** — capture an actual tool-call command from `~/.localfirst/interceptor-debug.log` after a real Claude Code session.
+1. **Observe** — capture an actual tool-call command from `~/.occasio/interceptor-debug.log` after a real Claude Code session.
 2. **Implement** — write the narrowest possible handler for the observed shape. No speculative coverage.
 3. **Live-validate** — run a fresh session, confirm the pattern triggers locally, confirm `check-validation` passes against the new debug log.
 4. **Record** — note the live-validation timestamp and the evidence in the slice's project memory.
@@ -39,7 +39,7 @@ D-2 is recorded as a cautionary example: it was implemented for a pattern the te
 
 ### Secret scanning
 
-Eight high-confidence patterns: Anthropic keys, GitHub PATs, AWS access keys, private-key headers, database connection URLs, `api_key=` / `api-key=`, `password=`, and `access|bearer|auth` tokens. The scanner runs against every tool result in-process. `localfirst demo` exercises the same `scanSecrets` function against five fixture files in 10 seconds — same code path that fires in real sessions.
+Eight high-confidence patterns: Anthropic keys, GitHub PATs, AWS access keys, private-key headers, database connection URLs, `api_key=` / `api-key=`, `password=`, and `access|bearer|auth` tokens. The scanner runs against every tool result in-process. `occasio demo` exercises the same `scanSecrets` function against five fixture files in 10 seconds — same code path that fires in real sessions.
 
 ## Test surface
 
@@ -57,13 +57,13 @@ The "84% saved" figure in the README is from a real 7-request session captured o
 - `context_savings` — compounding model based on the JSONL log sequence (no heuristic; see `calcCompoundingSavings`)
 - `cache_savings` — exact, from Anthropic's prompt-cache headers
 
-The math and the savings buckets are visible in `localfirst status` under `Breakdown:` and recomputed on every read of the session.
+The math and the savings buckets are visible in `occasio status` under `Breakdown:` and recomputed on every read of the session.
 
 ## Stage 3 — Cline live validation (2026-05-09)
 
-Real Cline traffic was routed through the proxy and produced verifiable canonical-pipeline dispatch. This is the boundary-layer claim — that LocalFirst's interior is genuinely agent-agnostic — backed by a second agent end-to-end.
+Real Cline traffic was routed through the proxy and produced verifiable canonical-pipeline dispatch. This is the boundary-layer claim — that Occasio's interior is genuinely agent-agnostic — backed by a second agent end-to-end.
 
-**Routing signal used:** SSE content fingerprint. The user's Cline release did not forward the explicit `x-localfirst-agent` header through its UI, so the proxy fell back to scanning tool-block names in the response and matching them against the registered agent maps. `read_file` is a Cline-registered name; the agent router selected the cline adapter automatically.
+**Routing signal used:** SSE content fingerprint. The user's Cline release did not forward the explicit `x-occasio-agent` header through its UI, so the proxy fell back to scanning tool-block names in the response and matching them against the registered agent maps. `read_file` is a Cline-registered name; the agent router selected the cline adapter automatically.
 
 **Verbatim proxy stderr from the validation run** (01:42, 2026-05-09):
 
@@ -81,7 +81,7 @@ What this proves:
 
 **Caveats** (operational, not architectural):
 
-- The handler returned exit 1 because Cline sent a path relative to its VS Code workspace and the proxy resolved it relative to its own CWD. Workaround for further validation: start `localfirst claude` from the Cline workspace root. A workspace-aware path-resolution slice is a future operational enhancement, not a structural gap.
+- The handler returned exit 1 because Cline sent a path relative to its VS Code workspace and the proxy resolved it relative to its own CWD. Workaround for further validation: start `occasio claude` from the Cline workspace root. A workspace-aware path-resolution slice is a future operational enhancement, not a structural gap.
 - Subsequent Cline runs (01:48 onward) emitted only `attempt_completion` because Cline cached prior file content. `attempt_completion` is intentionally unmapped — it correctly falls through to PASS. These runs do not constitute additional validation evidence; the 01:42 run is the canonical record.
 - Cline's full tool surface (`write_to_file`, `replace_in_file`, `browser_action`, `use_mcp_tool`, etc.) is intentionally unmapped today. Adding canonical handlers for any of them is a separate forward slice if and when it becomes a product priority.
 - The mid-loop fallback counter bug surfaced during this validation (`Ran locally: 0 of 3` despite the canonical pipeline running) was fixed in commit `ebdda9a`. The fix is unit-test verified but has not been live-confirmed against a Cline session that exercises both an interceptable tool and a follow-up unmapped tool in the same conversation. The fix is correct; it just hasn't been observed in production traffic.
@@ -95,7 +95,7 @@ What this proves:
 - `prev_hash` — SHA-256 hex of the previous row (`"0000...0000"` for the first row)
 - `hash` — SHA-256 hex of `JSON.stringify(rowWithoutHash)`, where `rowWithoutHash` includes `prev_hash`
 
-Chain continuity is verified by `localfirst audit verify`. The verifier checks: (1) first chained row's `prev_hash` equals the GENESIS sentinel, (2) each subsequent row's `prev_hash` equals the computed hash of the previous row, (3) stored hash equals recomputed hash for every row.
+Chain continuity is verified by `occasio audit verify`. The verifier checks: (1) first chained row's `prev_hash` equals the GENESIS sentinel, (2) each subsequent row's `prev_hash` equals the computed hash of the previous row, (3) stored hash equals recomputed hash for every row.
 
 Tamper detection: modifying any field in any row causes a hash mismatch on that row and a chain-break error on every subsequent row. The verifier uses the recomputed hash (not the stored hash) to advance the expected chain, so a single tampered row generates cascading errors — making the tamper location unambiguous.
 
@@ -108,4 +108,4 @@ The claim is tamper-evident (any modification is detectable), not tamper-proof w
 - **Windows is the live-validated platform.** Mac support is in progress; contributions for `cd`/path handling on Mac are welcome.
 - **Read-only Bash coverage.** Write commands (`git push`, `npm install`, etc.) intentionally fall through to the cloud path.
 - **No statefulness across sessions.** The cwd tracking in compound chains is local to a single execution; the proxy never mutates `process.cwd()`.
-- **The Anthropic prompt cache exists independently.** The cache_savings line reflects savings the user gets even without LocalFirst. We surface it for completeness, but it is not LocalFirst-attributable.
+- **The Anthropic prompt cache exists independently.** The cache_savings line reflects savings the user gets even without Occasio. We surface it for completeness, but it is not Occasio-attributable.

@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * localfirst selftest — exercise the highest-risk governance claims against a
- * scratch temp setup. Never touches the user's real ~/.localfirst chain.
+ * occasio selftest — exercise the highest-risk governance claims against a
+ * scratch temp setup. Never touches the user's real ~/.occasio chain.
  *
  * Scope (deliberately small):
  *   1. read_file vs deny_paths           → BLOCK path-denied
@@ -68,7 +68,7 @@ async function runSelfTest(opts = {}) {
     log(`  ${ok ? '✓' : '✗'}  ${String(id).padStart(2)}. ${name}${ok ? '' : `   — ${detail}`}`);
   };
 
-  log('LocalFirst self-test');
+  log('Occasio self-test');
   log(`  scratch root: ${fixtures.root}`);
   log(`  audit file:   ${auditPath}`);
   log('');

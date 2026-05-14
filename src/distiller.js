@@ -103,7 +103,7 @@ function distill(cmd, output) {
 
   const nonEmpty = lines.filter(l => l.trim()).length;
   const content  = lines.slice(0, maxLines).join('\n')
-    + `\n[LocalFirst: ${nonEmpty} ${unitLabel} total — showing first ${maxLines}. Full output not re-sent to model.]`;
+    + `\n[Occasio: ${nonEmpty} ${unitLabel} total — showing first ${maxLines}. Full output not re-sent to model.]`;
 
   const savedBytes  = Math.max(0, rawBytes - Buffer.byteLength(content, 'utf8'));
   const savedTokens = Math.ceil(savedBytes / 4);
@@ -142,7 +142,7 @@ function distillTestOutput(output, rawBytes, cmd) {
 
   const chosen = [...keepIdx].sort((a, b) => a - b).map(i => lines[i]);
   const totalNonEmpty = lines.filter(l => l.trim()).length;
-  const note = `[LocalFirst: test output ${totalNonEmpty} lines — showing ${chosen.length} failure/summary lines. Full output saved for inspection: localfirst distill]`;
+  const note = `[Occasio: test output ${totalNonEmpty} lines — showing ${chosen.length} failure/summary lines. Full output saved for inspection: occasio distill]`;
   const content = chosen.join('\n') + '\n' + note;
 
   const savedBytes  = Math.max(0, rawBytes - Buffer.byteLength(content, 'utf8'));

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * sign.js — wrap a LocalFirst Phase-0 attestation in an in-toto Statement v1
+ * sign.js — wrap a Occasio Phase-0 attestation in an in-toto Statement v1
  * envelope and Sigstore-sign it keyless. Outputs (a) a populated
  * `signature` object to inline in the predicate JSON, and (b) the Sigstore
  * Bundle as a sidecar file for cryptographic verification.
@@ -24,7 +24,7 @@ const crypto = require('crypto');
 const { canonicalize } = require('./canonicalize');
 
 const PREDICATE_TYPE =
-  'https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1';
+  'https://github.com/occasiolabs/occasio/spec/agent-attestation/v1';
 const STATEMENT_TYPE     = 'https://in-toto.io/Statement/v1';
 const DSSE_PAYLOAD_TYPE  = 'application/vnd.in-toto+json';
 const SIGSTORE_AUDIENCE  = 'sigstore';
@@ -50,7 +50,7 @@ function buildInTotoStatement(attestation) {
     predicateType: PREDICATE_TYPE,
     subject: [
       {
-        name:   `localfirst:run:${attestation.subject.run_id}`,
+        name:   `occasio:run:${attestation.subject.run_id}`,
         digest: { sha256: attestation.audit_chain.last_hash },
       },
     ],

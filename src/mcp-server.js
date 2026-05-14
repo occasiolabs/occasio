@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * mcp-server.js — LocalFirst MCP server (registered as "lf").
+ * mcp-server.js — Occasio MCP server (registered as "lf").
  *
  * Exposes three tools under the mcp__lf__* namespace:
  *   read_file   — reads a local file, returns cat-n formatted content
@@ -12,8 +12,8 @@
  * Normalization from wire shapes to internal handleR* shapes is done in
  * mcp-normalize.js before execution.
  *
- * Every call is logged to ~/.localfirst/mcp-experiment.jsonl for adoption
- * measurement via `localfirst mcp-experiment`.
+ * Every call is logged to ~/.occasio/mcp-experiment.jsonl for adoption
+ * measurement via `occasio mcp-experiment`.
  *
  * Runs on stdio (JSON-RPC 2.0). Registered in .claude/settings.json as "lf".
  */
@@ -27,7 +27,7 @@ const pipeline       = require('./core/pipeline');
 const { makeBoundaryEvent } = require('./core/boundary-event');
 const { createAuditor }     = require('./audit/jsonl-auditor');
 
-const LOG_FILE = path.join(os.homedir(), '.localfirst', 'mcp-experiment.jsonl');
+const LOG_FILE = path.join(os.homedir(), '.occasio', 'mcp-experiment.jsonl');
 
 // v0.6.5 (Step 2): MCP traffic is now governed by the same canonical pipeline
 // as the Claude Code adapter. Tool calls are evaluated by policy.engine,
@@ -35,15 +35,15 @@ const LOG_FILE = path.join(os.homedir(), '.localfirst', 'mcp-experiment.jsonl');
 // the same components, the same policy.yml, the same hash-chained log.
 //
 // Concurrency note: mcp-server.js runs as a child process of the agent (e.g.
-// Claude Desktop) and writes to the same ~/.localfirst/pipeline-events.jsonl
+// Claude Desktop) and writes to the same ~/.occasio/pipeline-events.jsonl
 // as the Claude Code proxy. v0.6.5 ASSUMES single-writer discipline — only
 // one of (Claude Code proxy, MCP server) appends to the file at a time. If
 // both are running concurrently with audit traffic, an interleaved append on
 // Windows can corrupt the chain. A dedicated slice (deferred) will harden
 // concurrent audit writing; until then, run one or the other.
 // Audit-file override via env var (symmetric with the Claude Code proxy
-// in src/index.js). Used by `localfirst harness --scenario mcp-*` to
-// keep MCP test traffic out of the user's real ~/.localfirst chain.
+// in src/index.js). Used by `occasio harness --scenario mcp-*` to
+// keep MCP test traffic out of the user's real ~/.occasio chain.
 let mcpAuditor = createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undefined);
 
 // v0.6.6: emit a policy_loaded row on first policy load and on every
@@ -58,15 +58,15 @@ let mcpAuditor = createAuditor(process.env.LOCALFIRST_AUDIT_FILE || undefined);
     const status = mcpAuditor.recordPolicyLoaded(change);
     if (status && status.ok === false) {
       const dropped = status.droppedRow ? JSON.stringify(status.droppedRow) : '(no row attached)';
-      process.stderr.write(`\n[localfirst-mcp][audit-fatal] policy_loaded write failed: ${status.error?.message}\n`);
-      process.stderr.write(`[localfirst-mcp][audit-fatal] dropped row: ${dropped}\n`);
-      process.stderr.write(`[localfirst-mcp][audit-fatal] aborting MCP server.\n`);
+      process.stderr.write(`\n[occasio-mcp][audit-fatal] policy_loaded write failed: ${status.error?.message}\n`);
+      process.stderr.write(`[occasio-mcp][audit-fatal] dropped row: ${dropped}\n`);
+      process.stderr.write(`[occasio-mcp][audit-fatal] aborting MCP server.\n`);
       setTimeout(() => process.exit(1), 250);
     }
   });
   // Cold-start trigger so the row lands before the first tool call.
   try { policyLoaderM.load(); } catch (e) {
-    process.stderr.write(`[localfirst-mcp] policy load failed at startup: ${e.message}\n`);
+    process.stderr.write(`[occasio-mcp] policy load failed at startup: ${e.message}\n`);
   }
 }
 
@@ -266,9 +266,9 @@ async function handleRequest(req) {
       // back up.
       if (e && e.name === 'AuditWriteError') {
         const dropped = e.droppedRow ? JSON.stringify(e.droppedRow) : '(no row attached)';
-        process.stderr.write(`\n[localfirst-mcp][audit-fatal] ${e.message}\n`);
-        process.stderr.write(`[localfirst-mcp][audit-fatal] dropped row: ${dropped}\n`);
-        process.stderr.write(`[localfirst-mcp][audit-fatal] aborting MCP server.\n`);
+        process.stderr.write(`\n[occasio-mcp][audit-fatal] ${e.message}\n`);
+        process.stderr.write(`[occasio-mcp][audit-fatal] dropped row: ${dropped}\n`);
+        process.stderr.write(`[occasio-mcp][audit-fatal] aborting MCP server.\n`);
         try {
           respond(id, {
             content: [{ type: 'text', text: 'audit-fatal: MCP server aborting' }],
@@ -309,7 +309,7 @@ process.on('SIGTERM', () => process.exit(0));
 
 // Test hooks. Exposed so test-interceptor.js can drive handleRequest
 // directly with a temp auditor and a captured stdout, without spawning a
-// child process. Production callers (bin/localfirst-mcp.js) ignore these.
+// child process. Production callers (bin/occasio-mcp.js) ignore these.
 module.exports = {
   handleRequest,
   TOOLS,

@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/env localfirst start
+ExecStart=/usr/bin/env occasio start
 Restart=always
 RestartSec=2
 # v0.6.4: the proxy aborts with exit code 1 if it cannot append to its

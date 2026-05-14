@@ -930,7 +930,7 @@ function anthropicRequest(body, authHeaders) {
  * @param {object} [opts]
  * @param {number}  [opts.maxRounds=5]
  * @param {boolean} [opts.verbose=false]
- * @param {string}  [opts.mode='intercept']  LocalFirst mode — used to decide
+ * @param {string}  [opts.mode='intercept']  Occasio mode — used to decide
  *   whether to abort when secrets are found in tool results.  Pass the same
  *   mode string that index.js uses ('intercept' | 'block_secrets' | 'log').
  *
@@ -1101,7 +1101,7 @@ async function runOneRound(toolBlocks, ctx) {
       // Per-call boundary accounting: how many bytes the tool produced (raw)
       // vs how many actually re-entered the model's next request (kept), plus
       // a one-token reason code identifying what shaping prevented re-entry.
-      // Drives `localfirst boundary` and the public "control what re-enters
+      // Drives `occasio boundary` and the public "control what re-enters
       // the model" claim.
       const rawBytes  = Buffer.byteLength(rawOutput || '');
       const keptBytes = Buffer.byteLength(output    || '');

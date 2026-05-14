@@ -2,7 +2,7 @@
 canonicalize.py — RFC 8785 subset for byte-stable JSON serialisation.
 
 Companion to docs/audit_walker.py and docs/attest_verify.py: lets an
-auditor in a Python-only environment re-verify a LocalFirst
+auditor in a Python-only environment re-verify a Occasio
 attestation against the producer's canonical form without trusting
 the producer's code.
 

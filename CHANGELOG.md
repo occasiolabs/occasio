@@ -16,13 +16,13 @@ block, every transform, every redacted secret, plus the active policy's
 hash and rules digest. Signed via Sigstore keyless using GitHub Actions
 OIDC — no key management.
 
-- `localfirst attest --run-id <uuid>` — build an attestation predicate
-- `localfirst attest --sign` — Sigstore-sign via GitHub OIDC (CI)
-- `localfirst attest verify <file>` — three-step independent verification
+- `occasio attest --run-id <uuid>` — build an attestation predicate
+- `occasio attest --sign` — Sigstore-sign via GitHub OIDC (CI)
+- `occasio attest verify <file>` — three-step independent verification
 
 Two reference verifiers ship:
 
-- Node: `localfirst attest verify` (full pipeline + Sigstore)
+- Node: `occasio attest verify` (full pipeline + Sigstore)
 - Python: `python docs/attest_verify.py` (stdlib + optional `sigstore-python`)
 
 Cross-language byte-equivalence on the predicate canonicalization step
@@ -48,7 +48,7 @@ Four detectors over a time window of the audit chain:
 - `unknown-tool-input` — previously-unseen `tool_inputs` key shape
 - `secret-redact-rate` — redaction rate spike or first-time leak
 
-`localfirst anomalies` runs all four against the active chain with
+`occasio anomalies` runs all four against the active chain with
 human or `--json` output. Exit codes: 0 / 1 / 2 / 3 = no signal / low /
 medium-or-high / detector error. Detector crashes are separated from
 real alerts (`result.errors`) so compliance reviewers don't see
@@ -63,13 +63,13 @@ baseline and what was tuned vs the starter values.
 
 Policy + decision engine for Anthropic Computer Use tool surface
 (`computer.screenshot`, `computer.type`, `computer.mouse_move`, `bash`,
-etc.). Same governance vocabulary as the rest of LocalFirst:
+etc.). Same governance vocabulary as the rest of Occasio:
 `deny_keyboard_patterns`, `deny_command_patterns`, plus a built-in
 always-on lethal-command blacklist (sudo, recursive root delete, mkfs,
 fork-bomb). PCRE-style inline flag prefixes `(?i)`/`(?m)` translated to
 JS RegExp flags so policy authors use familiar syntax.
 
-`localfirst computer-use --dry-run --from <jsonl>` applies a policy to
+`occasio computer-use --dry-run --from <jsonl>` applies a policy to
 synthetic Computer-Use traffic and reports each decision. Live proxy
 adapter wiring is deferred until at least one design partner is on it;
 the dry-run CLI exists today.
@@ -79,8 +79,8 @@ the dry-run CLI exists today.
 Production CLIs that exercise full pipelines against synthetic data in
 seconds, with no external dependencies:
 
-- `localfirst demo attest` — end-to-end attestation pipeline (30 s)
-- `localfirst demo anomalies` — EDR smoke test, all four detectors fire
+- `occasio demo attest` — end-to-end attestation pipeline (30 s)
+- `occasio demo anomalies` — EDR smoke test, all four detectors fire
 
 ### Added — Reference Pipeline + EDR walkthrough
 
@@ -99,12 +99,12 @@ seconds, with no external dependencies:
 - `package.json` `files` array now includes `docs/` and `spec/`. The
   Python verifier (`docs/attest_verify.py`), audit walker, predicate
   spec, and the EDR / reference-pipeline walkthroughs all ship in the
-  npm tarball — running `localfirst attest verify` after `npm install`
+  npm tarball — running `occasio attest verify` after `npm install`
   no longer requires cloning the GitHub repo for the reference
   materials.
-- `package.json` `bin` adds `localfirst-mcp` as a first-class command.
+- `package.json` `bin` adds `occasio-mcp` as a first-class command.
   MCP-server invocation no longer needs the full node_modules path in
-  `mcp_config.json` — `localfirst-mcp` is on `PATH` after global
+  `mcp_config.json` — `occasio-mcp` is on `PATH` after global
   install.
 - README rewritten to lead with the value promise instead of the
   interception technique. Four-layer architecture diagram, runnable
@@ -146,7 +146,7 @@ seconds, with no external dependencies:
 
 ## [0.8.0] — 2026-05-11  Path-1 ↔ path-2 defense symmetry + Claude-in-Claude self-test stack
 
-The first release where LocalFirst can validate its own governance claims
+The first release where Occasio can validate its own governance claims
 against a real Claude Code subordinate session — and where every defense
 class (deny_paths, redact-secrets, distill-output, max_output_tokens) is
 enforced symmetrically at both the tool-call gate AND the outbound auto-
@@ -161,7 +161,7 @@ synthetic `tool_use Read` + `tool_result <file content>` pairs into the
 OUTBOUND request body as agentic context BEFORE the model has had a chance
 to call any tool. Those tool_results never triggered path-1 because no
 model-initiated call happened. Two concrete bypasses found by the new
-`localfirst harness` against a real subordinate session:
+`occasio harness` against a real subordinate session:
 
 - **deny_paths bypass.** A denied file was read via auto-context and its
   bytes reached the model anyway. Closed by a new path-2 gate in
@@ -183,15 +183,15 @@ max_output_tokens enforcement. Defense matrix:
 
 Audit reasons: `outbound-context-path-denied`, `outbound-secret-redacted[-strict]`,
 `outbound-shaping-<step>+<step>`. Each path-2 enforcement writes its own
-audit row with `direction: 'outbound'` so `localfirst report` and the
+audit row with `direction: 'outbound'` so `occasio report` and the
 independent Python walker see both gates uniformly.
 
 ### Added — self-test infrastructure
 
-**`localfirst harness`.** End-to-end governance validation against a real
-Claude Code subordinate. Spawns `localfirst claude --print <prompt>` with
+**`occasio harness`.** End-to-end governance validation against a real
+Claude Code subordinate. Spawns `occasio claude --print <prompt>` with
 scratch policy + scratch audit chain in `os.tmpdir()`, never touches the
-user's real `~/.localfirst/`. Authenticates via Claude Code's bundled
+user's real `~/.occasio/`. Authenticates via Claude Code's bundled
 auth — no `ANTHROPIC_API_KEY` required when the user is signed in via
 Claude Pro. Nine v1 scenarios: `deny-read`, `deny-shell-bypass`,
 `symlink-bypass`, `redact-secrets-live`, `context-budget-live`,
@@ -200,7 +200,7 @@ Claude Pro. Nine v1 scenarios: `deny-read`, `deny-shell-bypass`,
 level, $0 per run). Each scenario also runs an independent audit-chain
 verifier so a defended-but-chain-broken outcome is correctly FAILed.
 
-**`localfirst redteam`.** Autonomous adversarial tester. A second LLM
+**`occasio redteam`.** Autonomous adversarial tester. A second LLM
 (default Haiku 4.5) is given an exfiltration goal and a 4-tool surface
 (`send_prompt`, `read_audit_log`, `read_subject_response`, `done`) to
 probe the subordinate. Tester's verdict is recorded but NOT trusted —
@@ -210,7 +210,7 @@ nothing") are surfaced as their own signal. Hard caps: `--max-turns`,
 `--tester-budget` (USD). Peer dep on `@anthropic-ai/sdk`, dynamic
 require with install hint if missing.
 
-**`localfirst selftest`.** Eight in-process governance checks on a
+**`occasio selftest`.** Eight in-process governance checks on a
 scratch policy and scratch audit chain. Synthetic boundary events
 (no LLM), runs in <1 s. Covers `read_file` deny, shell-bash deny,
 shell-powershell deny, allow-path positive, secret BLOCK under strict
@@ -218,22 +218,22 @@ mode, redact-secrets TRANSFORM, audit-chain verify, chain shape sanity.
 
 ### Added — context-control / observability
 
-**`localfirst boundary`.** Per-request three-column view: tool output
+**`occasio boundary`.** Per-request three-column view: tool output
 **produced**, tool output that **re-entered** the model, tool output
 **prevented** from re-entering and why (`distill_clip` / `redact_secrets` /
 `context_budget` / `block`). Backed by new `bytes` / `kept_bytes` /
 `prevention_reason` fields on every recorded tool call.
 
-**`localfirst baseline`.** Per-project behaviour baseline. `learn` mines
+**`occasio baseline`.** Per-project behaviour baseline. `learn` mines
 the last N days of logs scoped to the current cwd into
-`~/.localfirst/baseline/<cwd-hash>.json`; `compare` walks the most recent
+`~/.occasio/baseline/<cwd-hash>.json`; `compare` walks the most recent
 session and surfaces anomalies: `sensitive_path` (HIGH — covers `~/.ssh`,
 `~/.aws`, `*/credentials`, `*.env*`, `/etc/(shadow|passwd|sudoers)`,
 even on cold start), `new_path` / `new_tool` (medium), `new_shell_verb`
 (HIGH for `curl`/`wget`/`ssh`/`rm`/`sudo`, medium otherwise),
 `volume_spike` (>1.5× p95).
 
-**`localfirst replay --attribute`.** Per-run token attribution. Answers
+**`occasio replay --attribute`.** Per-run token attribution. Answers
 "who ate the context window?" without persisting request bodies. Splits
 the run's input tokens into tool_contributions (per canonical tool
 category, approx), cache_reuse (exact), residual (system + user + carry-
@@ -290,8 +290,8 @@ workflow YAML is a real entry in `SCENARIOS` in `src/harness.js`.
 - 2372 unit / 113 smoke / 8 selftest assertions, all green.
 - Live-validated all five defense scenarios + the MCP cross-protocol
   scenario from a real Claude Code subordinate session via
-  `localfirst harness`.
-- `localfirst --version` now prints `localfirst v0.8.0`.
+  `occasio harness`.
+- `occasio --version` now prints `occasio v0.8.0`.
 
 ## [0.7.1] — 2026-05-11  Context-control framing + four observability features
 
@@ -322,7 +322,7 @@ new framing end-to-end, and one critical enforcement bypass is closed.
 
 ### Added — control plane
 
-**`localfirst boundary` (Feature 1).**
+**`occasio boundary` (Feature 1).**
 - Per-request three-column view: tool output **produced**, tool output that
   **re-entered** the model's next request, tool output **prevented** from
   re-entering and why. Reads the existing JSONL log and projects it through
@@ -337,17 +337,17 @@ new framing end-to-end, and one critical enforcement bypass is closed.
 - New `policy.yml` field on any tool entry. Applied as the FINAL clip after
   any TRANSFORM/distill so the budget can further trim already-shaped
   output. Mirrors the existing distill marker convention with
-  `[LocalFirst: ~Nt cut by context_budget (max Mt). …]` so the reason
-  is visible to the model and to `localfirst boundary`.
+  `[Occasio: ~Nt cut by context_budget (max Mt). …]` so the reason
+  is visible to the model and to `occasio boundary`.
 - Validator (`policy validate`) errors on non-positive-integer values —
   silently dropping a budget rule is treated as a cost gap, not a warning.
 - Hot-reload applies on the very next tool call (existing policy loader
   contract).
 
-**`localfirst baseline` (Feature 3).**
+**`occasio baseline` (Feature 3).**
 - Per-project-cwd behaviour baseline. `baseline learn` mines the last N days
   of logs scoped to the current project, persists a frequency profile to
-  `~/.localfirst/baseline/<cwd-hash>.json` (paths, tool categories, shell
+  `~/.occasio/baseline/<cwd-hash>.json` (paths, tool categories, shell
   verbs, session size quantiles).
 - `baseline compare` walks the most recent session against the baseline and
   surfaces anomalies: `sensitive_path` (HIGH, fires even on cold start;
@@ -358,7 +358,7 @@ new framing end-to-end, and one critical enforcement bypass is closed.
   `volume_spike` (>1.5× p95 baseline session size).
 - Baselines are local-only, no export, no telemetry.
 
-**`localfirst replay --attribute` (Feature 4).**
+**`occasio replay --attribute` (Feature 4).**
 - Per-run token attribution. Answers "who ate the context window?" without
   persisting request bodies. Three classes: **tool contributions** (Σ
   kept_bytes / 4, approximate, marked '~'), **cache reuse** (Σ cache_read_
@@ -366,14 +366,14 @@ new framing end-to-end, and one critical enforcement bypass is closed.
   kept_total — covers system prompt + user messages + cross-request tool_
   result carry-over). Plus a four-line "prevented from re-entering"
   breakdown derived from existing JSONL fields.
-- Counterfactual line shows what the run would have cost without LocalFirst
+- Counterfactual line shows what the run would have cost without Occasio
   shaping.
 
 ### Added — self-verification
 
-**`localfirst selftest`.**
+**`occasio selftest`.**
 - Eight in-process governance checks on a scratch policy and scratch audit
-  chain in `os.tmpdir()`. Never touches the user's `~/.localfirst`. Covers
+  chain in `os.tmpdir()`. Never touches the user's `~/.occasio`. Covers
   read_file deny, shell_bash/shell_powershell deny (the new bypass class),
   allow-path positive, secret BLOCK under strict mode, redact-secrets
   TRANSFORM, audit-chain verify, chain shape sanity (≥3 BLOCK + ≥1
@@ -400,7 +400,7 @@ new framing end-to-end, and one critical enforcement bypass is closed.
 
 - **`src/localrouter.js`** (Ollama / local-LLM routing). Undocumented in the
   v0.7.0 reframe, ran a 1.5 s probe on every request even when no Ollama
-  daemon was present, produced confusing `qwen2.5:7b` entries in `localfirst
+  daemon was present, produced confusing `qwen2.5:7b` entries in `occasio
   inspect`. The product story is now "control what re-enters the model after
   a tool call" — outbound prompt redirection is a separate problem and out
   of scope. If demand returns, reintroduce behind an opt-in flag with
@@ -417,7 +417,7 @@ new framing end-to-end, and one critical enforcement bypass is closed.
   maintainer's Windows 11 workstation 2026-05-11.
 - **Audit chain.** Multi-writer caveat from v0.6.5 still applies — running
   the Claude Code proxy and the MCP server simultaneously against the same
-  `~/.localfirst/pipeline-events.jsonl` will break the SHA-256 chain. The
+  `~/.occasio/pipeline-events.jsonl` will break the SHA-256 chain. The
   maintainer rotated the broken local chain on 2026-05-11; a hardening pass
   (PID file or named-pipe single-writer guard) is queued for a later release.
 
@@ -440,7 +440,7 @@ schema changes, no behavioural differences from v0.6.6.
 
 ### Important — past releases
 
-Versions **0.6.6 and earlier** of `@localfirst-ai/localfirst` were published
+Versions **0.6.6 and earlier** of `@occasiolabs/occasio` were published
 under the MIT License. **Those releases remain MIT in perpetuity.** This
 change governs v0.7.0 and all subsequent releases only; no attempt is made
 (and none is legally possible) to retroactively alter the license of prior
@@ -463,9 +463,9 @@ audit fields, **no** schema-based replacement of the existing validator,
 ### Added
 
 **Published JSON Schema for `policy.yml`.**
-- `schemas/localfirst-policy.schema.json` — JSON Schema draft 2020-12,
+- `schemas/occasio-policy.schema.json` — JSON Schema draft 2020-12,
   covering every field the loader normalizes. The `$id` is
-  `https://localfirst.ai/schemas/localfirst-policy.schema.json`. The schema
+  `https://occasio.ai/schemas/occasio-policy.schema.json`. The schema
   ships in the npm tarball alongside `bin/`, `src/`, and `policy-templates/`.
 - A test asserts every key the schema declares is also recognised by
   `src/policy/validate.js`'s `KNOWN_TOP_LEVEL` set, and vice versa. Drift
@@ -482,7 +482,7 @@ audit fields, **no** schema-based replacement of the existing validator,
   `# yaml-language-server: $schema=...` directive so editors with YAML
   language-server support get autocomplete and inline validation out of the
   box.
-- `localfirst policy init --template <name>` selects one. Default remains
+- `occasio policy init --template <name>` selects one. Default remains
   `dev-default` (byte-identical to the previous starter). Unknown names exit
   non-zero with the list of valid names.
 - `dev-default.yml` is the previous embedded `STARTER_POLICY` lifted out as a
@@ -523,7 +523,7 @@ audit fields, **no** schema-based replacement of the existing validator,
   *and* MCP traffic governed by the same `policy.yml` — and points at the
   v0.6.5 demo at `docs/demos/mcp-block.md` as the artefact behind it.
 - The repository URLs in `package.json` now point at
-  `localfirst-ai/localfirst`.
+  `occasiolabs/occasio`.
 - Discipline: every claim in the rewritten paragraphs points at an
   artefact in the repo. Test 34's link guard fails if any of those
   artefacts go missing.
@@ -541,19 +541,19 @@ audit fields, **no** schema-based replacement of the existing validator,
   identically until `policy.yml` is edited.
 - Tests: existing 1923 + new Section 34 = passing on
   `node test-interceptor.js`.
-- Both verifiers (Node `localfirst audit verify`, Python
+- Both verifiers (Node `occasio audit verify`, Python
   `docs/audit_walker.py`) parity-checked on a mixed-kind chain that
   includes `policy_loaded` rows.
 
 ## [0.6.5] — 2026-05-10  One MCP Proof — Cross-Protocol Governance
 
-A deliberately narrow release. v0.6.5 routes the existing LocalFirst MCP server
-(`bin/localfirst-mcp`) through the same canonical pipeline (`policy.evaluate
+A deliberately narrow release. v0.6.5 routes the existing Occasio MCP server
+(`bin/occasio-mcp`) through the same canonical pipeline (`policy.evaluate
 → dispatcher.dispatch → auditor.record`) that already governs the Claude Code
 adapter. The architectural claim being proved is small but load-bearing:
 **the same `policy.yml` governs Claude Code's `Read` and an MCP client's
 `read_file`, byte-for-byte unchanged**. Audit rows from MCP traffic now land
-in `pipeline-events.jsonl` with `protocol: "mcp"` and `localfirst report`
+in `pipeline-events.jsonl` with `protocol: "mcp"` and `occasio report`
 surfaces them under `blocked_accesses[]`.
 
 ### Fixed (behavior change)
@@ -579,10 +579,10 @@ surfaces them under `blocked_accesses[]`.
   `mcp-client` when the client omits `clientInfo`.
 - **`docs/demos/mcp-block.md`.** A reproducible end-to-end capture of the
   cross-protocol proof: policy file, MCP requests, captured responses,
-  verbatim audit row, both verifiers, and `localfirst report` output.
+  verbatim audit row, both verifiers, and `occasio report` output.
 - **MCP-side AuditWriteError handling.** The MCP server inherits the v0.6.4
   fail-fatal contract: an audit-write failure aborts the MCP server with
-  `[localfirst-mcp][audit-fatal]` on stderr.
+  `[occasio-mcp][audit-fatal]` on stderr.
 
 ### Concurrency note (deferred hardening)
 
@@ -612,13 +612,13 @@ simultaneously, against the same audit file.
   rows, and the existing `mcp-experiment.jsonl` adoption-log regression
   guard).
 - Both verifiers agree on the maintainer's now-33-row reference log:
-  `localfirst audit verify` → `Chain intact (33 rows verified)`,
+  `occasio audit verify` → `Chain intact (33 rows verified)`,
   `python docs/audit_walker.py …` → `OK: 33 rows verified`.
 
 ## [0.6.4] — 2026-05-10  Hardening — Fail-Loud Audit, Supervisor Templates, Independent Walker
 
 A small, deliberately featureless release. v0.6.4 raises the credibility floor
-of the governance story without expanding what LocalFirst does. Three changes,
+of the governance story without expanding what Occasio does. Three changes,
 no new policy primitives, no CLI surface changes.
 
 ### Fixed (behavior change)
@@ -634,7 +634,7 @@ no new policy primitives, no CLI surface changes.
   on success, so a failed write cannot poison the in-memory chain.
 - `pipeline.process()` promotes `ok: false` into a new `AuditWriteError`.
 - The proxy's request handler in `src/index.js` catches `AuditWriteError`,
-  writes the dropped row JSON to stderr with a `[localfirst][audit-fatal]`
+  writes the dropped row JSON to stderr with a `[occasio][audit-fatal]`
   marker (so a supervisor / log scraper can recover it forensically), closes
   the listening socket, and exits non-zero after a 250 ms grace period.
 - **This is a behavior change.** Environments that had a latent
@@ -645,8 +645,8 @@ no new policy primitives, no CLI surface changes.
 ### Added (operational)
 
 **Supervisor templates under `bin/supervisor/`.**
-- `localfirst.service` — systemd unit (user scope), `Restart=always`.
-- `com.localfirst.proxy.plist.template` — launchd template (user scope), with
+- `occasio.service` — systemd unit (user scope), `Restart=always`.
+- `com.occasio.proxy.plist.template` — launchd template (user scope), with
   `{{LOCALFIRST_BIN}}` placeholder for the absolute binary path.
 - `install-windows-task.ps1` — registers a Windows Scheduled Task that runs
   at logon, restarts within 1 minute of exit, scoped to the current user
@@ -663,12 +663,12 @@ no new policy primitives, no CLI surface changes.
 
 **`docs/AUDIT.md` and `docs/audit_walker.py` — independent verifiability.**
 - A standalone Python walker (~30 LOC, stdlib only) that re-walks the SHA-256
-  hash chain over `pipeline-events.jsonl` without using any LocalFirst code.
+  hash chain over `pipeline-events.jsonl` without using any Occasio code.
 - The doc specifies the row format, the canonical serialization rules, and
   the genesis sentinel precisely enough that any third-party verifier can
-  reproduce LocalFirst's own `localfirst audit verify`.
+  reproduce Occasio's own `occasio audit verify`.
 - **Parity gate.** v0.6.4 verifies that `audit_walker.py` and
-  `localfirst audit verify` agree byte-for-byte on the maintainer's 31-row
+  `occasio audit verify` agree byte-for-byte on the maintainer's 31-row
   reference log. The release was gated on this check passing; a regression
   on it is treated as audit-credibility-critical.
 - The doc is linked from `GOVERNANCE.md`. It is intentionally explicit about
@@ -685,11 +685,11 @@ no new policy primitives, no CLI surface changes.
 
 ## [0.6.3] — 2026-05-10  Governance Milestone — Path Control, Custom Patterns, Audit Inputs, Report
 
-This release closes the loop between *policy* and *evidence*. LocalFirst now captures
+This release closes the loop between *policy* and *evidence*. Occasio now captures
 the full input to every tool call in the tamper-evident audit log, enforces
 deny / allow lists on filesystem paths, lets you declare custom regex patterns that
 extend the secret scanner, and ships a one-command compliance report. Together these
-turn LocalFirst from a routing layer into a governance layer that an enterprise
+turn Occasio from a routing layer into a governance layer that an enterprise
 buyer can reason about.
 
 ### Added
@@ -699,7 +699,7 @@ buyer can reason about.
   the existing decision fields. Path-bearing tools (`read_file`, `find_files`, `grep`)
   capture the resolved absolute path; shell tools capture the command. The audit
   hash chain extends over the new field, so any post-hoc edit is detectable by
-  `localfirst audit`.
+  `occasio audit`.
 - Inputs are normalized at the boundary so the same logical action produces the same
   entry regardless of which agent issued it.
 
@@ -715,18 +715,18 @@ buyer can reason about.
 **Custom `deny_patterns` for the secret scanner (ARCH-27)**
 - `deny_patterns:` is a mapping of `label: "regex-string"` entries that extend the
   built-in scanner. Patterns are compiled at load time; invalid regex entries are
-  reported by `localfirst policy validate` rather than silently dropped.
+  reported by `occasio policy validate` rather than silently dropped.
 - Use cases: internal JWT formats, ticket / case identifiers, project-specific
   tokens, locale-specific PII patterns.
 
-**`localfirst report` — one-command governance summary**
+**`occasio report` — one-command governance summary**
 - Aggregates the recent audit log into a buyer-readable report: counts of LOCAL vs
   PASS vs BLOCK decisions, distinct deny reasons, secrets caught, paths denied,
   and the audit-chain integrity status. Designed to be paste-ready for a
   compliance review or pilot conversation.
 
 **Starter policy now demonstrates the new fields**
-- `localfirst policy init` generates a starter file that includes commented-out
+- `occasio policy init` generates a starter file that includes commented-out
   examples for `deny_paths`, `allow_paths`, and `deny_patterns`. The defaults are
   still no-ops, so the file is safe to commit unedited.
 
@@ -745,14 +745,14 @@ buyer can reason about.
   routed BLOCK Decisions to the cloud as "tool not handled" passthroughs.
   Net effect: deny_paths / deny_patterns / secret-block events on the tool-call
   path produced no synthetic refusal and no audit-log BLOCK row, so
-  `localfirst report` structurally always reported `paths_blocked: 0`.
+  `occasio report` structurally always reported `paths_blocked: 0`.
 - The classifier now treats every dispatchable Decision (LOCAL / BLOCK /
   TRANSFORM) as handled by the local pipeline; only PASS and unregistered
   tool names fall through to the cloud. With this change, denied tool calls
   are dispatched through `pipeline.processToolEvent`, the dispatcher's BLOCK
   branch returns `{ blocked: true, response, reason }`, the auditor writes a
   `result_kind: "block"` row to `pipeline-events.jsonl`, and the agent sees
-  the `(blocked by policy)` synthetic tool_result. `localfirst report` now
+  the `(blocked by policy)` synthetic tool_result. `occasio report` now
   surfaces the block under `summary.paths_blocked` and `blocked_accesses[]`.
 - Single-file change in `src/adapters/claude-code.js`; downstream layers
   (engine, dispatcher, pipeline, auditor, report) were already correct.
@@ -769,7 +769,7 @@ buyer can reason about.
 
 ## [0.6.2] — 2026-05-09  Policy System — Transform, Chain, Validate, Init
 
-This release ships the complete **policy system**: a single `~/.localfirst/policy.yml`
+This release ships the complete **policy system**: a single `~/.occasio/policy.yml`
 is now the authoritative document for *both* routing decisions (LOCAL / PASS / BLOCK)
 *and* output shaping (TRANSFORM). The TRANSFORM action is wired end-to-end, composable,
 observable, and live-reloading. A full authoring loop ships alongside it:
@@ -793,7 +793,7 @@ observable, and live-reloading. A full authoring loop ships alongside it:
 
 **Transform chaining — redact → distill in one pass (ARCH-20)**
 - When both `redact_secrets_in_tool_results: true` and `distill_tool_results: true` are
-  active (or both are implied by global + per-tool flags), LocalFirst automatically
+  active (or both are implied by global + per-tool flags), Occasio automatically
   chains them: secrets are redacted first (security guarantee), then the redacted output
   is distilled (efficiency).  No extra config needed.
 - `TRANSFORM_CHAIN(['redact-secrets', 'distill-output'])` is a first-class Decision type.
@@ -808,22 +808,22 @@ observable, and live-reloading. A full authoring loop ships alongside it:
   distillation ran with a token-savings figure, and `→ transform-name` as a fallback
   for custom / unknown transforms.  Plain LOCAL tools show nothing — no noise for
   simple sessions.
-- The `localfirst status` command and exit banner now include a
+- The `occasio status` command and exit banner now include a
   `Transforms: N tool results shaped` line when any transforms ran this session.
 - `session.json` gains a `tools_transformed` counter; each log entry carries
   `tools_transformed` per-request.
 
-**`localfirst policy show` — inspect the active policy (ARCH-19)**
+**`occasio policy show` — inspect the active policy (ARCH-19)**
 - Displays the full active policy: global flags and per-tool routing decisions,
   annotated as `(default)` or `← override`.
 - Warns when a `tools:` block is present (it replaces all built-in defaults) and
   lists the tools that will now PASS to the cloud.
 - Warns when a tool entry references an unknown transform name.
-- `localfirst policy show --diff` prints only values that differ from defaults —
+- `occasio policy show --diff` prints only values that differ from defaults —
   useful for quickly auditing what a policy file actually changes.
 
-**`localfirst policy validate` — lint before it silently misbehaves (ARCH-23)**
-- Parses `~/.localfirst/policy.yml` (or `--file <path>`) and reports every issue
+**`occasio policy validate` — lint before it silently misbehaves (ARCH-23)**
+- Parses `~/.occasio/policy.yml` (or `--file <path>`) and reports every issue
   that would cause a silent failure at runtime.
 - **Errors** (exit 1): unknown `action` value, `TRANSFORM` missing `transform` field,
   wrong type for a boolean flag, `tools:` not a mapping, tool entry not a mapping.
@@ -832,8 +832,8 @@ observable, and live-reloading. A full authoring loop ships alongside it:
 - Output is structured: each issue is shown with its dotted key path and a plain-English
   explanation.
 
-**`localfirst policy init` — strong first-run experience (ARCH-24)**
-- `localfirst policy init` writes a commented starter `~/.localfirst/policy.yml` with
+**`occasio policy init` — strong first-run experience (ARCH-24)**
+- `occasio policy init` writes a commented starter `~/.occasio/policy.yml` with
   all four flags at their built-in defaults and worked per-tool routing examples in
   comments.
 - Safe by default: refuses to overwrite an existing file without `--force`.
@@ -854,10 +854,10 @@ observable, and live-reloading. A full authoring loop ships alongside it:
 ### Complete authoring loop
 
 ```
-localfirst policy init              # create ~/.localfirst/policy.yml
-$EDITOR ~/.localfirst/policy.yml    # edit
-localfirst policy validate          # catch errors before they bite
-localfirst policy show              # confirm what is actually active
+occasio policy init              # create ~/.occasio/policy.yml
+$EDITOR ~/.occasio/policy.yml    # edit
+occasio policy validate          # catch errors before they bite
+occasio policy show              # confirm what is actually active
 # proxy picks up changes immediately — no restart
 ```
 
@@ -889,14 +889,14 @@ localfirst policy show              # confirm what is actually active
 **Tamper-evident audit log (`pipeline-events.jsonl`)**
 - Every cross-boundary event is now hash-chained: each row carries `prev_hash` (GENESIS sentinel for the first row) and `hash` (SHA-256 of the serialized row without the hash field)
 - Chain is continuous across process restarts — the auditor reads the last hash from the existing file on startup
-- New command: `localfirst audit [verify] [--file <path>]` — verifies the full chain; reports legacy rows (written before hash support), chain breaks, and individual hash mismatches
+- New command: `occasio audit [verify] [--file <path>]` — verifies the full chain; reports legacy rows (written before hash support), chain breaks, and individual hash mismatches
 - Any modification to any field in any row is detected: a tampered row triggers an error on that row and a cascade error on all subsequent rows (prev_hash mismatch)
 - New module: `src/audit/verifier.js` — `verifyFile()` returns `{ ok, total, legacy, chained, errors, firstHash, lastHash }`
 
 **Multi-agent support (Stage 3 architecture)**
 - Second agent live-validated: Cline routes through the same canonical pipeline as Claude Code without any changes to the policy engine, dispatcher, scanner, or audit layers
 - Canonical tool-name registry (`src/core/tool-names.js`): pipeline interior speaks agent-agnostic names; adapters translate at the boundary
-- Agent routing: `x-localfirst-agent` HTTP header selects the adapter; SSE content fingerprinting is the fallback when the header is absent
+- Agent routing: `x-occasio-agent` HTTP header selects the adapter; SSE content fingerprinting is the fallback when the header is absent
 - Policy-as-data (`policy.yml`): `tools:` block drives every LOCAL/PASS/BLOCK routing decision; built-in classifiers (`bash-allowlist`, `read-input-validator`, etc.) are named and configurable
 - New adapters: `src/adapters/cline.js` + `src/adapters/claude-code.js` (refactored); `src/proxy/agent-router.js`
 
@@ -942,8 +942,8 @@ localfirst policy show              # confirm what is actually active
 
 ### Fixed
 
-- **`parseFileTokens` now works with modern Claude Code** — rewrote to use `tool_use` / `tool_result` pair correlation instead of the `--- path ---` delimiter format that Claude Code stopped emitting. File token breakdowns in `localfirst inspect` now populate correctly.
-- **`Saved:` metric now honest** — `localfirst status` previously labelled Anthropic's own prompt-cache savings as "Saved by LocalFirst." Now split into `Cache: $X (Anthropic prompt cache)` (dim) and `Saved: $X (LAO / distill)` (green, only shown when non-zero). Same fix applied to the session exit summary and doctor session display.
+- **`parseFileTokens` now works with modern Claude Code** — rewrote to use `tool_use` / `tool_result` pair correlation instead of the `--- path ---` delimiter format that Claude Code stopped emitting. File token breakdowns in `occasio inspect` now populate correctly.
+- **`Saved:` metric now honest** — `occasio status` previously labelled Anthropic's own prompt-cache savings as "Saved by Occasio." Now split into `Cache: $X (Anthropic prompt cache)` (dim) and `Saved: $X (LAO / distill)` (green, only shown when non-zero). Same fix applied to the session exit summary and doctor session display.
 - **`🛑` vs `⚠` in ledger and replay** — non-blocked requests that touched a secret now show `⚠` (warning) instead of `🛑` (blocked). `🛑` is reserved for `event_type: blocked` only.
 
 ### Tests
@@ -956,22 +956,22 @@ localfirst policy show              # confirm what is actually active
 
 ### Added
 
-**`localfirst inspect` — per-request cloud-boundary manifest**
-- `localfirst inspect` shows the last request; `--last N`, `--entry N`, `--run <id>`, `--scope today`
+**`occasio inspect` — per-request cloud-boundary manifest**
+- `occasio inspect` shows the last request; `--last N`, `--entry N`, `--run <id>`, `--scope today`
 - For each request type shows a structured boundary view:
   - `cloud_sent` / `trimmed`: files in context (names + estimated token counts), messages in request, cache stats, distilled tool results
   - `local_only`: commands executed locally with sizes and native/exec flag, note that results were forwarded to Anthropic, distilled outputs flagged
   - `blocked`: secrets detected with label + line numbers, rule-blocked files
   - `budget_exceeded`: limit and spend at time of block
-- All labels distinguish exact values (provider-reported tokens) from estimates (LocalFirst file analyzer)
+- All labels distinguish exact values (provider-reported tokens) from estimates (Occasio file analyzer)
 
 **`lao_dropped` now logged**
 - Previously only printed to terminal; now persisted in every log entry as `lao_dropped: string[]`
-- Visible in `localfirst inspect` and `localfirst replay --detail`
+- Visible in `occasio inspect` and `occasio replay --detail`
 
 **`outbound_message_count` now logged**
 - Message count in the actual forwarded request body (post-LAO) added as `outbound_message_count`
-- Shown in `localfirst inspect` for cloud_sent/trimmed entries
+- Shown in `occasio inspect` for cloud_sent/trimmed entries
 
 **`replay --detail` boundary sub-lines**
 - Each event in detail view gets an indented boundary annotation:
@@ -993,19 +993,19 @@ localfirst policy show              # confirm what is actually active
 ### Added
 
 **Session budget (`--budget N`)**
-- `localfirst claude --budget 1.00` sets a per-session dollar cap
+- `occasio claude --budget 1.00` sets a per-session dollar cap
 - Requests are blocked (HTTP 402) once the session cost meets or exceeds the budget limit
 - Warning fires once at 80 % of budget (the threshold before the next request is blocked)
-- Budget is shown in the startup banner, `localfirst status`, and the session exit summary
+- Budget is shown in the startup banner, `occasio status`, and the session exit summary
 - Blocked budget attempts are logged with `event_type: budget_exceeded`, including `budget_limit` and `budget_spent` fields
-- `localfirst ledger --summary` counts `budget_exceeded` events in a dedicated row
-- `localfirst status` shows spend vs. limit with colour coding (green < 80 %, yellow 80–99 %, red ≥ 100 %)
+- `occasio ledger --summary` counts `budget_exceeded` events in a dedicated row
+- `occasio status` shows spend vs. limit with colour coding (green < 80 %, yellow 80–99 %, red ≥ 100 %)
 - New pure-function module `src/budget.js` (`budgetStatus`, `fmtBudget`) — no I/O, fully testable
 
 **Output distillation v2 (raw inspectability, from previous pass)**
-- `distill()` now returns `rawContent` when distilled; raw output written to `~/.localfirst/distilled/YYYY-MM-DD.jsonl`
+- `distill()` now returns `rawContent` when distilled; raw output written to `~/.occasio/distilled/YYYY-MM-DD.jsonl`
 - Test-runner distillation: `npm test`, `jest`, `vitest`, `pytest`, `cargo test`, `go test` — smart extraction keeps failure lines + summary
-- `localfirst distill` CLI: list today's distilled entries; `--entry N` shows raw content
+- `occasio distill` CLI: list today's distilled entries; `--entry N` shows raw content
 
 ### Tests
 
@@ -1017,16 +1017,16 @@ localfirst policy show              # confirm what is actually active
 
 ### Added
 
-**Replay and run audit (`localfirst replay`)**
+**Replay and run audit (`occasio replay`)**
 - Groups today's log entries by `run_id`, ordered by `iso` timestamp
 - Summary view: one header per run — start/end time, duration, event counts by type (cloud/local/blocked/trimmed), cost, savings
 - `--detail`: sequential per-event table with timestamp, event type, model, token counts, cost, and annotations (tools local, distilled, LAO, secrets detected, rule-blocked)
 - `--run <id-prefix>`: full event detail for one specific run
 - `--last N`: show last N runs (default: 3)
 
-**Token ledger (`localfirst ledger`)**
+**Token ledger (`occasio ledger`)**
 - `event_type` on every log entry: `cloud_sent` | `local_only` | `blocked` | `trimmed`
-- `run_id` (UUID) per `localfirst claude` session — ties all log entries to their originating run
+- `run_id` (UUID) per `occasio claude` session — ties all log entries to their originating run
 - `iso` field (full ISO-8601) on every entry — session scope filter is now cross-midnight safe
 - Blocked requests now written to main JSONL log in addition to the blocked audit file
 - `--last N`, `--summary`, `--scope session|today`
@@ -1036,7 +1036,7 @@ localfirst policy show              # confirm what is actually active
   - `grep` / `rg`: 50 lines
   - `find`, `ls`, `dir`, `Get-ChildItem`: 100 lines
   - `git log`: 100 lines
-- Clipped output appends: `[LocalFirst: N total — showing first M. Full output not re-sent to model.]`
+- Clipped output appends: `[Occasio: N total — showing first M. Full output not re-sent to model.]`
 - `distill_tokens_saved` and `distill_cost_saved` tracked in log entries, `session.json`, ledger summary, dashboard, and session exit summary
 - Dashboard tool rows show `✂ distilled` label with tooltip when output was clipped
 
@@ -1048,16 +1048,16 @@ localfirst policy show              # confirm what is actually active
 ## [0.5.0] — 2026-05-06  Week 2: Trust, Measurability, Clarity
 
 ### Added
-- `localfirst doctor` — diagnostic command: checks Node ≥18, claude CLI, log dir writable, port 8081 available, Python (LAO), LAO scorer script, PowerShell profile (Windows)
+- `occasio doctor` — diagnostic command: checks Node ≥18, claude CLI, log dir writable, port 8081 available, Python (LAO), LAO scorer script, PowerShell profile (Windows)
 - `--preset strict|balanced|off` — named policy presets replacing cryptic `--mode` flag
 - Real savings tracking: `cache_savings` (Anthropic prompt-cache) and `lao_cost_saved` (context trimming) in session.json and per-request log entries
 - Per-request cache savings inline in terminal: `· cache 8.5k (-$0.0024)`
-- Session summary and `localfirst status` show itemized savings breakdown (cache + LAO)
+- Session summary and `occasio status` show itemized savings breakdown (cache + LAO)
 
 ### Fixed
 - Dangerous flag `-D` (git force-delete branch) was not caught — classifier lowercased before Set lookup, missing the uppercase `-D` entry
 - Session summary `Local:` line always showed 0% — was reading `local_tokens`/`cloud_tokens` which were removed in v0.4.1
-- `localfirst status` referenced removed field names
+- `occasio status` referenced removed field names
 
 ### Tests
 - 144 tests (up from 101): routing coverage (section 9), LAO helpers (section 10), policy preset mapping (section 11)
@@ -1067,7 +1067,7 @@ localfirst policy show              # confirm what is actually active
 ## [0.4.1] — 2026-05-06  Week 1: Trust Hardening
 
 ### Added
-- `localfirst help` command with full usage text
+- `occasio help` command with full usage text
 - `--block-secrets` shorthand flag (alias for `--preset strict`)
 - Startup banner: version, mode label, log file path
 - `LOG_SCHEMA_VERSION = 1` constant — frozen log entry structure, every entry includes `v: 1`
@@ -1081,7 +1081,7 @@ localfirst policy show              # confirm what is actually active
 - **H1 (git config write risk)**: `git config` was in `git_safe_subcommands` — it's a write command. Removed
 - **H2 (env/printenv bypass)**: `env` and `printenv` were in `always_local` — they expose API keys through the interceptor. Removed
 - Secret `token` pattern narrowed: requires `access|bearer|auth` prefix (bare `TOKEN=` no longer fires)
-- `register` command now writes canonical `localfirst claude @args` entrypoint; auto-upgrades legacy `--intercept` form
+- `register` command now writes canonical `occasio claude @args` entrypoint; auto-upgrades legacy `--intercept` form
 
 ### Tests
 - 101 tests (up from 83): trust fixes C1/C2/C3/H1/H2 regressions, Windows path coverage, git subcommand coverage

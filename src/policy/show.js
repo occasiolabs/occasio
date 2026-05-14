@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * localfirst policy show — display the active policy in human-readable form.
+ * occasio policy show — display the active policy in human-readable form.
  *
  * Shows global flags and per-tool routing/transform decisions, annotating
  * each value as either the default or a user override from policy.yml.
  *
  * Usage:
- *   localfirst policy [show]         Full view of the active policy
- *   localfirst policy show --diff    Only values that differ from defaults
+ *   occasio policy [show]         Full view of the active policy
+ *   occasio policy show --diff    Only values that differ from defaults
  */
 
 const fs   = require('fs');
@@ -94,7 +94,7 @@ function runPolicyCli(args, opts = {}) {
   const defaults = loader.DEFAULT_POLICY;
 
   // ── Header ────────────────────────────────────────────────────────────────
-  console.log(col.b('\n⚡ LocalFirst — Active Policy\n'));
+  console.log(col.b('\n⚡ Occasio — Active Policy\n'));
 
   const fileStatus = fileExists
     ? `${filePath}  ${col.g('(loaded)')}`

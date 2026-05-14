@@ -1,6 +1,6 @@
 'use strict';
 /**
- * test-smoke.js — Live integration smoke test for the LocalFirst interceptor.
+ * test-smoke.js — Live integration smoke test for the Occasio interceptor.
  *
  * Exercises interceptToolUse end-to-end for git read-only commands using a
  * partial-batch SSE fixture.  No Anthropic dependency — the git block runs
@@ -61,14 +61,14 @@ const minReqBody = { model: 'claude-sonnet-4-6', messages: [{ role: 'user', cont
 const emptyHeaders = {};
 const opts = { verbose: false, mode: 'intercept', todoStore: [] };
 
-// Project root is the localfirst git repo (this directory).
+// Project root is the occasio git repo (this directory).
 // It is a real git repo used for live execution assertions.
 const PROJECT_ROOT = __dirname;
 
 // ── smoke tests ────────────────────────────────────────────────────────────────
 
 async function run() {
-  console.log('LocalFirst interceptor smoke test\n');
+  console.log('Occasio interceptor smoke test\n');
 
   // ── 1. git status — plain form ────────────────────────────────────────────
   console.log('1. [Edit, Bash(git -C <root> status)] — plain form');
@@ -333,7 +333,7 @@ async function run() {
   {
     const fs = require('fs');
     const os = require('os');
-    const auditPath = path.join(os.tmpdir(), `localfirst-smoke-audit-${Date.now()}.jsonl`);
+    const auditPath = path.join(os.tmpdir(), `occasio-smoke-audit-${Date.now()}.jsonl`);
     const { createAuditor } = require('./src/audit/jsonl-auditor');
     const auditor = createAuditor(auditPath);
 
@@ -375,7 +375,7 @@ async function run() {
   {
     const fs = require('fs');
     const os = require('os');
-    const auditPath = path.join(os.tmpdir(), `localfirst-smoke-bash-audit-${Date.now()}.jsonl`);
+    const auditPath = path.join(os.tmpdir(), `occasio-smoke-bash-audit-${Date.now()}.jsonl`);
     const { createAuditor } = require('./src/audit/jsonl-auditor');
     const auditor = createAuditor(auditPath);
 
@@ -412,7 +412,7 @@ async function run() {
   {
     const fs = require('fs');
     const os = require('os');
-    const auditPath = path.join(os.tmpdir(), `localfirst-smoke-ps-audit-${Date.now()}.jsonl`);
+    const auditPath = path.join(os.tmpdir(), `occasio-smoke-ps-audit-${Date.now()}.jsonl`);
     const { createAuditor } = require('./src/audit/jsonl-auditor');
     const auditor = createAuditor(auditPath);
 
@@ -463,7 +463,7 @@ async function run() {
     loader._setOverrideForTests({ deny_paths: [denyDir] });
 
     try {
-      const auditPath = path.join(os.tmpdir(), `localfirst-smoke-deny-${Date.now()}.jsonl`);
+      const auditPath = path.join(os.tmpdir(), `occasio-smoke-deny-${Date.now()}.jsonl`);
       const { createAuditor } = require('./src/audit/jsonl-auditor');
       const auditor = createAuditor(auditPath);
 
@@ -504,7 +504,7 @@ async function run() {
   // ── 18. boundary accounting — tool runs carry kept_bytes + prevention_reason
   // End-to-end smoke for the boundary feature: a tool that actually runs
   // through the canonical pipeline must surface raw `bytes`, post-shaping
-  // `kept_bytes`, and a `prevention_reason` field so `localfirst boundary`
+  // `kept_bytes`, and a `prevention_reason` field so `occasio boundary`
   // can render the three-column view from the live log.
   console.log('\n18. [Read tool, real file] — toolsRun carries kept_bytes + prevention_reason');
   {

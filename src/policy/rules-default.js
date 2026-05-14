@@ -3,7 +3,7 @@
 /**
  * Default rule set — Stage 2.
  *
- * In Stage 2 the policy file at ~/.localfirst/policy.yml supplies two
+ * In Stage 2 the policy file at ~/.occasio/policy.yml supplies two
  * named decisions; everything else is still produced by the legacy
  * classifier (`interceptor.classifyBlock`).
  *
@@ -30,7 +30,7 @@
  *   block_secrets_in_tool_results: true
  *   block_requests_over_budget:    true
  *
- * Users override by writing ~/.localfirst/policy.yml.
+ * Users override by writing ~/.occasio/policy.yml.
  */
 
 module.exports = {};

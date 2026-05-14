@@ -1,17 +1,17 @@
-# LocalFirst
+# Occasio
 
 > Cryptographically verifiable behavioral attestation for AI coding agents.
 
 When an AI agent writes code in your CI, the question a reviewer or auditor will ask is not *"what did it produce"* — it is *"what did it actually do"*. Which files did it read. Which it was blocked from reading. Which secrets it tried to leak. Which policy was in effect. Whether that record can be trusted six months later.
 
-LocalFirst sits between the agent and the cloud on your own machine, decides every tool call against one human-readable policy, writes a tamper-evident audit chain of every decision, and produces signed attestations that a third party can verify offline using only `cosign` or a 200-line Python script.
+Occasio sits between the agent and the cloud on your own machine, decides every tool call against one human-readable policy, writes a tamper-evident audit chain of every decision, and produces signed attestations that a third party can verify offline using only `cosign` or a 200-line Python script.
 
 ```bash
-npm install -g @localfirst-ai/localfirst
+npm install -g @occasiolabs/occasio
 
-localfirst demo attest      # End-to-end attestation pipeline (30s, no API key)
-localfirst demo anomalies   # Live EDR detection on a synthetic adversarial chain (5s)
-localfirst harness          # Real Claude Code attacking a denied path — defense holds
+occasio demo attest      # End-to-end attestation pipeline (30s, no API key)
+occasio demo anomalies   # Live EDR detection on a synthetic adversarial chain (5s)
+occasio harness          # Real Claude Code attacking a denied path — defense holds
 ```
 
 The first two demos run against synthetic data so you can see the full pipeline in under a minute with no external dependencies. The third spawns a real Claude Code subordinate under your Anthropic login (bundled auth — no API key required) and proves the defense end-to-end.
@@ -24,9 +24,9 @@ The first two demos run against synthetic data so you can see the full pipeline 
 
 **Layer 2 — Policy enforcement.** Every tool call hits one decision: `LOCAL` / `PASS` / `BLOCK` / `TRANSFORM`, driven by [`policy.yml`](policy-templates/dev-default.yml). `deny_paths` is enforced on the realpath-resolved absolute path so symlinks and traversal variants resolve to the same denial. `block_secrets_in_tool_results` redacts API keys and JWTs out of any tool output before it re-enters the prompt. Hot-reload: edits to `policy.yml` take effect on the next call, with a `policy_loaded` row written to the audit chain.
 
-**Layer 3 — Behavioral attestation.** `localfirst attest --run-id <uuid>` produces a self-contained JSON predicate that commits to the full audit-chain slice for one agent session: every tool call, every block, every transform, every redacted secret, plus the active policy's SHA-256 hash and rules digest. `--sign` wraps it in an [in-toto Statement v1](https://github.com/in-toto/attestation) and Sigstore-signs it using GitHub Actions OIDC (no key management). The predicate type URI is [`agent-attestation/v1`](spec/agent-attestation/v1/README.md). Two independent reference verifiers ship — Node (`localfirst attest verify`) and Python ([`docs/attest_verify.py`](docs/attest_verify.py)) — and the test suite asserts they agree byte-for-byte on the same payload.
+**Layer 3 — Behavioral attestation.** `occasio attest --run-id <uuid>` produces a self-contained JSON predicate that commits to the full audit-chain slice for one agent session: every tool call, every block, every transform, every redacted secret, plus the active policy's SHA-256 hash and rules digest. `--sign` wraps it in an [in-toto Statement v1](https://github.com/in-toto/attestation) and Sigstore-signs it using GitHub Actions OIDC (no key management). The predicate type URI is [`agent-attestation/v1`](spec/agent-attestation/v1/README.md). Two independent reference verifiers ship — Node (`occasio attest verify`) and Python ([`docs/attest_verify.py`](docs/attest_verify.py)) — and the test suite asserts they agree byte-for-byte on the same payload.
 
-**Layer 4 — Anomaly detection (EDR).** `localfirst anomalies` runs four detectors over a time window of the audit chain: deny-rate spike, file-read-volume burst, previously-unseen tool-input shape, secret-redaction-rate spike. Severity escalates against your historical baseline — a ×500 deviation from normal triggers HIGH; see [`docs/edr-demo.md`](docs/edr-demo.md) for the reproducible defense-in-depth walkthrough.
+**Layer 4 — Anomaly detection (EDR).** `occasio anomalies` runs four detectors over a time window of the audit chain: deny-rate spike, file-read-volume burst, previously-unseen tool-input shape, secret-redaction-rate spike. Severity escalates against your historical baseline — a ×500 deviation from normal triggers HIGH; see [`docs/edr-demo.md`](docs/edr-demo.md) for the reproducible defense-in-depth walkthrough.
 
 ---
 
@@ -38,7 +38,7 @@ Three regulatory drivers, all converging on the same requirement: **runtime evid
 - **NIST AI RMF (GOVERN, MEASURE, MANAGE families)** is becoming required in US Federal procurement and is influencing FedRAMP AI controls.
 - **SOC 2 Common Criteria** are extending to AI-agent controls — auditors at major firms started asking "show me the agent's tool-call log" in 2026 audits.
 
-There is currently no off-the-shelf product producing a signed, third-party-verifiable artifact for what an AI coding agent did inside your CI. LocalFirst fills that gap with an open schema (Apache-2.0) and ships the reference implementations for it.
+There is currently no off-the-shelf product producing a signed, third-party-verifiable artifact for what an AI coding agent did inside your CI. Occasio fills that gap with an open schema (Apache-2.0) and ships the reference implementations for it.
 
 ---
 
@@ -47,23 +47,23 @@ There is currently no off-the-shelf product producing a signed, third-party-veri
 Requires Node.js ≥ 18. Works on Windows, macOS, Linux.
 
 ```bash
-npm install -g @localfirst-ai/localfirst   # Install
-localfirst doctor                          # Verify setup (Node, claude CLI, port, profile)
-localfirst policy init                     # Write ~/.localfirst/policy.yml (dev-default)
-localfirst register                        # Add 'claude' shell alias (one-time)
+npm install -g @occasiolabs/occasio   # Install
+occasio doctor                          # Verify setup (Node, claude CLI, port, profile)
+occasio policy init                     # Write ~/.occasio/policy.yml (dev-default)
+occasio register                        # Add 'claude' shell alias (one-time)
 claude "read package.json and tell me the version"
 ```
 
-After the alias is registered, every `claude` invocation routes through LocalFirst transparently. Audit-chain rows accumulate at `~/.localfirst/pipeline-events.jsonl`.
+After the alias is registered, every `claude` invocation routes through Occasio transparently. Audit-chain rows accumulate at `~/.occasio/pipeline-events.jsonl`.
 
 **Inspect the run:**
 
 ```bash
-localfirst status                  # Session totals
-localfirst replay --detail         # Run-level audit
-localfirst audit verify            # Re-walk the hash chain end-to-end
-localfirst anomalies               # Run EDR detectors over the last 15 minutes
-localfirst attest --run-id <uuid>  # Build a behavioral attestation for one session
+occasio status                  # Session totals
+occasio replay --detail         # Run-level audit
+occasio audit verify            # Re-walk the hash chain end-to-end
+occasio anomalies               # Run EDR detectors over the last 15 minutes
+occasio attest --run-id <uuid>  # Build a behavioral attestation for one session
 ```
 
 ---
@@ -72,31 +72,31 @@ localfirst attest --run-id <uuid>  # Build a behavioral attestation for one sess
 
 | Command | What it does |
 |---|---|
-| `localfirst claude [args]` | Start Claude Code with LocalFirst proxy active |
-| `localfirst register` | Register `claude` shell alias |
-| `localfirst doctor` | Setup health-check |
-| `localfirst status` | Session totals + savings breakdown |
-| `localfirst replay` | Run-level audit (`--detail`, `--run <id>`, `--attribute`) |
-| `localfirst inspect` | Per-request cloud-boundary manifest |
-| `localfirst boundary` | Three-column view: produced / re-entered / prevented |
-| `localfirst ledger` | Per-request token ledger |
-| `localfirst distill` | Inspect distilled tool outputs |
-| `localfirst dashboard` | Live browser dashboard at http://localhost:3001 |
-| `localfirst audit verify` | Re-walk the SHA-256 audit chain end-to-end |
-| `localfirst report` | Governance summary export (`--days N`, `--format csv`) |
-| `localfirst anomalies` | EDR detection over the audit chain (`--window 15m`, `--json`) |
-| `localfirst attest --run-id <uuid>` | Build a behavioral attestation predicate v1 |
-| `localfirst attest --sign` | Sigstore-sign via GitHub Actions OIDC |
-| `localfirst attest verify <file>` | Re-verify a signed attestation end-to-end |
-| `localfirst policy [show \| validate \| init \| doctor]` | Policy authoring + diagnosis |
-| `localfirst harness` | Run scripted adversarial scenarios against your policy |
-| `localfirst redteam` | Autonomous tester-LLM probes a subject Claude Code session |
-| `localfirst computer-use --dry-run` | Apply a Computer-Use policy to synthetic tool_use blocks |
-| `localfirst demo attest` | End-to-end attestation pipeline against a synthetic chain |
-| `localfirst demo anomalies` | EDR smoke test: synthetic adversarial chain → all 4 detectors |
-| `localfirst selftest` | In-process governance self-checks on a scratch chain |
-| `localfirst baseline [learn \| compare]` | Per-project behavior baseline + drift detection |
-| `localfirst preflight` | Read-only mine of recent activity for policy suggestions |
+| `occasio claude [args]` | Start Claude Code with Occasio proxy active |
+| `occasio register` | Register `claude` shell alias |
+| `occasio doctor` | Setup health-check |
+| `occasio status` | Session totals + savings breakdown |
+| `occasio replay` | Run-level audit (`--detail`, `--run <id>`, `--attribute`) |
+| `occasio inspect` | Per-request cloud-boundary manifest |
+| `occasio boundary` | Three-column view: produced / re-entered / prevented |
+| `occasio ledger` | Per-request token ledger |
+| `occasio distill` | Inspect distilled tool outputs |
+| `occasio dashboard` | Live browser dashboard at http://localhost:3001 |
+| `occasio audit verify` | Re-walk the SHA-256 audit chain end-to-end |
+| `occasio report` | Governance summary export (`--days N`, `--format csv`) |
+| `occasio anomalies` | EDR detection over the audit chain (`--window 15m`, `--json`) |
+| `occasio attest --run-id <uuid>` | Build a behavioral attestation predicate v1 |
+| `occasio attest --sign` | Sigstore-sign via GitHub Actions OIDC |
+| `occasio attest verify <file>` | Re-verify a signed attestation end-to-end |
+| `occasio policy [show \| validate \| init \| doctor]` | Policy authoring + diagnosis |
+| `occasio harness` | Run scripted adversarial scenarios against your policy |
+| `occasio redteam` | Autonomous tester-LLM probes a subject Claude Code session |
+| `occasio computer-use --dry-run` | Apply a Computer-Use policy to synthetic tool_use blocks |
+| `occasio demo attest` | End-to-end attestation pipeline against a synthetic chain |
+| `occasio demo anomalies` | EDR smoke test: synthetic adversarial chain → all 4 detectors |
+| `occasio selftest` | In-process governance self-checks on a scratch chain |
+| `occasio baseline [learn \| compare]` | Per-project behavior baseline + drift detection |
+| `occasio preflight` | Read-only mine of recent activity for policy suggestions |
 
 Session-level overrides on top of `policy.yml`:
 
@@ -119,7 +119,7 @@ Three independent checks, all required for a verified attestation:
 
 Two reference verifiers ship side by side:
 
-- **Node**: `localfirst attest verify <file>`
+- **Node**: `occasio attest verify <file>`
 - **Python**: `python docs/attest_verify.py <file>` — stdlib + optional `sigstore-python`, reuses [`docs/audit_walker.py`](docs/audit_walker.py) for the chain step. See [`docs/python-verifier.md`](docs/python-verifier.md).
 
 **Cross-language invariant** (asserted in the test suite as `xlang:` and `xlang-float:` cases): both verifiers agree byte-for-byte on the predicate-equivalence and audit-chain steps for the same payload, including tamper-detection cases. Non-integer numbers are rejected by both canonicalize implementations so a future schema cannot silently introduce divergence.
@@ -137,7 +137,7 @@ agent (Claude Code / Cline / MCP / Computer Use)
   │
   ▼  tool call
 ┌──────────────────────────────────────────────────────────────┐
-│  LocalFirst proxy                                            │
+│  Occasio proxy                                            │
 │                                                              │
 │  Layer 1: adapter parse → canonical event                    │
 │  Layer 2: policy decision (LOCAL / PASS / BLOCK / TRANSFORM) │
@@ -152,7 +152,7 @@ Anthropic API
 
 End of session
   │
-  ▼  localfirst attest --run-id … --sign
+  ▼  occasio attest --run-id … --sign
 Layer 3: signed in-toto Statement → Sigstore bundle → GitHub Check Run
   │
   ▼  independent verifier
@@ -163,10 +163,10 @@ Node / Python / cosign — all must agree
 
 ## Log format
 
-All data is stored locally at `~/.localfirst/`:
+All data is stored locally at `~/.occasio/`:
 
 ```
-~/.localfirst/
+~/.occasio/
   pipeline-events.jsonl        # tamper-evident audit chain (SHA-256 linked)
   policy.yml                   # active policy
   session.json                 # current run_id, totals
@@ -174,7 +174,7 @@ All data is stored locally at `~/.localfirst/`:
   baseline/<cwd-hash>.json     # per-project behavior baseline (opt-in)
 ```
 
-The audit-chain row schema is documented in [`docs/AUDIT.md`](docs/AUDIT.md). Each row carries `prev_hash` and `hash` (SHA-256 hex), with the first row chained from a fixed GENESIS sentinel (64 zeros). `localfirst audit verify` and `docs/audit_walker.py` are independent implementations of the walker.
+The audit-chain row schema is documented in [`docs/AUDIT.md`](docs/AUDIT.md). Each row carries `prev_hash` and `hash` (SHA-256 hex), with the first row chained from a fixed GENESIS sentinel (64 zeros). `occasio audit verify` and `docs/audit_walker.py` are independent implementations of the walker.
 
 ---
 
@@ -211,6 +211,6 @@ The audit-chain row schema is documented in [`docs/AUDIT.md`](docs/AUDIT.md). Ea
 
 ## License
 
-LocalFirst is open source under the [Apache License 2.0](LICENSE), including an explicit patent grant for safe enterprise use. Versions 0.6.6 and earlier were released under the MIT License and remain MIT in perpetuity for those releases.
+Occasio is open source under the [Apache License 2.0](LICENSE), including an explicit patent grant for safe enterprise use. Versions 0.6.6 and earlier were released under the MIT License and remain MIT in perpetuity for those releases.
 
 Contributions are accepted under Apache-2.0; please sign off your commits per the [DCO](https://developercertificate.org/) (`git commit -s`).

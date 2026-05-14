@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Register a Windows Scheduled Task that keeps `localfirst` running for
+  Register a Windows Scheduled Task that keeps `occasio` running for
   the current user, restarting it within 30 seconds if it exits.
 
 .DESCRIPTION
@@ -13,11 +13,11 @@
   Tested-on: Windows.
 
   The task runs at user logon, not at boot, because LocalFirst's audit
-  log lives in the user profile (~/.localfirst/). Run from an elevated
+  log lives in the user profile (~/.occasio/). Run from an elevated
   shell only if you need the task to survive logoff.
 #>
 
-$Action  = New-ScheduledTaskAction  -Execute "localfirst" -Argument "start"
+$Action  = New-ScheduledTaskAction  -Execute "occasio" -Argument "start"
 $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 
 $Settings = New-ScheduledTaskSettingsSet `

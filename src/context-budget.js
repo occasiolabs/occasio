@@ -63,7 +63,7 @@ function enforceContextBudget(output, maxTokens) {
   // gone whether the marker is appended or not.
   const preventedTokens = Math.max(0, rawTokens - cutTokens);
   const clipped = cut +
-    `\n\n[LocalFirst: ~${preventedTokens}t cut by context_budget (max ${maxTokens}t). Full output not re-sent to model.]`;
+    `\n\n[Occasio: ~${preventedTokens}t cut by context_budget (max ${maxTokens}t). Full output not re-sent to model.]`;
   const keptTokens = estTokens(clipped);
   return {
     content: clipped,

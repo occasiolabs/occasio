@@ -4,7 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const LOG_DIR = path.join(os.homedir(), '.localfirst');
+const LOG_DIR = path.join(os.homedir(), '.occasio');
 
 const col = {
   r: s => `\x1b[31m${s}\x1b[0m`, g: s => `\x1b[32m${s}\x1b[0m`,
@@ -146,7 +146,7 @@ function printRunDetail(runId, entries) {
   const end   = stats.end   ? new Date(stats.end).toISOString()   : '?';
   const dur   = fmtDuration(stats.durationMs);
 
-  console.log(col.b(`\n⚡ LocalFirst Replay  —  Run ${id}`));
+  console.log(col.b(`\n⚡ Occasio Replay  —  Run ${id}`));
   if (runId && runId !== 'legacy') console.log(col.d(`   run_id: ${runId}`));
   console.log(col.d(`   ${start}  →  ${end}  (${dur})\n`));
 
@@ -402,7 +402,7 @@ function runReplayCli(args) {
       return;
     }
     if (attribute) {
-      console.log(col.b(`\n⚡ LocalFirst Replay — Token Attribution`));
+      console.log(col.b(`\n⚡ Occasio Replay — Token Attribution`));
       console.log(fmtAttribution(attributeRun(runsMap.get(matchedKey)), matchedKey));
       return;
     }
@@ -418,11 +418,11 @@ function runReplayCli(args) {
   const sliced = runList.slice(-limit);
   const total  = runList.length;
 
-  console.log(col.b(`\n⚡ LocalFirst Replay`));
+  console.log(col.b(`\n⚡ Occasio Replay`));
   console.log(col.d(`   ${today}  \xb7  ${total} run${total === 1 ? '' : 's'} today\n`));
 
   if (!sliced.length) {
-    console.log(col.d('   No runs yet. Run: localfirst claude\n'));
+    console.log(col.d('   No runs yet. Run: occasio claude\n'));
     return;
   }
 

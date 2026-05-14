@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * mcp-normalize.js — Input normalization shims for LocalFirst MCP tools.
+ * mcp-normalize.js — Input normalization shims for Occasio MCP tools.
  *
  * Adapts the parameter shapes Claude actually sends (matching the lao server's
  * observed schemas) to the shapes expected by handleReadTool, handleGlobTool,

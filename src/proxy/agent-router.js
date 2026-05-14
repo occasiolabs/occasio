@@ -3,11 +3,11 @@
 /**
  * Agent router — picks an adapter for an incoming proxy request.
  *
- * Detection signal: the `x-localfirst-agent` HTTP header.
+ * Detection signal: the `x-occasio-agent` HTTP header.
  *   - Header value matches a registered agent → that adapter.
  *   - Header missing or unknown               → claude-code (default).
  *
- * The header is LocalFirst-internal: callers (Cline, etc.) set it; the
+ * The header is Occasio-internal: callers (Cline, etc.) set it; the
  * proxy strips it before forwarding to Anthropic.
  *
  * This module deliberately knows about no specific adapter. Adapters are
@@ -53,7 +53,7 @@ function detectAgentFromSse(sseBody, adapters, registry) {
  * Pick an adapter for an incoming proxy request.
  *
  * Resolution order:
- *   1. Explicit header  `x-localfirst-agent`  → that adapter
+ *   1. Explicit header  `x-occasio-agent`  → that adapter
  *   2. Content fingerprint (when sseBody + registry supplied)
  *   3. defaultAgent
  *
@@ -64,7 +64,7 @@ function detectAgentFromSse(sseBody, adapters, registry) {
  * @returns {{ adapter, agentId, source: 'header' | 'fingerprint' | 'default' }}
  */
 function selectAdapter(headers, adapters, defaultAgent, opts = {}) {
-  const raw = headers && headers['x-localfirst-agent'];
+  const raw = headers && headers['x-occasio-agent'];
   if (typeof raw === 'string') {
     const id = raw.trim().toLowerCase();
     if (adapters && adapters[id]) {
@@ -88,6 +88,6 @@ function selectAdapter(headers, adapters, defaultAgent, opts = {}) {
   return { adapter: adapters[defaultAgent], agentId: defaultAgent, source: 'default' };
 }
 
-const HEADER_NAME = 'x-localfirst-agent';
+const HEADER_NAME = 'x-occasio-agent';
 
 module.exports = { selectAdapter, detectAgentFromSse, HEADER_NAME };

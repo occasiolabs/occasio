@@ -3,14 +3,14 @@
 /**
  * baseline.js — per-project agent behaviour baseline + anomaly detection.
  *
- * Reads ~/.localfirst/logs/*.jsonl, groups by run_id, and builds a frequency
+ * Reads ~/.occasio/logs/*.jsonl, groups by run_id, and builds a frequency
  * profile of tool usage scoped to a single project root (cwd). A subsequent
  * `compare` pass flags any session whose tool calls deviate from that profile
  * — new paths, new tool categories, new shell verbs, or volume spikes.
  *
- * Storage: ~/.localfirst/baseline/<cwd-hash>.json. One file per project root.
- * Mining is opt-in (`localfirst baseline learn`), comparison is opt-in
- * (`localfirst baseline compare`). The proxy never auto-records or auto-checks.
+ * Storage: ~/.occasio/baseline/<cwd-hash>.json. One file per project root.
+ * Mining is opt-in (`occasio baseline learn`), comparison is opt-in
+ * (`occasio baseline compare`). The proxy never auto-records or auto-checks.
  *
  * Schema requirement: log entries must have a `cwd` field. Entries without
  * `cwd` are silently skipped — they predate v0.6.3.
@@ -21,8 +21,8 @@ const path   = require('path');
 const os     = require('os');
 const crypto = require('crypto');
 
-const LOG_DIR      = path.join(os.homedir(), '.localfirst', 'logs');
-const BASELINE_DIR = path.join(os.homedir(), '.localfirst', 'baseline');
+const LOG_DIR      = path.join(os.homedir(), '.occasio', 'logs');
+const BASELINE_DIR = path.join(os.homedir(), '.occasio', 'baseline');
 
 // Patterns that bump severity to "high" regardless of baseline novelty.
 // Read of any of these is treated as a high-severity anomaly even when the
@@ -438,17 +438,17 @@ function runBaselineCli(args = []) {
   if (!sub || sub === 'show') {
     const b = readBaseline(cwd);
     if (!b) {
-      process.stdout.write('\n  ' + C.d(`No baseline for this project. Run: ${C.b('localfirst baseline learn')}`) + '\n');
+      process.stdout.write('\n  ' + C.d(`No baseline for this project. Run: ${C.b('occasio baseline learn')}`) + '\n');
       return { ok: false };
     }
-    process.stdout.write(`\n${C.b('LocalFirst Baseline')}\n` + fmtBaseline(b) + '\n');
+    process.stdout.write(`\n${C.b('Occasio Baseline')}\n` + fmtBaseline(b) + '\n');
     return { ok: true };
   }
 
   if (sub === 'learn') {
     const baseline = mineBaseline({ cwd, days });
     const target = writeBaseline(cwd, baseline);
-    process.stdout.write(`\n${C.b('LocalFirst Baseline — learn')}\n`);
+    process.stdout.write(`\n${C.b('Occasio Baseline — learn')}\n`);
     process.stdout.write(`  Source: last ${days} days of logs\n`);
     process.stdout.write(`  Saved:  ${target}\n`);
     process.stdout.write(fmtBaseline(baseline) + '\n');
@@ -458,7 +458,7 @@ function runBaselineCli(args = []) {
   if (sub === 'compare') {
     const baseline = readBaseline(cwd);
     if (!baseline) {
-      process.stdout.write('\n  ' + C.d(`No baseline yet. Run: ${C.b('localfirst baseline learn')}`) + '\n');
+      process.stdout.write('\n  ' + C.d(`No baseline yet. Run: ${C.b('occasio baseline learn')}`) + '\n');
       return { ok: false };
     }
     // Compare LAST run (most recent run_id) for this cwd.
@@ -475,7 +475,7 @@ function runBaselineCli(args = []) {
       .sort((a, b) => b.lastIso - a.lastIso)[0].run;
     const session = extractToolCalls(lastRun);
     const cmp = compareSession(session, baseline);
-    process.stdout.write(`\n${C.b('LocalFirst Baseline — compare')}\n` + fmtComparison(cmp) + '\n');
+    process.stdout.write(`\n${C.b('Occasio Baseline — compare')}\n` + fmtComparison(cmp) + '\n');
     return { ok: cmp.anomalies.length === 0, comparison: cmp };
   }
 
@@ -486,7 +486,7 @@ function runBaselineCli(args = []) {
   }
 
   process.stdout.write('\n  ' + C.r(`Unknown subcommand: ${sub}`) + '\n');
-  process.stdout.write('  ' + C.d('Use: localfirst baseline [learn|show|compare|reset]') + '\n');
+  process.stdout.write('  ' + C.d('Use: occasio baseline [learn|show|compare|reset]') + '\n');
   return { ok: false };
 }
 

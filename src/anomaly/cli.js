@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * anomaly/cli.js — `localfirst anomalies`
+ * anomaly/cli.js — `occasio anomalies`
  *
  * Usage:
- *   localfirst anomalies                       Run all detectors over the last 15 min
- *   localfirst anomalies --window 5m           Override window size (s/m/h suffixes)
- *   localfirst anomalies --json                Machine-readable output
- *   localfirst anomalies --since <ISO>         Pin the "now" anchor (testing)
- *   localfirst anomalies --chain <path>        Override chain file
+ *   occasio anomalies                       Run all detectors over the last 15 min
+ *   occasio anomalies --window 5m           Override window size (s/m/h suffixes)
+ *   occasio anomalies --json                Machine-readable output
+ *   occasio anomalies --since <ISO>         Pin the "now" anchor (testing)
+ *   occasio anomalies --chain <path>        Override chain file
  *
  * Exit codes:
  *   0  no alerts
@@ -50,7 +50,7 @@ function runAnomaliesCli(args = []) {
   if (bool(args, '--help') || bool(args, '-h')) {
     process.stdout.write(
       'Usage:\n' +
-      '  localfirst anomalies [--window 15m] [--since <ISO>] [--chain <path>] [--json]\n' +
+      '  occasio anomalies [--window 15m] [--since <ISO>] [--chain <path>] [--json]\n' +
       '\n' +
       'Detectors:\n' +
       '  deny-rate           BLOCK rate spike vs historical baseline\n' +
@@ -94,7 +94,7 @@ function runAnomaliesCli(args = []) {
 function renderHuman(result, windowMs) {
   const winLabel = humanDuration(windowMs);
   process.stdout.write(
-    `${C.b('localfirst anomalies')}  ${C.d('window=' + winLabel + ', ' +
+    `${C.b('occasio anomalies')}  ${C.d('window=' + winLabel + ', ' +
        result.window_rows + ' rows in window, ' +
        result.history_rows + ' historical)')}\n\n`);
 
@@ -131,7 +131,7 @@ function renderHuman(result, windowMs) {
 
   process.stdout.write('\n');
   process.stdout.write(
-    `  ${C.d('Tip: `localfirst replay --run <id>` to see the run that produced an implicated row.')}\n\n`);
+    `  ${C.d('Tip: `occasio replay --run <id>` to see the run that produced an implicated row.')}\n\n`);
 }
 
 function humanDuration(ms) {

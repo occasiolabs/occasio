@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * localfirst policy doctor — cross-reference live session logs with the
+ * occasio policy doctor — cross-reference live session logs with the
  * active policy and surface actionable improvement suggestions.
  *
  * Usage:
- *   localfirst policy doctor              Analyse last 7 days of logs
- *   localfirst policy doctor --days 14    Analyse last N days
+ *   occasio policy doctor              Analyse last 7 days of logs
+ *   occasio policy doctor --days 14    Analyse last N days
  */
 
 const fs   = require('fs');
@@ -22,7 +22,7 @@ const col = {
   b: s => `\x1b[1m${s}\x1b[0m`,
 };
 
-const LOG_DIR = path.join(os.homedir(), '.localfirst');
+const LOG_DIR = path.join(os.homedir(), '.occasio');
 
 // Maps agent-protocol tool names (as logged in tools[].tool) to policy
 // canonical names used in policy.yml tools: blocks.
@@ -173,12 +173,12 @@ function runDoctorCli(args, opts = {}) {
   const daysArg  = (args || []).indexOf('--days');
   const days     = daysArg >= 0 && args[daysArg + 1] ? (parseInt(args[daysArg + 1], 10) || 7) : 7;
 
-  console.log(col.b('\n⚡ LocalFirst — Policy Doctor\n'));
+  console.log(col.b('\n⚡ Occasio — Policy Doctor\n'));
 
   const entries = readRecentLogs(days, logsDir);
   if (!entries.length) {
     console.log(col.d(`  No session logs found (last ${days} day${days > 1 ? 's' : ''}).`));
-    console.log(col.d('  Run a session first, then re-run localfirst policy doctor.\n'));
+    console.log(col.d('  Run a session first, then re-run occasio policy doctor.\n'));
     return { ok: true, suggestions: [] };
   }
 
@@ -217,7 +217,7 @@ function runDoctorCli(args, opts = {}) {
 
   const hasActionable = suggestions.some(s => s.fix);
   if (hasActionable) {
-    console.log(col.d('  Edit ~/.localfirst/policy.yml, then run localfirst policy validate\n'));
+    console.log(col.d('  Edit ~/.occasio/policy.yml, then run occasio policy validate\n'));
   }
 
   return { ok: true, suggestions };

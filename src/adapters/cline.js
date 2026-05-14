@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Cline adapter — second AI agent supported by LocalFirst.
+ * Cline adapter — second AI agent supported by Occasio.
  *
  * Cline (https://github.com/cline/cline) is a VS Code extension that uses
  * the Anthropic Messages API for tool calls. Because both Cline and Claude
@@ -38,7 +38,7 @@ const PROTOCOL = 'anthropic-http';
 
 // Cline → canonical tool-name map. Only the tools whose semantics map
 // cleanly onto canonical handlers are registered here. Tools without a
-// LocalFirst-native equivalent (write_to_file, browser_action, etc.) are
+// Occasio-native equivalent (write_to_file, browser_action, etc.) are
 // left unmapped — they fall through to PASS via the policy engine.
 toolNames.register(AGENT, {
   read_file:        toolNames.CANONICAL.READ_FILE,        // identity name; input differs

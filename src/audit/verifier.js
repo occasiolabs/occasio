@@ -4,7 +4,7 @@
  * verifier.js — hash-chain verification for pipeline-events.jsonl.
  *
  * verifyFile(filePath) → { ok, total, legacy, chained, errors, firstHash, lastHash }
- * runAuditCli(args)    — CLI entry point for `localfirst audit [verify]`
+ * runAuditCli(args)    — CLI entry point for `occasio audit [verify]`
  *
  * Chain rules:
  *   1. The first hash-chained row must have prev_hash === GENESIS.
@@ -105,9 +105,9 @@ function verifyFile(filePath = DEFAULT_LOG) {
 function runAuditCli(args) {
   const sub = args[0];
 
-  // Accept: `localfirst audit`, `localfirst audit verify`, `localfirst audit verify --file <path>`
+  // Accept: `occasio audit`, `occasio audit verify`, `occasio audit verify --file <path>`
   if (sub && sub !== 'verify' && !sub.startsWith('-')) {
-    console.error(`Unknown audit subcommand: ${sub}\nUsage: localfirst audit [verify] [--file <path>]`);
+    console.error(`Unknown audit subcommand: ${sub}\nUsage: occasio audit [verify] [--file <path>]`);
     process.exit(1);
   }
 
@@ -115,7 +115,7 @@ function runAuditCli(args) {
   const fileIdx = rest.indexOf('--file');
   const filePath = fileIdx !== -1 && rest[fileIdx + 1] ? rest[fileIdx + 1] : DEFAULT_LOG;
 
-  console.log(`\n${col.b('LocalFirst — audit log verification')}\n`);
+  console.log(`\n${col.b('Occasio — audit log verification')}\n`);
   console.log(`  File:  ${col.d(filePath)}`);
 
   const r = verifyFile(filePath);

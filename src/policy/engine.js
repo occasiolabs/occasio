@@ -173,7 +173,7 @@ function evaluate(event) {
     if (shellBlock) return shellBlock;
   }
 
-  // Stage 3: tool routing is policy-driven. Read ~/.localfirst/policy.yml's
+  // Stage 3: tool routing is policy-driven. Read ~/.occasio/policy.yml's
   // `tools:` block. Default tools entries reproduce the previous hardcoded
   // routing exactly (see DEFAULT_TOOLS in loader.js).
   const tools  = (policy && policy.tools) || {};
@@ -259,7 +259,7 @@ function evaluate(event) {
  *   { action: 'BLOCK', secrets, syntheticResponse, reason }
  *
  * Stage 2 wiring:
- *   - Reads `block_secrets_in_tool_results` from ~/.localfirst/policy.yml.
+ *   - Reads `block_secrets_in_tool_results` from ~/.occasio/policy.yml.
  *   - In legacy `block_secrets` mode, the policy's BLOCK is honored if
  *     enabled; in normal `intercept` mode, scan still runs (callers can
  *     surface warnings) but no block.
@@ -324,7 +324,7 @@ function evaluateRequest(ctx = {}) {
               type:   'budget_exceeded',
               budget,
               spent:  sessionCost,
-              by:     'LocalFirst',
+              by:     'Occasio',
             },
           },
         },

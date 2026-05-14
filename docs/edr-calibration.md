@@ -1,16 +1,16 @@
 # EDR-Detector calibration
 
-The four built-in anomaly detectors (`src/anomaly/detectors/*`) shipped with starter thresholds. This doc records what those thresholds do on a real, day-to-day LocalFirst chain, and what was tuned after measuring.
+The four built-in anomaly detectors (`src/anomaly/detectors/*`) shipped with starter thresholds. This doc records what those thresholds do on a real, day-to-day Occasio chain, and what was tuned after measuring.
 
 ## Why the thresholds matter
 
-LocalFirst markets the anomaly layer as EDR — a category whose buyers (CISOs, Compliance) judge tools by the false-positive rate on normal activity. *"How often does this fire when nothing is wrong?"* is a hard, specific question. Starter thresholds without an empirical baseline are a credibility risk.
+Occasio markets the anomaly layer as EDR — a category whose buyers (CISOs, Compliance) judge tools by the false-positive rate on normal activity. *"How often does this fire when nothing is wrong?"* is a hard, specific question. Starter thresholds without an empirical baseline are a credibility risk.
 
 The calibration script `scripts/calibrate-anomaly-detectors.js` slides a 15-minute window across an audit chain in 5-minute steps, runs every detector on every window, and tallies alerts by severity. Run it against any sufficiently large chain (≥ ~500 rows) to validate the defaults against your own usage.
 
 ## Calibration run
 
-**Chain:** `~/.localfirst/pipeline-events.jsonl`
+**Chain:** `~/.occasio/pipeline-events.jsonl`
 **Span:** 3.2 days (2026-05-11 → 2026-05-14)
 **Rows:** 2522
 **Windows evaluated:** 911 (≈ 12 per hour)
@@ -68,6 +68,6 @@ The script prints per-detector tallies, alert rates, one example per severity le
 
 ## What this is not
 
-- **Not a replacement for adversarial validation.** Calibration tells us whether the threshold is too tight for normal use. It does not tell us whether the threshold is loose enough to catch genuine attacks. That is the job of `localfirst demo anomalies` (which constructs a synthetic adversarial chain that must trigger all four detectors) and the [EDR demo walkthrough](edr-demo.md) (which runs a real Claude Code session against the policy and confirms the detectors fire on the resulting chain).
+- **Not a replacement for adversarial validation.** Calibration tells us whether the threshold is too tight for normal use. It does not tell us whether the threshold is loose enough to catch genuine attacks. That is the job of `occasio demo anomalies` (which constructs a synthetic adversarial chain that must trigger all four detectors) and the [EDR demo walkthrough](edr-demo.md) (which runs a real Claude Code session against the policy and confirms the detectors fire on the resulting chain).
 - **Not a static contract.** Defaults are tuned against one user's chain over 3 days. A production deployment should re-calibrate against its own audit history. Plan: lift the thresholds into `policy.yml` as overridable values once the schema for that is agreed.
 - **Not a guarantee of zero false positives.** A `MEDIUM` `secret-redact-rate` alert can fire when someone is legitimately editing a config file full of pattern-matching secrets. The right reading of any single alert is "look at the implicated rows and decide", not "block production".

@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * localfirst report — structured governance export (ARCH-27).
+ * occasio report — structured governance export (ARCH-27).
  *
  * Usage:
- *   localfirst report [--format json|csv] [--days N]
+ *   occasio report [--format json|csv] [--days N]
  *
  * Reads:
- *   ~/.localfirst/pipeline-events.jsonl  — per-tool audit events (tool access, blocks)
- *   ~/.localfirst/logs/YYYY-MM-DD.jsonl  — per-request cost/token summary
+ *   ~/.occasio/pipeline-events.jsonl  — per-tool audit events (tool access, blocks)
+ *   ~/.occasio/logs/YYYY-MM-DD.jsonl  — per-request cost/token summary
  *
  * Outputs a structured document answering:
  *   "What data did the AI agent access, what was blocked, and did any secrets appear?"
@@ -19,7 +19,7 @@ const path = require('path');
 const os   = require('os');
 const { verifyFile } = require('../audit/verifier');
 
-const LOG_DIR     = path.join(os.homedir(), '.localfirst');
+const LOG_DIR     = path.join(os.homedir(), '.occasio');
 const EVENTS_FILE = path.join(LOG_DIR, 'pipeline-events.jsonl');
 const LOGS_DIR    = path.join(LOG_DIR, 'logs');
 
@@ -208,7 +208,7 @@ function runReportCli(args) {
   const days      = daysIdx  >= 0 ? (parseInt(args[daysIdx + 1], 10) || 30) : 30;
 
   if (format !== 'json' && format !== 'csv') {
-    process.stderr.write(`[LocalFirst] report: unknown format "${format}", use json or csv\n`);
+    process.stderr.write(`[Occasio] report: unknown format "${format}", use json or csv\n`);
     process.exit(1);
   }
 

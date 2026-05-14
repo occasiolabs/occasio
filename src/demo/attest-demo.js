@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * demo/attest-demo.js — `localfirst demo attest`
+ * demo/attest-demo.js — `occasio demo attest`
  *
  * Production CLI command, first-class user-facing feature. The `demo/`
  * folder houses CLIs that exercise a full pipeline against synthetic
  * data so users can see the system end-to-end in seconds without
- * touching their real ~/.localfirst chain. These are demos in the
+ * touching their real ~/.occasio chain. These are demos in the
  * sense of "demonstrations" — they are not throwaway scaffolding,
  * they ship in the npm package and are documented in the README.
  *
  * End-to-end demo of the attestation pipeline, locally, without GitHub
  * Actions or external services. Runs against a synthetic audit chain so
- * it never touches the user's real ~/.localfirst/pipeline-events.jsonl.
+ * it never touches the user's real ~/.occasio/pipeline-events.jsonl.
  *
  * Flow demonstrated:
  *   1. Build a hash-chained scratch audit chain (3 PASS + 1 BLOCK + 1
  *      TRANSFORM with redacted secret + 1 policy_loaded row)
- *   2. Verify the chain integrity (mirrors `localfirst audit verify`)
+ *   2. Verify the chain integrity (mirrors `occasio audit verify`)
  *   3. Build an unsigned attestation for the synthetic run_id
  *   4. Verify the predicate ↔ attestation byte-equivalence (canonical
  *      JSON round-trip) without invoking Sigstore — the test harness
@@ -84,7 +84,7 @@ function buildSyntheticChain(chainFile, policyFile) {
   // policy_loaded
   ({ hash: prev } = appendRow(chainFile, prev, {
     ts: ts(0), event_id: crypto.randomUUID(),
-    run_id: RUN_ID, agent: 'localfirst',
+    run_id: RUN_ID, agent: 'occasio',
     kind: 'policy_loaded', tool_name: 'policy_loaded', action: 'INFO',
     tool_inputs: { policy_hash: policyHash, policy_path: policyFile, version: 1 },
     policy_source: 'user', reason: 'policy-loaded',
@@ -127,9 +127,9 @@ async function runAttestDemoCli(_args = []) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lf-demo-attest-'));
   const chainFile  = path.join(tmpDir, 'pipeline-events.jsonl');
   const policyFile = path.join(tmpDir, 'policy.yml');
-  const outFile    = path.join(tmpDir, 'localfirst-attestation.json');
+  const outFile    = path.join(tmpDir, 'occasio-attestation.json');
 
-  process.stdout.write(`${C.b('localfirst demo attest')}\n`);
+  process.stdout.write(`${C.b('occasio demo attest')}\n`);
   process.stdout.write(`${C.d('  scratch dir: ' + tmpDir)}\n\n`);
 
   // ── Step 1 ─────────────────────────────────────────────────────────────
@@ -189,7 +189,7 @@ async function runAttestDemoCli(_args = []) {
   process.stdout.write(`   - Add ${C.c('.github/workflows/attest-on-pr.yml')} from ${C.d('docs/reference-pipeline.md')}\n`);
   process.stdout.write(`   - Grant the workflow ${C.c('id-token: write')} + ${C.c('checks: write')} permissions\n`);
   process.stdout.write(`   - Push a PR; the Action will sign via Sigstore keyless and post a Check Run\n`);
-  process.stdout.write(`   - Auditors verify offline: ${C.c('localfirst attest verify <file>')}\n\n`);
+  process.stdout.write(`   - Auditors verify offline: ${C.c('occasio attest verify <file>')}\n\n`);
   process.stdout.write(`${C.d('Scratch artifacts kept at ' + tmpDir + ' for inspection.')}\n`);
 
   return 0;

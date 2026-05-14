@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-attest_verify.py — independent Python verifier for LocalFirst's
+attest_verify.py — independent Python verifier for Occasio's
 AI-Agent Behavioral Attestation v1 predicate.
 
 Mirrors src/attest/verify.js, but written for an auditor whose
-environment is Python-only and who refuses to trust LocalFirst's
-own verifier to certify LocalFirst's own output. Three independent
+environment is Python-only and who refuses to trust Occasio's
+own verifier to certify Occasio's own output. Three independent
 checks, in order, each must pass:
 
     1. Sigstore signature  (Fulcio cert chain + Rekor inclusion)
@@ -47,7 +47,7 @@ from canonicalize import canonicalize  # noqa: E402
 import audit_walker  # noqa: E402
 
 PREDICATE_TYPE = (
-    "https://github.com/localfirst-ai/localfirst/spec/agent-attestation/v1"
+    "https://github.com/occasiolabs/occasio/spec/agent-attestation/v1"
 )
 DSSE_PAYLOAD_TYPE = "application/vnd.in-toto+json"
 
@@ -248,7 +248,7 @@ def _render(result: dict) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Independent Python verifier for LocalFirst Agent Attestation v1."
+            "Independent Python verifier for Occasio Agent Attestation v1."
         )
     )
     parser.add_argument("attestation", help="Path to attestation.json")

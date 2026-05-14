@@ -149,7 +149,7 @@ vite.config.ts.timestamp-*
 # To keep: push internal/ to a private companion repo
 internal/
 
-# Python bytecode (parallel localfirst/ Python package)
+# Python bytecode (parallel occasio/ Python package)
 __pycache__/
 *.pyc
 *.pyo
@@ -158,3 +158,9 @@ __pycache__/
 *.vsix
 *.tgz
 *.zip
+
+# Local-only working directories: experiments, scratch, legacy Python helper
+# (these were silently dropped during the rebrand rename — restored explicitly)
+.claude/
+localfirst/
+occasio/

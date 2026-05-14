@@ -3,7 +3,7 @@
 /**
  * Preflight pattern miner (ARCH-26, read-only).
  *
- * Reads ~/.localfirst/logs/*.jsonl, groups entries by run_id, and identifies
+ * Reads ~/.occasio/logs/*.jsonl, groups entries by run_id, and identifies
  * which tool calls appear consistently at the start of sessions for a given
  * project root. No execution, no caching, no side effects.
  *
@@ -17,7 +17,7 @@ const path = require('path');
 const os   = require('os');
 const { execSync } = require('child_process');
 
-const LOG_DIR = path.join(os.homedir(), '.localfirst');
+const LOG_DIR = path.join(os.homedir(), '.occasio');
 
 // Only mine these tool types. Shell commands are too variable to be useful
 // as preflight candidates; todo tools carry no path information.

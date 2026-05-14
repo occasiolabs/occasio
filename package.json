@@ -1,7 +1,7 @@
 {
-  "name": "@localfirst-ai/localfirst",
+  "name": "@occasiolabs/occasio",
   "version": "0.8.1",
-  "description": "LocalFirst — cryptographically verifiable behavioral attestation for AI coding agents. Tool-call interception + policy enforcement + tamper-evident audit chain + Sigstore-signed in-toto attestations + windowed EDR detection. Same engine for Claude Code and MCP; Computer-Use scaffold included.",
+  "description": "Occasio — cryptographically verifiable behavioral attestation for AI coding agents. Tool-call interception + policy enforcement + tamper-evident audit chain + Sigstore-signed in-toto attestations + windowed EDR detection. Same engine for Claude Code and MCP; Computer-Use scaffold included.",
   "main": "src/index.js",
   "files": [
     "bin/",
@@ -19,7 +19,7 @@
     "test:mcp": "node test-mcp-server.js",
     "restart-check": "node scripts/restart-check.js",
     "check-validation": "node scripts/check-validation.js",
-    "start": "node bin/localfirst.js"
+    "start": "node bin/occasio.js"
   },
   "keywords": [
     "claude",
@@ -47,20 +47,20 @@
     "computer-use"
   ],
   "bin": {
-    "localfirst":     "bin/localfirst.js",
-    "lf":             "bin/localfirst.js",
-    "localfirst-mcp": "bin/localfirst-mcp.js"
+    "occasio":     "bin/occasio.js",
+    "oc":          "bin/occasio.js",
+    "occasio-mcp": "bin/occasio-mcp.js"
   },
   "engines": {
     "node": ">=18"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/localfirst-ai/localfirst.git"
+    "url": "https://github.com/occasiolabs/occasio.git"
   },
-  "homepage": "https://github.com/localfirst-ai/localfirst#readme",
+  "homepage": "https://github.com/occasiolabs/occasio#readme",
   "bugs": {
-    "url": "https://github.com/localfirst-ai/localfirst/issues"
+    "url": "https://github.com/occasiolabs/occasio/issues"
   },
   "license": "Apache-2.0",
   "dependencies": {

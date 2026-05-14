@@ -22,7 +22,7 @@ const col = {
   b: s => `\x1b[1m${s}\x1b[0m`,
 };
 
-const LOG_DIR     = path.join(os.homedir(), '.localfirst');
+const LOG_DIR     = path.join(os.homedir(), '.occasio');
 const MCP_LOG     = path.join(LOG_DIR, 'mcp-experiment.jsonl');
 const TODAY       = new Date().toISOString().slice(0, 10);
 const SESSION_LOG = path.join(LOG_DIR, 'logs', `${TODAY}.jsonl`);
@@ -58,7 +58,7 @@ function runStats() {
   const mcpDistillSaved = mcpEntries.reduce((s, e) => s + (e.distillSaved || 0), 0);
   const mcpSecretsFound = mcpEntries.reduce((s, e) => s + (e.secretsFound || 0), 0);
 
-  console.log(col.b('\n⚡ LocalFirst MCP Experiment\n'));
+  console.log(col.b('\n⚡ Occasio MCP Experiment\n'));
 
   if (total === 0) {
     console.log(col.d('  No tool calls recorded yet. Run a Claude session first.\n'));

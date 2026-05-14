@@ -3,7 +3,7 @@
   LocalFirst launchd template (v0.6.4).
 
   This file is a TEMPLATE: replace {{LOCALFIRST_BIN}} with the absolute
-  path to your `localfirst` executable before installing. See
+  path to your `occasio` executable before installing. See
   bin/supervisor/README.md for the install command.
 
   STATUS: shipped unvalidated on macOS in v0.6.4. The Linux systemd unit
@@ -14,7 +14,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>ai.localfirst.proxy</string>
+    <string>ai.occasio.proxy</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -29,8 +29,8 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/localfirst.out.log</string>
+    <string>/tmp/occasio.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/localfirst.err.log</string>
+    <string>/tmp/occasio.err.log</string>
 </dict>
 </plist>

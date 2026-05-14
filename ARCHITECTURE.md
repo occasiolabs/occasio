@@ -1,6 +1,6 @@
-# LocalFirst Architecture
+# Occasio Architecture
 
-LocalFirst is built as a **user-side boundary layer** between AI agents and the user's machine. The architecture is layered: each layer has a named module with a clean contract, and policy decisions flow through the canonical pipeline (`adapter → policy → dispatcher → auditor`). Concrete components wrap the implementations in `interceptor.js` / `runtime.js` / `analyzer.js` / `distiller.js` and the per-call defense gates in `outbound-policy.js`.
+Occasio is built as a **user-side boundary layer** between AI agents and the user's machine. The architecture is layered: each layer has a named module with a clean contract, and policy decisions flow through the canonical pipeline (`adapter → policy → dispatcher → auditor`). Concrete components wrap the implementations in `interceptor.js` / `runtime.js` / `analyzer.js` / `distiller.js` and the per-call defense gates in `outbound-policy.js`.
 
 ## The seven layers
 
@@ -90,7 +90,7 @@ Existing modules (`interceptor.js`, `runtime.js`, `analyzer.js`, `distiller.js`,
 | Bash       | `NATIVE_HANDLERS.Bash` runs `nativeHandle(cmd)`; on null, falls back to `runLocally(cmd)` exec subprocess. `native: true\|false` returned to caller |
 | PowerShell | `NATIVE_HANDLERS.PowerShell` expands `$env:` vars then runs `nativeHandle(cmd)`. `expandedCmd` returned for label/audit |
 
-For each call: one `BoundaryEvent` is constructed, one `Decision` is emitted, one `Result` is returned, and one row is appended to `~/.localfirst/pipeline-events.jsonl`.
+For each call: one `BoundaryEvent` is constructed, one `Decision` is emitted, one `Result` is returned, and one row is appended to `~/.occasio/pipeline-events.jsonl`.
 
 ## Multi-round orchestration (post-Phase-D)
 
@@ -113,7 +113,7 @@ adapter.runToolLoop({initialSse, reqBody, reqHeaders, ...opts})
 
 ## Stage 2 — policy as data
 
-Two decisions are now produced by the policy engine reading `~/.localfirst/policy.yml`:
+Two decisions are now produced by the policy engine reading `~/.occasio/policy.yml`:
 
 | Decision point | Where it runs | YAML key |
 |---|---|---|
@@ -179,7 +179,7 @@ The user can author `policy.yml` to:
 
 ### Default behavior preserved
 
-`DEFAULT_POLICY.tools` reproduces the pre-Stage-3 hardcoded routing exactly. Existing users see no change. To override, the user creates `~/.localfirst/policy.yml` with their own `tools:` block; if present, it replaces the defaults entirely.
+`DEFAULT_POLICY.tools` reproduces the pre-Stage-3 hardcoded routing exactly. Existing users see no change. To override, the user creates `~/.occasio/policy.yml` with their own `tools:` block; if present, it replaces the defaults entirely.
 
 ## Stage 3 — canonical tool-name registry
 
@@ -199,7 +199,7 @@ The pipeline interior speaks **canonical** tool names — agent-agnostic identif
 - `BoundaryEvent.toolName` — agent-agnostic; the original Claude name remains in `BoundaryEvent.raw.name`.
 - `dispatcher.NATIVE_HANDLERS` — keyed on canonical names.
 - `policy.tools` (in `policy.yml` defaults and `DEFAULT_TOOLS`).
-- `~/.localfirst/pipeline-events.jsonl` — `tool_name` is canonical.
+- `~/.occasio/pipeline-events.jsonl` — `tool_name` is canonical.
 
 **Where Claude-specific names still appear:**
 - `BoundaryEvent.raw.name` — preserved for protocol-shape callers.
@@ -225,7 +225,7 @@ Adding a second agent (Cline, Cursor) is now mechanical: write the adapter, call
 
 ## Stage 3 — Cline adapter (synthetic; live validation pending)
 
-LocalFirst now ships a second adapter (`src/adapters/cline.js`) that recognizes Cline tool calls and routes them through the same canonical pipeline. The adapter's responsibilities:
+Occasio now ships a second adapter (`src/adapters/cline.js`) that recognizes Cline tool calls and routes them through the same canonical pipeline. The adapter's responsibilities:
 
 1. **Tool name registration.** `toolNames.register('cline', { read_file: 'read_file', execute_command: 'shell_bash', ... })`. Tools without a canonical mapping (e.g., `write_to_file`, `browser_action`) fall through to PASS via the policy engine.
 2. **Input shape translation.** Per-tool transformers convert Cline's input shape (`{path: 'foo'}`) to canonical (`{file_path: 'foo'}`) so dispatcher handlers and label extraction work uniformly.
@@ -250,15 +250,15 @@ The Cline adapter is exercised by synthetic SSE fixtures based on Cline's publis
 - Verify per-tool input field names (currently translated from public docs).
 - Confirm Cline routes through the proxy correctly when configured with a custom Anthropic base URL.
 - Run a real Cline session through the proxy and verify `pipeline-events.jsonl` records `agent: 'cline'`.
-- Add live validation: route a real Cline session through the proxy with `x-localfirst-agent: cline` set in Cline's request configuration. Verify `~/.localfirst/pipeline-events.jsonl` records `agent: 'cline'` and tool dispatches succeed.
+- Add live validation: route a real Cline session through the proxy with `x-occasio-agent: cline` set in Cline's request configuration. Verify `~/.occasio/pipeline-events.jsonl` records `agent: 'cline'` and tool dispatches succeed.
 
 ## Stage 3 — proxy-side agent routing
 
-`index.js` now selects an adapter per request. Both `claudeCodeAdapter` and `clineAdapter` are loaded at proxy startup (so each agent's tool-name registration runs before any traffic arrives). For each `/v1/messages` request, the proxy reads the `x-localfirst-agent` header and dispatches accordingly.
+`index.js` now selects an adapter per request. Both `claudeCodeAdapter` and `clineAdapter` are loaded at proxy startup (so each agent's tool-name registration runs before any traffic arrives). For each `/v1/messages` request, the proxy reads the `x-occasio-agent` header and dispatches accordingly.
 
 ```
 Cline VS Code extension (configured with proxy URL + custom header)
-       ↓ Anthropic API request with `x-localfirst-agent: cline` header
+       ↓ Anthropic API request with `x-occasio-agent: cline` header
    proxy at localhost:8081
        ↓ selectAdapter(req.headers) → cline adapter
    cline.runToolLoop(...) → canonical pipeline → agent: 'cline' in audit
@@ -266,13 +266,13 @@ Cline VS Code extension (configured with proxy URL + custom header)
    api.anthropic.com
 ```
 
-Detection signal: `x-localfirst-agent` HTTP header.
+Detection signal: `x-occasio-agent` HTTP header.
 - `cline` → Cline adapter.
 - Header missing or unrecognized → Claude Code adapter (preserves backward compat).
 
 Implementation: `src/proxy/agent-router.js` exports `selectAdapter(headers, adapters, defaultAgent) → { adapter, agentId, source }`. The router is agent-agnostic: it knows nothing about specific adapters, only how to look one up by header. `index.js` supplies the registered adapter map and the default.
 
-The header is **LocalFirst-internal**: it never leaves the machine. The proxy strips it from the outbound HTTP request before forwarding to Anthropic.
+The header is **Occasio-internal**: it never leaves the machine. The proxy strips it from the outbound HTTP request before forwarding to Anthropic.
 
 The dispatcher's `NATIVE_HANDLERS` table is now the **single source of truth** for tool execution. `interceptToolUse` no longer makes any direct call to `handleReadTool` / `handleGlobTool` / `handleGrepTool` / `handleTodoWriteTool` / `handleTodoReadTool` / `nativeHandle` / `runLocally` / `expandPsEnvVars` for tool dispatch. The remaining call sites for those functions are inside the dispatcher, gate-check helpers (`isPowerShellNativeHandleable`, `classifyBlock`), or self-recursive helpers (`runCompound` for D-3 compound chains).
 
@@ -297,7 +297,7 @@ The dispatcher's `NATIVE_HANDLERS` table is now the **single source of truth** f
 
 ## What changed between v0.6.0 and Stage 1
 
-No user-visible behavior changes. `localfirst claude`, `localfirst status`, `localfirst demo`, the Saved banner, the dashboard, and the JSONL log shape are all identical to v0.6.0. The structural changes:
+No user-visible behavior changes. `occasio claude`, `occasio status`, `occasio demo`, the Saved banner, the dashboard, and the JSONL log shape are all identical to v0.6.0. The structural changes:
 
 - 7 new files in `src/core/`, `src/adapters/`, `src/policy/`, `src/executor/`, `src/scanner/`, `src/audit/`
 - New test sections ARCH-1 through ARCH-6 covering layer contracts and end-to-end flow
@@ -309,7 +309,7 @@ No user-visible behavior changes. `localfirst claude`, `localfirst status`, `loc
 
 ## Production audit log
 
-Path: `~/.localfirst/pipeline-events.jsonl`
+Path: `~/.occasio/pipeline-events.jsonl`
 
 One row per tool call that flows through the canonical pipeline. Format:
 

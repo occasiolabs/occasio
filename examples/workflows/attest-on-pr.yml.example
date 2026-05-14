@@ -27,19 +27,19 @@ jobs:
 
       # ── Your AI-agent step goes here ────────────────────────────────
       # The only requirement is that the agent runs under LocalFirst so
-      # its tool calls land in ~/.localfirst/pipeline-events.jsonl. Below
+      # its tool calls land in ~/.occasio/pipeline-events.jsonl. Below
       # is the Claude Code path; substitute as needed.
       - name: Install LocalFirst + Claude Code
-        run: npm install -g @localfirst-ai/localfirst @anthropic-ai/claude-code
+        run: npm install -g @occasio-ai/occasio @anthropic-ai/claude-code
 
       - name: Run Claude Code under LocalFirst
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: localfirst claude --hardened < .github/agent-prompt.txt
+        run: occasio claude --hardened < .github/agent-prompt.txt
 
       # ── Produce + sign attestation, post Check Run ──────────────────
       - name: Attest
-        uses: localfirst-ai/attest-action@v1
+        uses: occasio-ai/attest-action@v1
         # All inputs optional — run-id auto-resolves from
-        # ~/.localfirst/session.json. See integrations/attest-action/README.md
+        # ~/.occasio/session.json. See integrations/attest-action/README.md
         # for the full input matrix.

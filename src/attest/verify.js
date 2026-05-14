@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * verify.js — re-verify a signed LocalFirst Agent Attestation end-to-end.
+ * verify.js — re-verify a signed Occasio Agent Attestation end-to-end.
  *
  * Three independent checks, in order — each must pass:
  *   1. Sigstore bundle is cryptographically valid against Fulcio/Rekor.
@@ -10,7 +10,7 @@
  *      JSON we hold (modulo the `signature` field, which is metadata-only and
  *      excluded before comparison).
  *   3. The audit chain (`chain_file` in the attestation) verifies via the
- *      same walker that `localfirst audit verify` uses, AND the
+ *      same walker that `occasio audit verify` uses, AND the
  *      `first_hash`/`last_hash` claimed in the attestation exist in that
  *      chain in the correct order.
  *
@@ -142,12 +142,12 @@ async function verifyAttestation(attestationPath, bundlePath, ctx = {}) {
 async function runAttestVerifyCli(args) {
   args = args || [];
   if (args.length === 0 || args[0].startsWith('-') && args[0] !== '--help') {
-    process.stderr.write('Usage: localfirst attest verify <attestation.json> [--bundle <path>]\n');
+    process.stderr.write('Usage: occasio attest verify <attestation.json> [--bundle <path>]\n');
     process.exit(2);
   }
   if (args[0] === '--help' || args[0] === '-h') {
     process.stdout.write(
-      'Usage: localfirst attest verify <attestation.json> [--bundle <path>]\n' +
+      'Usage: occasio attest verify <attestation.json> [--bundle <path>]\n' +
       '\n' +
       'Default bundle path: <attestation>.sigstore.json (sidecar convention).\n'
     );

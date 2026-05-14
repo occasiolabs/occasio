@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * demo/anomalies-demo.js — `localfirst demo anomalies`
+ * demo/anomalies-demo.js — `occasio demo anomalies`
  *
  * Production CLI command, first-class user-facing feature. See
  * src/demo/README.md for the folder convention. Builds a synthetic
@@ -18,7 +18,7 @@
  *   secret-redact-rate  pattern: 3 redacted-secret rows in window
  *                                (vs. zero in 250 historical rows)
  *
- * Never touches ~/.localfirst — uses os.tmpdir() throughout.
+ * Never touches ~/.occasio — uses os.tmpdir() throughout.
  *
  * Used by:
  *   - Smoke-testing the EDR layer end-to-end
@@ -150,7 +150,7 @@ function runAnomaliesDemoCli(_args = []) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lf-demo-anomalies-'));
   const chainFile = path.join(tmpDir, 'pipeline-events.jsonl');
 
-  process.stdout.write(`${C.b('localfirst demo anomalies')}\n`);
+  process.stdout.write(`${C.b('occasio demo anomalies')}\n`);
   process.stdout.write(`${C.d('  scratch dir: ' + tmpDir)}\n\n`);
 
   // ── Step 1 ─────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ function runAnomaliesDemoCli(_args = []) {
   if (!allFired) return 1;
   process.stdout.write(`${C.g('✓')} EDR layer end-to-end OK  ${C.d('(scratch chain preserved at ' + tmpDir + ')')}\n`);
   process.stdout.write(`\n${C.d('Re-run against the same chain interactively:')}\n`);
-  process.stdout.write(`   ${C.c('localfirst anomalies --chain ' + chainFile + ' --since "' + new Date(nowMs).toISOString() + '"')}\n\n`);
+  process.stdout.write(`   ${C.c('occasio anomalies --chain ' + chainFile + ' --since "' + new Date(nowMs).toISOString() + '"')}\n\n`);
   return 0;
 }
 

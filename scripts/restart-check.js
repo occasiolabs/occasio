@@ -2,7 +2,7 @@
 /**
  * restart-check.js — Detect stale proxy (interceptor.js modified after proxy started).
  *
- * The LocalFirst proxy caches interceptor.js in memory on startup via Node's
+ * The Occasio proxy caches interceptor.js in memory on startup via Node's
  * module require() cache.  If interceptor.js is edited while the proxy is
  * running, the new code is NOT used until the proxy process is restarted.
  *
@@ -21,7 +21,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const SESSION_FILE   = path.join(os.homedir(), '.localfirst', 'session.json');
+const SESSION_FILE   = path.join(os.homedir(), '.occasio', 'session.json');
 const INTERCEPTOR_JS = path.join(__dirname, '..', 'src', 'interceptor.js');
 
 // Parse "DD.MM.YYYY HH:MM:SS" (German locale) or ISO strings from session.json.
@@ -88,7 +88,7 @@ try {
 
 const sessionStart = parseSessionDate(session.start);
 
-console.log('LocalFirst proxy staleness check');
+console.log('Occasio proxy staleness check');
 console.log('─'.repeat(40));
 console.log(`interceptor.js modified : ${fmt(interceptorMtime)}`);
 console.log(`proxy session started   : ${sessionStart ? fmt(sessionStart) : `"${session.start}" (unparsed)`}`);
@@ -106,7 +106,7 @@ if (stale) {
   const diffMin = Math.round(diffMs / 60000);
   console.log(`\n✗  STALE — interceptor.js is ${diffMin} minute(s) newer than the running proxy.`);
   console.log('   The proxy is running OLD code.');
-  console.log('   Restart required: stop the proxy and run `localfirst claude` again.');
+  console.log('   Restart required: stop the proxy and run `occasio claude` again.');
   process.exit(1);
 } else {
   console.log('\n✓  OK — proxy session started after the last interceptor.js edit.');

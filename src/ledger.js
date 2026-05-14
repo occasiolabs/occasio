@@ -4,7 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const LOG_DIR      = path.join(os.homedir(), '.localfirst');
+const LOG_DIR      = path.join(os.homedir(), '.occasio');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
 
 const col = {
@@ -125,7 +125,7 @@ function printSummary(totals, scope, runId) {
           distill_tokens_saved = 0, tools_local_count } = totals;
   const saved = (cache_savings || 0) + (lao_cost_saved || 0) + distill_cost_saved;
 
-  console.log(col.b(`\n⚡ LocalFirst Ledger  —  Summary`));
+  console.log(col.b(`\n⚡ Occasio Ledger  —  Summary`));
   if (runId) console.log(col.d(`   run: ${runId}`));
   console.log(col.d(`   scope: ${scope}\n`));
 
@@ -182,7 +182,7 @@ function runLedgerCli(args) {
   }
 
   // List view
-  console.log(col.b(`\n⚡ LocalFirst Ledger`));
+  console.log(col.b(`\n⚡ Occasio Ledger`));
   let headerLine = '';
   if (runId) headerLine += col.d(`run: ${runId}`);
   if (session?.start) headerLine += col.d(`${runId ? '  ·  ' : ''}started ${new Date(session.start).toTimeString().slice(0, 8)}`);
@@ -190,7 +190,7 @@ function runLedgerCli(args) {
   console.log(col.d(`   scope: ${scope}  ·  ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} total\n`));
 
   if (!entries.length) {
-    console.log(col.d('   No entries yet. Run: localfirst claude\n'));
+    console.log(col.d('   No entries yet. Run: occasio claude\n'));
     return;
   }
 

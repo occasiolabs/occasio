@@ -6,7 +6,7 @@
  *
  * Slide the 15-minute anomaly window across an audit chain and count how
  * often each detector fires. Use against your real
- * ~/.localfirst/pipeline-events.jsonl to find the false-positive rate of
+ * ~/.occasio/pipeline-events.jsonl to find the false-positive rate of
  * the current default thresholds on normal usage.
  *
  * The thresholds in src/anomaly/detectors/* started as best guesses. This

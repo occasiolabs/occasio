@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * computer-use-cli.js — `localfirst computer-use` (dry-run demo).
+ * computer-use-cli.js — `occasio computer-use` (dry-run demo).
  *
  * Reads a JSONL file of synthetic tool_use blocks (or stdin), applies a
  * computer-use policy file, and prints what the engine would decide for
@@ -9,8 +9,8 @@
  * without yet wiring up the live proxy adapter.
  *
  * Usage:
- *   localfirst computer-use --dry-run --from <jsonl>   [--policy <yml>]
- *   localfirst computer-use --example                  # built-in sample
+ *   occasio computer-use --dry-run --from <jsonl>   [--policy <yml>]
+ *   occasio computer-use --example                  # built-in sample
  *
  * Live mode (intercept a real Computer-Use session through the proxy) is
  * a follow-up that requires:
@@ -105,8 +105,8 @@ function runComputerUseCli(args = []) {
   if (bool(args, '--help') || bool(args, '-h')) {
     process.stdout.write(
       'Usage:\n' +
-      '  localfirst computer-use --dry-run --from <jsonl> [--policy <yml>]\n' +
-      '  localfirst computer-use --example\n\n' +
+      '  occasio computer-use --dry-run --from <jsonl> [--policy <yml>]\n' +
+      '  occasio computer-use --example\n\n' +
       'Apply a computer-use policy to a JSONL of synthetic tool_use blocks\n' +
       'and report each decision. Live proxy interception is not yet wired —\n' +
       'this is the adapter\'s policy-engine half, validated in isolation.\n'

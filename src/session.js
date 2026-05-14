@@ -16,7 +16,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const SESSION_FILE = path.join(os.homedir(), '.localfirst', 'session.json');
+const SESSION_FILE = path.join(os.homedir(), '.occasio', 'session.json');
 
 /**
  * Increment tools_mcp_count in session.json by n (default 1).
