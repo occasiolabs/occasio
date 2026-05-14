@@ -3,6 +3,13 @@
 /**
  * demo/attest-demo.js — `localfirst demo attest`
  *
+ * Production CLI command, first-class user-facing feature. The `demo/`
+ * folder houses CLIs that exercise a full pipeline against synthetic
+ * data so users can see the system end-to-end in seconds without
+ * touching their real ~/.localfirst chain. These are demos in the
+ * sense of "demonstrations" — they are not throwaway scaffolding,
+ * they ship in the npm package and are documented in the README.
+ *
  * End-to-end demo of the attestation pipeline, locally, without GitHub
  * Actions or external services. Runs against a synthetic audit chain so
  * it never touches the user's real ~/.localfirst/pipeline-events.jsonl.

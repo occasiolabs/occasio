@@ -3,8 +3,10 @@
 /**
  * demo/anomalies-demo.js — `localfirst demo anomalies`
  *
- * Builds a synthetic adversarial audit chain in a temp dir and runs all four
- * anomaly detectors against it. Each detector is designed to fire on exactly
+ * Production CLI command, first-class user-facing feature. See
+ * src/demo/README.md for the folder convention. Builds a synthetic
+ * adversarial audit chain in a temp dir and runs all four anomaly
+ * detectors against it. Each detector is designed to fire on exactly
  * one of the four written patterns:
  *
  *   deny-rate           pattern: 12 BLOCK rows in the recent window
