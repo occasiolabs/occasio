@@ -11002,17 +11002,25 @@ console.log('\n3. runLocally');
         now: NOW,
         detectors: [crasher],
       });
-      assert('runDetectors: crashing detector becomes a low-severity alert',
-        result.alerts.length === 1 &&
-        result.alerts[0].severity === 'low' &&
-        result.alerts[0].detector_id === 'crasher' &&
-        /boom/.test(result.alerts[0].message));
+      // A crashed detector goes to errors, not alerts. Compliance reviewers
+      // see no spurious "low-severity finding"; engineering sees the bug
+      // on a dedicated channel.
+      assert('runDetectors: crashing detector → empty alerts',
+        result.alerts.length === 0);
+      assert('runDetectors: crashing detector → recorded on errors channel',
+        Array.isArray(result.errors) && result.errors.length === 1 &&
+        result.errors[0].detector_id === 'crasher' &&
+        /boom/.test(result.errors[0].error));
+      assert('runDetectors: error payload carries detector label + stack',
+        result.errors[0].label === 'Test Crasher' &&
+        typeof result.errors[0].stack === 'string');
     }
     {
-      // End-to-end: zero rows → zero alerts, valid shape
+      // End-to-end: zero rows → zero alerts, zero errors, valid shape
       const result = runDetectors({ rows: [], now: NOW });
-      assert('runDetectors: empty chain → no alerts, valid window timestamps',
+      assert('runDetectors: empty chain → no alerts, no errors, valid window timestamps',
         result.alerts.length === 0 &&
+        Array.isArray(result.errors) && result.errors.length === 0 &&
         typeof result.window_start === 'string' &&
         typeof result.window_end === 'string');
     }

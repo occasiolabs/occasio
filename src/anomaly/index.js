@@ -29,6 +29,19 @@
  *     rows_implicated: string[]  // first ≤5 row hashes that triggered
  *   }
  *
+ * Runner result shape:
+ *   {
+ *     alerts:  Alert[]   anomalies the detectors observed in the window
+ *     errors:  Error[]   detectors that threw — bug reports, NOT anomalies
+ *     window_start, window_end, window_rows, history_rows
+ *   }
+ *
+ * Why alerts and errors are separate:
+ *   A crashed detector is a *bug in the detector*, not an *anomaly in the
+ *   chain*. Surfacing detector crashes as low-severity alerts trains
+ *   compliance reviewers to dismiss real anomalies. Separate channels:
+ *   alerts get human attention; errors go to the operator log and CI.
+ *
  * Read-only by default. Persistence (writing alerts back into the chain as
  * `kind:"anomaly_alert"` rows) is opt-in via the CLI's --persist flag and
  * piggybacks the existing JsonlAuditor so alerts inherit the chain's
@@ -105,6 +118,7 @@ function runDetectors({
   const list    = detectors || builtinDetectors();
 
   const alerts = [];
+  const errors = [];
   for (const d of list) {
     try {
       const out = d.evaluate(split.window, split.historical, {
@@ -123,21 +137,21 @@ function runDetectors({
         });
       }
     } catch (e) {
-      // A failing detector is itself an alert — surface it as low severity
-      // rather than silently swallowing.
-      alerts.push({
-        detector_id:   d.id,
-        severity:      'low',
-        observed:      null,
-        baseline:      null,
-        message:       `${d.label}: detector crashed (${e.message})`,
-        rows_implicated: [],
+      // A crashed detector is a bug, not an anomaly. Surface it on the
+      // errors channel so operators / CI see it without contaminating
+      // the alerts stream that compliance reviews.
+      errors.push({
+        detector_id: d.id,
+        label:       d.label,
+        error:       e.message || String(e),
+        stack:       e.stack || null,
       });
     }
   }
 
   return {
     alerts,
+    errors,
     window_start: new Date(split.windowStartMs).toISOString(),
     window_end:   new Date(split.windowEndMs).toISOString(),
     window_rows:  split.window.length,

@@ -74,10 +74,20 @@ function runAnomaliesCli(args = []) {
     renderHuman(result, windowMs);
   }
 
-  // Exit code reflects worst severity in alerts.
-  if (result.alerts.length === 0) return 0;
+  // Exit code reflects worst alert severity. Detector errors are
+  // a separate signal — exit code 3 dedicated to "the EDR layer
+  // itself is broken", so CI can distinguish "everything OK" from
+  // "an alert fired" from "the detector failed before it could decide".
+  const errCount = (result.errors || []).length;
+  if (result.alerts.length === 0) {
+    return errCount > 0 ? 3 : 0;
+  }
   const worst = result.alerts.reduce(
     (m, a) => Math.max(m, SEV_RANK[a.severity] || 0), 0);
+  // Errors take precedence over low/medium alerts: a broken
+  // detector means we cannot trust the absence of higher-severity
+  // findings either.
+  if (errCount > 0 && worst < 2) return 3;
   return worst >= 2 ? 2 : 1;
 }
 
@@ -88,12 +98,14 @@ function renderHuman(result, windowMs) {
        result.window_rows + ' rows in window, ' +
        result.history_rows + ' historical)')}\n\n`);
 
-  if (result.alerts.length === 0) {
+  const errs = result.errors || [];
+
+  if (result.alerts.length === 0 && errs.length === 0) {
     process.stdout.write(`  ${C.g('✓')} no anomalies in the current window\n\n`);
     return;
   }
 
-  // Sort high→low so worst is visible first.
+  // Sort alerts high→low so worst is visible first.
   const sorted = [...result.alerts].sort(
     (a, b) => (SEV_RANK[b.severity] || 0) - (SEV_RANK[a.severity] || 0));
   for (const a of sorted) {
@@ -106,6 +118,17 @@ function renderHuman(result, windowMs) {
         '…  (+' + (a.rows_implicated.length - 1) + ' more)')}\n`);
     }
   }
+
+  // Errors render separately so reviewers know to escalate to engineering,
+  // not to compliance. A crashed detector is a code defect, not a finding.
+  if (errs.length > 0) {
+    if (result.alerts.length > 0) process.stdout.write('\n');
+    process.stdout.write(`  ${C.r('!')} ${errs.length} detector(s) crashed — investigate as a bug, not a finding:\n`);
+    for (const e of errs) {
+      process.stdout.write(`     ${C.b(e.detector_id)}: ${e.error}\n`);
+    }
+  }
+
   process.stdout.write('\n');
   process.stdout.write(
     `  ${C.d('Tip: `localfirst replay --run <id>` to see the run that produced an implicated row.')}\n\n`);
