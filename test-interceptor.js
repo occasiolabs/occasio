@@ -10590,6 +10590,79 @@ console.log('\n3. runLocally');
     let threwUndef = null;
     try { canonicalize(undefined); } catch (e) { threwUndef = e; }
     assert('canonicalize: top-level undefined throws', threwUndef !== null);
+
+    // ── Float-divergence guard (cross-language invariant) ──────────────────
+    // JavaScript has no int/float distinction; Python does. JSON.parse('1.0')
+    // yields int(1) in JS but float(1.0) in Python. If either canonicalize
+    // implementation accepted non-integer floats, the canonical bytes would
+    // diverge silently and predicate-equivalence between the Node and Python
+    // verifiers would fail on the same input. Reject non-integer floats on
+    // both sides; integer-valued floats are accepted by Python (coerced to
+    // int representation) so a round-trip via Python produces the same
+    // canonical bytes as a round-trip via JS.
+    let threwFloat = null;
+    try { canonicalize(1.5); } catch (e) { threwFloat = e; }
+    assert('canonicalize: non-integer float (1.5) throws with informative message',
+      threwFloat !== null && /non-integer number 1\.5/.test(threwFloat.message));
+
+    let threwNegFloat = null;
+    try { canonicalize(-0.25); } catch (e) { threwNegFloat = e; }
+    assert('canonicalize: negative non-integer float throws', threwNegFloat !== null);
+
+    assert('canonicalize: integer 1 → "1"',           canonicalize(1) === '1');
+    assert('canonicalize: integer 0 → "0"',           canonicalize(0) === '0');
+    assert('canonicalize: large integer survives',    canonicalize(1234567890) === '1234567890');
+
+    let threwInObj = null;
+    try { canonicalize({ x: 1.5 }); } catch (e) { threwInObj = e; }
+    assert('canonicalize: non-integer float inside object throws', threwInObj !== null);
+  }
+
+  // ── Cross-language float guard (Python side rejects 1.5 same as JS) ─────────
+  // Closes the regression where Python would canonicalize float(1.5) to "1.5"
+  // while JS rejected it — silent byte-divergence. Both sides must reject.
+  console.log('\ncanonicalize: cross-language float guard via Python');
+  {
+    const cpFloat = require('child_process');
+    const pyCheck = cpFloat.spawnSync('python', ['--version'], { encoding: 'utf8' });
+    if (pyCheck.status !== 0) {
+      console.log('  ' + '\x1b[2m(python not in PATH — skipping)\x1b[0m');
+    } else {
+      const pathFloat = require('path');
+      // Each line on its own line — Python -c does not accept `try:` after
+      // semicolon-joined statements.
+      const cliCode = [
+        'import sys, json',
+        'sys.path.insert(0, r"' + pathFloat.resolve(__dirname, 'docs') + '")',
+        'from canonicalize import canonicalize as C',
+        'arg = json.loads(sys.argv[1])',
+        'try:',
+        '    print(C(arg))',
+        'except ValueError as e:',
+        '    print("ERR:" + str(e))',
+      ].join('\n');
+
+      function pyCanon(jsonInput) {
+        const r = cpFloat.spawnSync('python', ['-c', cliCode, jsonInput], { encoding: 'utf8' });
+        return (r.stdout || '').trim() + (r.stderr ? '\nSTDERR:' + r.stderr.trim() : '');
+      }
+
+      // Integer literal: both sides produce "1"
+      assert('xlang-float: integer 1 → both produce "1"',
+        pyCanon('1') === '1');
+      // Integer-valued float "1.0": JS parses to int(1) → "1"; Python parses
+      // to float(1.0) but our canonicalize coerces back to "1"
+      assert('xlang-float: float-literal "1.0" → Python emits "1" (matches JS)',
+        pyCanon('1.0') === '1');
+      // Non-integer float: both sides throw with a recognisable message
+      const out15 = pyCanon('1.5');
+      assert('xlang-float: float 1.5 → Python rejects (no silent divergence)',
+        out15.startsWith('ERR:') && /non-integer number/.test(out15));
+      // Inside an object the rejection still fires
+      const outObj = pyCanon('{"x":1.5}');
+      assert('xlang-float: nested non-integer float → Python rejects',
+        outObj.startsWith('ERR:'));
+    }
   }
 
   // ── attest-action: run-attest validators ───────────────────────────────────

@@ -53,9 +53,10 @@ function safeRekorUrl(raw) {
 }
 
 // ── Canonical JSON (RFC 8785 subset) ────────────────────────────────────────
-// Must stay logically identical to src/attest/canonicalize.js — see the
-// comment there. Used for predicate byte-equivalence so the check survives
-// runtime/version drift between producer and browser.
+// Must stay byte-identical to src/attest/canonicalize.js + docs/canonicalize.py.
+// Non-integer numbers are rejected so JS / Python / browser canonicalize the
+// same JSON to the same bytes (see src/attest/canonicalize.js header for the
+// JavaScript-vs-Python float-divergence rationale).
 
 function canonicalize(value) {
   if (value === null) return 'null';
@@ -63,6 +64,9 @@ function canonicalize(value) {
     case 'boolean': return value ? 'true' : 'false';
     case 'number':
       if (!Number.isFinite(value)) throw new Error('canonicalize: non-finite');
+      if (!Number.isInteger(value)) {
+        throw new Error('canonicalize: non-integer number ' + value);
+      }
       return JSON.stringify(value);
     case 'string': return JSON.stringify(value);
     case 'object': {

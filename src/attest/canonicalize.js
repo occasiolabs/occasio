@@ -9,18 +9,36 @@
  *     default Array.prototype.sort on strings)
  *   - keys whose value is `undefined` are omitted (matches JSON.stringify)
  *   - arrays preserve order; `undefined` elements become `null`
- *   - numbers use V8's JSON.stringify form (RFC 8259 compliant for integers
- *     and finite decimals — our schema only uses integers, so this is exact)
+ *   - numbers must be integers (see below); JSON.stringify form is used
  *   - strings use V8's JSON.stringify escaping
- *   - rejects: undefined at top level, non-finite numbers, functions, symbols
+ *   - rejects: undefined at top level, non-finite numbers, NON-INTEGER
+ *     numbers (see below), functions, symbols
+ *
+ * Why non-integer numbers are rejected (enforced cross-language invariant)
+ *   JavaScript has a single `number` type. JSON.parse('1.0') yields the
+ *   integer 1; JSON.stringify(1) emits '1'. Python distinguishes int from
+ *   float: json.loads('1.0') yields float(1.0); json.dumps(1.0) emits
+ *   '1.0'. If we silently accepted floats, the JS verifier and the Python
+ *   verifier would canonicalize the same JSON file to different bytes —
+ *   silent byte-equivalence breakage and the schema is no longer language-
+ *   independent. We reject non-integer numbers explicitly on both sides,
+ *   matching error messages, so the failure mode is loud and identical.
+ *
+ *   Integer-valued floats (1.0 parsed by Python as float(1.0)) ARE
+ *   accepted: both implementations coerce to the integer representation
+ *   so a round-trip through either side produces the same canonical bytes.
+ *
+ *   If a future schema requires decimal precision (it should not — counts
+ *   and timestamps don't need it), encode as a string ("1.5") and parse
+ *   numerically in the consumer. The canonicalize boundary stays integer-
+ *   only.
  *
  * Where this deviates from strict RFC 8785:
- *   - Float serialisation: RFC 8785 mandates a specific ECMAScript
- *     `Number.prototype.toString` form for non-integer floats. JSON.stringify
- *     in V8 matches this in practice but is not formally guaranteed. Our
- *     schema (agent-attestation v1) contains only integer counts and string
- *     hashes, so this is not an issue today. If we ever add float fields,
- *     swap this for a vetted JCS library.
+ *   - Float serialisation: RFC 8785 mandates a specific ECMAScript form
+ *     for non-integer floats. We sidestep this entirely by rejecting them
+ *     above. The deviation is intentional and load-bearing for cross-
+ *     language byte-equivalence; remove it only when adopting a vetted JCS
+ *     library that handles ECMAScript Number.prototype.toString exactly.
  *   - Lone surrogate handling: JSON.stringify produces \uXXXX escapes which
  *     are valid RFC 8259. JCS specifies the same. Identical in practice.
  *
@@ -42,6 +60,16 @@ function canonicalize(value) {
     case 'number':
       if (!Number.isFinite(value)) {
         throw new Error('canonicalize: non-finite number');
+      }
+      if (!Number.isInteger(value)) {
+        // See the header comment "Why non-integer numbers are rejected".
+        // If you hit this, encode the field as a string in the schema
+        // instead of changing this guard.
+        throw new Error(
+          'canonicalize: non-integer number ' + value +
+          ' — cross-language byte-equivalence requires schema fields be ' +
+          'integers or strings. Encode decimal values as strings.'
+        );
       }
       return JSON.stringify(value);
     case 'string':

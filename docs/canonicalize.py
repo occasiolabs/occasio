@@ -6,18 +6,31 @@ auditor in a Python-only environment re-verify a LocalFirst
 attestation against the producer's canonical form without trusting
 the producer's code.
 
-Must stay logically identical to src/attest/canonicalize.js and the
+Must stay byte-identical to src/attest/canonicalize.js and the
 inline copy in integrations/attest-view/viewer.js. The three
 implementations exist so the schema is provably language-independent;
 diverging them defeats the point.
 
+Cross-language invariant (load-bearing):
+    JavaScript has a single ``number`` type. ``JSON.parse('1.0')``
+    yields the integer 1; ``JSON.stringify(1)`` emits ``'1'``.
+    Python distinguishes int from float: ``json.loads('1.0')`` yields
+    ``float(1.0)``; ``json.dumps(1.0)`` emits ``'1.0'``. If we silently
+    accepted floats, the JS verifier and the Python verifier would
+    canonicalize the same JSON file to different bytes — silent
+    byte-equivalence breakage. This module:
+
+      - rejects non-integer floats (e.g. 1.5) with a clear error
+      - coerces integer-valued floats (e.g. 1.0) to the integer
+        representation so that a Python parse of ``"1.0"`` and a JS
+        parse of ``"1.0"`` canonicalize identically
+
+    If a future schema requires decimal precision, encode it as a
+    string. The canonicalize boundary stays integer-only.
+
 Deviations from strict RFC 8785 (documented, intentional):
-    - Floats use Python's json.dumps form. RFC 8785 mandates a
-      specific ECMAScript Number.prototype.toString form which is
-      equivalent for integers and most finite floats but not formally
-      identical across all edge cases. The agent-attestation v1
-      schema contains only integer counts and string hashes, so the
-      distinction does not bite there.
+    - Float rejection above (instead of RFC 8785's prescribed form).
+      Load-bearing for cross-language byte-equivalence.
     - Lone-surrogate handling matches Python json.dumps (escapes
       via \\uXXXX). JCS specifies the same.
 """
@@ -54,10 +67,18 @@ def canonicalize(value: Any) -> str:
     if isinstance(value, float):
         if value != value or value in (float("inf"), float("-inf")):
             raise ValueError("canonicalize: non-finite number")
-        # json.dumps for floats matches what V8's JSON.stringify
-        # produces for finite floats in practice. For the v1 schema
-        # this codepath is unused; kept for completeness.
-        return json.dumps(value)
+        # Cross-language invariant: a JSON literal like "1.0" parses to
+        # int(1) in JavaScript but float(1.0) in Python. Coerce the
+        # integer-valued case so both implementations canonicalize to
+        # the same bytes. Reject genuine non-integer floats — see the
+        # module docstring for the schema-design rationale.
+        if not value.is_integer():
+            raise ValueError(
+                f"canonicalize: non-integer number {value} — "
+                "cross-language byte-equivalence requires schema fields "
+                "be integers or strings. Encode decimal values as strings."
+            )
+        return str(int(value))
     if isinstance(value, str):
         # json.dumps emits a fully-escaped RFC 8259 string. Matches
         # what V8's JSON.stringify does for ASCII + most Unicode.
