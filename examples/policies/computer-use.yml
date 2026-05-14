@@ -1,0 +1,46 @@
+# LocalFirst — Computer-Use sample policy (tech-demo scaffold)
+#
+# Apply with:
+#   localfirst computer-use --dry-run --from traffic.jsonl --policy computer-use.yml
+#
+# Status: this policy file describes the *intended* directive set for live
+# Computer-Use interception. The dry-run CLI honours the directives below;
+# the live proxy adapter is a follow-up that requires Anthropic API access
+# for validation (see src/adapters/computer-use.js for the deferral notes).
+
+# Keyboard input — block typing strings that match these patterns.
+# Mirrors the secret-redaction regexes used for cloud-bound traffic but
+# applied at the keyboard layer, so the agent cannot type a secret into
+# an external application via mouse + type.
+deny_keyboard_patterns:
+  - '(?i)password\s*[:=]\s*\S+'
+  - '(?i)secret\s*[:=]\s*\S+'
+  - '(?i)api[_-]?key\s*[:=]\s*\S+'
+  - '(?i)(sk-ant-|ghp_|gho_|AKIA)[A-Za-z0-9]{16,}'
+
+# Bash commands — block patterns. The engine also enforces a built-in
+# blacklist (sudo, rm -rf /, mkfs, dd, fork-bomb) that is always on.
+deny_command_patterns:
+  # Exfil-style curl/wget against admin/api/prod hosts
+  - '\bcurl\b.*\b(api\.|admin\.|prod\.)'
+  - '\bwget\b.*\b(api\.|admin\.|prod\.)'
+  # Package installers — block until allow-listed via explicit pattern
+  - '\b(pip|npm|gem|cargo|apt|brew)\s+install\b'
+
+# Pixel-region rules — RESERVED. The directive shape below is what the
+# engine will accept once pixel-region work lands. Today the dry-run CLI
+# does not enforce these; the schema is here so policy authors can start
+# documenting intent.
+#
+# deny_screen_regions:
+#   - { x: 0,    y: 0,    w: 1920, h: 100, reason: 'top-bar-notifications' }
+#   - { x: 1700, y: 1000, w: 220,  h: 80,  reason: 'system-tray-clock' }
+
+# Browser navigation allow-list — RESERVED. Will be enforced when we add
+# a browser-state hook (likely via an MCP "browser state" tool the agent
+# is required to consult before clicking links). Until then this serves
+# as documentation of intent.
+#
+# allow_browser_hosts:
+#   - 'github.com'
+#   - 'docs.anthropic.com'
