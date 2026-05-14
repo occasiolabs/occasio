@@ -1,5 +1,5 @@
 [Unit]
-Description=LocalFirst — local AI-agent governance proxy
+Description=Occasio — local AI-agent governance proxy
 After=network-online.target
 Wants=network-online.target
 

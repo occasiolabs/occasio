@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  LocalFirst launchd template (v0.6.4).
+  Occasio launchd template (v0.6.4).
 
   This file is a TEMPLATE: replace {{LOCALFIRST_BIN}} with the absolute
   path to your `occasio` executable before installing. See

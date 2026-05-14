@@ -1,4 +1,4 @@
-# LocalFirst Attest — example GitHub Actions workflow
+# Occasio Attest — example GitHub Actions workflow
 #
 # Copy this file to .github/workflows/attest-on-pr.yml in your repo, drop in
 # whatever step actually runs the AI agent, and you have an end-to-end signed
@@ -26,13 +26,13 @@ jobs:
           fetch-depth: 2     # so files-changed can diff HEAD^..HEAD
 
       # ── Your AI-agent step goes here ────────────────────────────────
-      # The only requirement is that the agent runs under LocalFirst so
+      # The only requirement is that the agent runs under Occasio so
       # its tool calls land in ~/.occasio/pipeline-events.jsonl. Below
       # is the Claude Code path; substitute as needed.
-      - name: Install LocalFirst + Claude Code
+      - name: Install Occasio + Claude Code
         run: npm install -g @occasio-ai/occasio @anthropic-ai/claude-code
 
-      - name: Run Claude Code under LocalFirst
+      - name: Run Claude Code under Occasio
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: occasio claude --hardened < .github/agent-prompt.txt
