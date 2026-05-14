@@ -39,7 +39,7 @@ const crypto = require('crypto');
 const { buildAttestation }      = require('../attest');
 const { verifyFile }            = require('../audit/verifier');
 const { canonicalize }          = require('../attest/canonicalize');
-const { buildSummary }          = require('../../integrations/attest-action/scripts/post-check');
+const { buildSummary }          = require('../attest/check-summary');
 
 const C = {
   r: s => `\x1b[31m${s}\x1b[0m`,

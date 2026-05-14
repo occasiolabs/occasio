@@ -10736,8 +10736,11 @@ console.log('\n3. runLocally');
   // ── attest-action: post-check escapers ─────────────────────────────────────
   console.log('\nattest-action: post-check escapers');
   {
+    // Helpers moved to src/attest/check-summary.js (shared between
+    // the Action and the demo CLI). Import from src/ — that path
+    // ships with the npm tarball; the integrations/ path does not.
     const { mdCode, mdText, intOr0, safeRekorUrl, buildSummary } =
-      require('./integrations/attest-action/scripts/post-check');
+      require('./src/attest/check-summary');
 
     // mdCode strips/replaces characters that break out of `..` inline code.
     assert('mdCode: backtick neutralised',

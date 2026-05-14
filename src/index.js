@@ -48,7 +48,13 @@ const { runInspectCli }   = require('./inspect');
 const { runAuditCli }     = require('./audit/verifier');
 const { budgetStatus, fmtBudget, BUDGET_EXCEEDED_EVENT } = require('./budget');
 
-const VERSION = '0.8.0';
+// Source of truth: package.json. Read at startup so `occasio --version`
+// can't drift from what npm reports — the previous hardcoded constant
+// caused 0.8.1's CLI to mis-report itself as 0.8.0.
+const VERSION = (() => {
+  try { return require('../package.json').version; }
+  catch { return '0.0.0-unknown'; }
+})();
 const LOG_SCHEMA_VERSION = 2;
 // Port override via env var (used by `occasio harness` and redteam to
 // run isolated proxies against scratch audit chains on free ports). Default

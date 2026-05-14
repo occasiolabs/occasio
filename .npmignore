@@ -1,0 +1,21 @@
+# .npmignore — excludes files from the npm tarball beyond what `files` in
+# package.json includes. The `files` array specifies what to INCLUDE
+# (bin/, src/, schemas/, policy-templates/, docs/, spec/, LICENSE, NOTICE);
+# this list trims content from those directories that should never ship.
+
+# Python bytecode — machine + interpreter-version specific. Regenerated
+# automatically when someone runs the Python verifier; shipping them just
+# bloats the tarball and risks Python-3.13-specific bytecode failing on
+# 3.12 or earlier.
+__pycache__/
+*.pyc
+*.pyo
+
+# OS scratch / editor leftovers (defensive)
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Anything we accidentally drop into included directories during dev
+*.log
