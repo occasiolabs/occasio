@@ -84,9 +84,15 @@ function evaluate(windowRows, historicalRows, opts) {
     }
   }
 
-  // Cold-start: any redaction is medium-severity. Compliance wants to see it.
+  // Cold-start: a single redaction is LOW (visible in JSON/SIEM, not loud
+  // for human review); a burst (≥ COLD_START_BURST) is MEDIUM. Calibration
+  // showed that emitting MEDIUM on every cold-start redaction produces a
+  // false-positive every coding session that touches files matching the
+  // built-in secret patterns (e.g. test fixtures, example configs). The
+  // burst threshold ensures real spikes still surface during warm-up.
+  const COLD_START_BURST = 5;
   return [{
-    severity: 'medium',
+    severity: winCount >= COLD_START_BURST ? 'medium' : 'low',
     observed: winCount,
     baseline: null,
     message: `${winCount} secret-redaction event(s) in current window (cold-start: not enough history yet to compute baseline)`,

@@ -10933,7 +10933,8 @@ console.log('\n3. runLocally');
     }
     {
       const historical = [];
-      for (let i = 0; i < 60; i++) {
+      // ≥ COLD_START_MIN_ROWS (200) so the detector actually evaluates
+      for (let i = 0; i < 220; i++) {
         historical.push(mkRow({ tool_name: 'Bash', tool_inputs: { command: 'ls', cwd: '/x' } }));
       }
       // New shape: adds `env` key
@@ -10946,7 +10947,7 @@ console.log('\n3. runLocally');
     }
     {
       const historical = [];
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 220; i++) {
         historical.push(mkRow({ tool_name: 'Read', tool_inputs: { path: '/x' } }));
       }
       const window = [mkRow({ tool_name: 'Read', tool_inputs: { path: '/y' } })];
@@ -10966,10 +10967,18 @@ console.log('\n3. runLocally');
         alerts.length === 1 && alerts[0].severity === 'high');
     }
     {
-      // Cold-start with redaction → medium
+      // Cold-start: 2 redactions stays LOW (calibration showed MEDIUM-per-
+      // redaction was the biggest noise source on normal usage)
       const window = [mkRow({ secrets_redacted: 2 })];
       const alerts = secretRedactRate.evaluate(window, [], { windowMs: 15 * 60 * 1000 });
-      assert('secret-redact-rate: cold-start with redactions → medium',
+      assert('secret-redact-rate: cold-start single-digit redactions → low',
+        alerts.length === 1 && alerts[0].severity === 'low');
+    }
+    {
+      // Cold-start burst (≥ 5) does fire as MEDIUM
+      const window = [mkRow({ secrets_redacted: 5 })];
+      const alerts = secretRedactRate.evaluate(window, [], { windowMs: 15 * 60 * 1000 });
+      assert('secret-redact-rate: cold-start burst (5+ redactions) → medium',
         alerts.length === 1 && alerts[0].severity === 'medium');
     }
     {

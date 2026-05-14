@@ -13,7 +13,17 @@
 const ID    = 'unknown-tool-input';
 const LABEL = 'Unknown tool-input shape';
 
-const COLD_START_MIN_ROWS = 50;
+// Calibrated against a ~3-day real audit chain (2518 rows of normal
+// coding usage). Pre-tune the detector fired 27 times in 3.2 days at
+// MEDIUM severity on benign new fingerprints (e.g. `grep` first called
+// with only a `path` key). After raising the cold-start floor and
+// dropping non-privileged novelty to LOW, the rate drops to ~1/day on
+// normal use while privileged-key novelty still fires HIGH. See
+// docs/edr-calibration.md for the run that produced these numbers.
+const COLD_START_MIN_ROWS = 200;
+// Keys that suggest privilege escalation or sandbox escape — novelty on
+// these is escalated to HIGH. Everything else: LOW (logged but not loud).
+const PRIVILEGED_KEY_RE = /\b(env|privileged|sudo|raw|exec|eval|stdin|cap|caps|seccomp)\b/;
 
 // Fingerprint = `${tool_name}:${sorted comma-separated tool_inputs keys}`.
 // Empty inputs → `${tool_name}:`. Non-object inputs are ignored (we only
@@ -54,11 +64,13 @@ function evaluate(windowRows, historicalRows, _opts) {
   for (const [fp, rows] of byFp) {
     const [toolName, keysJoined] = fp.split(':');
     const keysDisplay = keysJoined ? `{${keysJoined}}` : '{}';
-    // Severity heuristic: if the new shape uses inputs that look privilege-
-    // sensitive, escalate. Otherwise medium.
-    const high = /\b(env|privileged|sudo|raw|exec|eval|stdin)\b/.test(keysJoined);
+    // Privileged-key novelty is loud (HIGH). Everything else is LOW
+    // — visible in JSON/SIEM consumers but not noisy for human review.
+    // Calibration showed MEDIUM on non-privileged novelty was the
+    // largest source of false positives on normal usage.
+    const high = PRIVILEGED_KEY_RE.test(keysJoined);
     alerts.push({
-      severity: high ? 'high' : 'medium',
+      severity: high ? 'high' : 'low',
       observed: rows.length,
       baseline: 0,
       message: `Tool '${toolName}' invoked with previously-unseen input shape ${keysDisplay} (${rows.length}× in current window)`,
