@@ -1,5 +1,139 @@
 # Changelog
 
+## [0.8.1] — 2026-05-14  Behavioral attestation v1 + EDR + Computer-Use scaffold
+
+Three new top-level capabilities, all building on the v0.8.0 audit chain
+as the evidence layer. Two of them ship reference implementations of
+emerging open standards (in-toto Attestation Framework, RFC 8785 JSON
+Canonicalization); the third (Computer-Use governance) is the only
+template for that surface that exists in any vendor's product today.
+
+### Added — AI-Agent Behavioral Attestation v1
+
+A signed, cryptographically verifiable predicate that commits to the
+full audit-chain slice for one agent session: every tool call, every
+block, every transform, every redacted secret, plus the active policy's
+hash and rules digest. Signed via Sigstore keyless using GitHub Actions
+OIDC — no key management.
+
+- `localfirst attest --run-id <uuid>` — build an attestation predicate
+- `localfirst attest --sign` — Sigstore-sign via GitHub OIDC (CI)
+- `localfirst attest verify <file>` — three-step independent verification
+
+Two reference verifiers ship:
+
+- Node: `localfirst attest verify` (full pipeline + Sigstore)
+- Python: `python docs/attest_verify.py` (stdlib + optional `sigstore-python`)
+
+Cross-language byte-equivalence on the predicate canonicalization step
+is asserted in the test suite under `xlang:` and `xlang-float:` cases.
+Both `canonicalize` implementations explicitly reject non-integer numbers
+so a future schema cannot silently introduce divergence.
+
+Companion artifacts:
+
+- `schemas/agent-attestation-v1.json` — authoritative JSON Schema
+- `spec/agent-attestation/v1/README.md` — predicate type specification
+- `integrations/attest-action/` — GitHub Action that signs, self-verifies,
+  uploads as artifact, and posts a PR Check Run
+- `integrations/attest-view/` — static drag-and-drop browser viewer
+- `docs/python-verifier.md` — independent Python verifier doc
+
+### Added — Anomaly detection layer (EDR)
+
+Four detectors over a time window of the audit chain:
+
+- `deny-rate` — BLOCK rate spike vs historical baseline
+- `file-read-volume` — distinct-file-read burst (recon pattern)
+- `unknown-tool-input` — previously-unseen `tool_inputs` key shape
+- `secret-redact-rate` — redaction rate spike or first-time leak
+
+`localfirst anomalies` runs all four against the active chain with
+human or `--json` output. Exit codes: 0 / 1 / 2 / 3 = no signal / low /
+medium-or-high / detector error. Detector crashes are separated from
+real alerts (`result.errors`) so compliance reviewers don't see
+engineering bugs in their alert stream.
+
+Thresholds calibrated against a real 3-day audit chain;
+`scripts/calibrate-anomaly-detectors.js` re-runs the calibration
+against any chain. `docs/edr-calibration.md` records the empirical
+baseline and what was tuned vs the starter values.
+
+### Added — Computer-Use policy engine + dry-run CLI
+
+Policy + decision engine for Anthropic Computer Use tool surface
+(`computer.screenshot`, `computer.type`, `computer.mouse_move`, `bash`,
+etc.). Same governance vocabulary as the rest of LocalFirst:
+`deny_keyboard_patterns`, `deny_command_patterns`, plus a built-in
+always-on lethal-command blacklist (sudo, recursive root delete, mkfs,
+fork-bomb). PCRE-style inline flag prefixes `(?i)`/`(?m)` translated to
+JS RegExp flags so policy authors use familiar syntax.
+
+`localfirst computer-use --dry-run --from <jsonl>` applies a policy to
+synthetic Computer-Use traffic and reports each decision. Live proxy
+adapter wiring is deferred until at least one design partner is on it;
+the dry-run CLI exists today.
+
+### Added — Demo commands
+
+Production CLIs that exercise full pipelines against synthetic data in
+seconds, with no external dependencies:
+
+- `localfirst demo attest` — end-to-end attestation pipeline (30 s)
+- `localfirst demo anomalies` — EDR smoke test, all four detectors fire
+
+### Added — Reference Pipeline + EDR walkthrough
+
+- `docs/reference-pipeline.md` — copy-paste GitHub Actions workflow,
+  end-to-end PR-to-signed-Check-Run-to-viewer walkthrough
+- `docs/edr-demo.md` — reproducible defense-in-depth demo: real Claude
+  Code attacking a denied path under your policy, all blocks held,
+  EDR fires HIGH ×100–×1000 over baseline
+- `examples/workflows/attest-on-pr.yml.example` — copy-paste workflow
+
+### Changed
+
+- `package.json` description and keywords repositioned around behavioral
+  attestation (agent-attestation, sigstore, in-toto, eu-ai-act, edr).
+  Discoverable on npm-search for the new buyer audience.
+- README rewritten to lead with the value promise instead of the
+  interception technique. Four-layer architecture diagram, runnable
+  demos above the fold, "Why now" section linking to EU AI Act / NIST
+  AI RMF / SOC 2 AI controls.
+
+### Fixed
+
+- Cross-language float-divergence in `canonicalize` (JS / Python /
+  browser). Was a footgun that would have shipped to the in-toto
+  submission and silently broken predicate equivalence the moment
+  anyone added a float field to the schema. Now hard-rejected on all
+  three sides with matching error messages.
+- Sigstore-claim precision in README, spec, and python-verifier doc.
+  Old wording suggested the test suite cross-verified Sigstore; it
+  does not — the test mocks signing. Real-OIDC round-trip is now
+  self-verified by the reference Action in CI.
+- Anomaly-detector severity inflation. Calibration against a real
+  chain showed `unknown-tool-input` and `secret-redact-rate` produced
+  too many MEDIUM-severity false positives on normal usage. Tuned:
+  non-privileged-key novelty is now LOW; cold-start single-redactions
+  are LOW (bursts of ≥5 stay MEDIUM); privileged-key novelty stays
+  HIGH; deny-rate and file-read-volume defaults unchanged.
+
+### Tests
+
+2607 unit tests (up from 2372). Notable additions:
+
+- `attest:` block — schema shape, sign round-trip with mocked Sigstore,
+  tamper detection on predicate / chain / bundle
+- `canonicalize:` block — RFC 8785 subset properties, key reorder
+  round-trip, float rejection
+- `xlang:` and `xlang-float:` blocks — Python verifier spawned from
+  Node, agrees byte-for-byte
+- `anomaly:` block — each detector cold-start + positive case +
+  crash-to-errors-channel
+- `attest-action:` blocks — input validators, post-check escapers,
+  end-to-end XSS scenario for the Check Run summary
+
 ## [0.8.0] — 2026-05-11  Path-1 ↔ path-2 defense symmetry + Claude-in-Claude self-test stack
 
 The first release where LocalFirst can validate its own governance claims

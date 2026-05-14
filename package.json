@@ -1,6 +1,6 @@
 {
   "name": "@localfirst-ai/localfirst",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "LocalFirst — cryptographically verifiable behavioral attestation for AI coding agents. Tool-call interception + policy enforcement + tamper-evident audit chain + Sigstore-signed in-toto attestations + windowed EDR detection. Same engine for Claude Code and MCP; Computer-Use scaffold included.",
   "main": "src/index.js",
   "files": [

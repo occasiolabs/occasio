@@ -43,7 +43,7 @@ Eight high-confidence patterns: Anthropic keys, GitHub PATs, AWS access keys, pr
 
 ## Test surface
 
-- **2372 unit tests** covering routing, native handlers, secret patterns, cost math, classifier behavior, partial-batch interception, path-1/path-2 outbound enforcement, audit chain, harness orchestration, and validation script behavior.
+- **2607 unit tests** covering routing, native handlers, secret patterns, cost math, classifier behavior, partial-batch interception, path-1/path-2 outbound enforcement, audit chain, harness orchestration, validation script behavior, behavioral attestation (Node + Python cross-language with byte-equivalence assertions), windowed anomaly detection (4 detectors with cold-start protection), and Computer-Use policy engine.
 - **113 smoke tests** exercising the full `interceptToolUse` execution path against partial-batch SSE fixtures, including all four git shapes.
 - **Live-fire validation** required for any change that touches tool-call routing or display surfaces.
 

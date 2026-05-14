@@ -80,6 +80,21 @@ runs:
         LF_PR_NUMBER:        ${{ github.event.pull_request.number }}
       run: node ${{ github.action_path }}/scripts/run-attest.js
 
+    # Self-verify the freshly-signed attestation before publishing it as an
+    # artifact. Exercises the real-OIDC sign-and-verify round-trip end-to-end
+    # in the same CI run — if Sigstore verification fails for any reason
+    # (Rekor inclusion not yet propagated, cert chain mismatch, tampered
+    # bundle), the action fails before the artifact reaches anyone who would
+    # rely on it. Only runs when the attestation was actually signed
+    # (inputs.sign == 'true'); unsigned attestations have nothing to verify.
+    - name: Self-verify signed attestation
+      if: inputs.sign == 'true' && steps.attest.outputs.bundle-path != ''
+      shell: bash
+      run: |
+        localfirst attest verify \
+          "${{ steps.attest.outputs.attestation-path }}" \
+          --bundle "${{ steps.attest.outputs.bundle-path }}"
+
     - name: Upload attestation artifacts
       uses: actions/upload-artifact@v4
       with:

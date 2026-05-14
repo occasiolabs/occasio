@@ -86,7 +86,9 @@ permissions:
 
 The attestation file written by this action is a self-contained JSON object conforming to the [`agent-attestation/v1`](https://github.com/localfirst-ai/localfirst/blob/main/spec/agent-attestation/v1/README.md) predicate. The accompanying Sigstore Bundle (`.sigstore.json`) is signed by a short-lived Fulcio certificate bound to this workflow's OIDC identity, with a Rekor transparency log entry.
 
-To re-verify offline, install LocalFirst and run:
+The action **self-verifies** the signed attestation in the same CI run before publishing the artifact — Sigstore signature, DSSE-payload-equivalence, and audit-chain integrity all checked. If any check fails the action fails, so no broken attestation ever reaches a consumer. This is the real-OIDC end-to-end round-trip the test suite cannot exercise locally.
+
+To re-verify offline at any time, install LocalFirst and run:
 
 ```bash
 npm install -g @localfirst-ai/localfirst
