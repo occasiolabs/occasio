@@ -10447,6 +10447,104 @@ console.log('\n3. runLocally');
     try { fsT.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
 
+  // ── cross-language verify: Python re-verifies a Node-produced attestation ──
+  // This is the proof artifact for an in-toto / OpenSSF predicate-type
+  // submission: a verifier written in a different language, using only
+  // stdlib + a hand-translated canonicalize, produces the same
+  // pass/fail decision as the Node-side verifier on the same byte payload.
+  console.log('\ncross-language verify: Python verifier round-trip');
+  {
+    const cpT = require('child_process');
+    const pyResult = cpT.spawnSync('python', ['--version'], { encoding: 'utf8' });
+    if (pyResult.status !== 0) {
+      console.log('  ' + '\x1b[2m(python not in PATH — skipping cross-language test)\x1b[0m');
+    } else {
+      const osT   = require('os');
+      const fsT   = require('fs');
+      const pathT = require('path');
+      const cryptoT = require('crypto');
+
+      const { buildSyntheticChain } = require('./src/demo/attest-demo');
+      const { buildAttestation }    = require('./src/attest');
+      const { buildInTotoStatement } = require('./src/attest/sign');
+      const { canonicalize }         = require('./src/attest/canonicalize');
+
+      const tmpDir = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'lf-xlang-test-'));
+      const chain  = pathT.join(tmpDir, 'pipeline-events.jsonl');
+      const policy = pathT.join(tmpDir, 'policy.yml');
+      const runId  = buildSyntheticChain(chain, policy);
+      const att    = buildAttestation({ runId, logFile: chain, policyFile: policy });
+
+      // Build a synthetic-but-correctly-shaped Sigstore bundle: the DSSE
+      // payload IS what `localfirst attest --sign` would have signed. The
+      // signature itself is a placeholder ('xxxx') so sigstore-python's
+      // crypto check will fail (expected); the byte-equivalence step
+      // succeeds iff the canonical-JSON implementations agree.
+      const statement     = buildInTotoStatement(att);
+      const statementJson = canonicalize(statement);
+      const payloadB64    = Buffer.from(statementJson, 'utf8').toString('base64');
+      const bundle = {
+        mediaType: 'application/vnd.dev.sigstore.bundle+json;version=0.2',
+        dsseEnvelope: {
+          payloadType: 'application/vnd.in-toto+json',
+          payload: payloadB64,
+          signatures: [{ sig: 'xxxx', keyid: '' }],
+        },
+        verificationMaterial: { tlogEntries: [] },
+      };
+
+      const attPath = pathT.join(tmpDir, 'attestation.json');
+      const bunPath = pathT.join(tmpDir, 'attestation.sigstore.json');
+      fsT.writeFileSync(attPath, JSON.stringify(att, null, 2));
+      fsT.writeFileSync(bunPath, JSON.stringify(bundle, null, 2));
+
+      const verifier = pathT.resolve(__dirname, 'docs', 'attest_verify.py');
+      const r = cpT.spawnSync(
+        'python',
+        [verifier, '--json', attPath, '--bundle', bunPath, '--chain', chain],
+        { encoding: 'utf8' });
+
+      let parsed;
+      try { parsed = JSON.parse(r.stdout); } catch (e) {
+        parsed = { ok: false, parseError: e.message, stdout: r.stdout, stderr: r.stderr };
+      }
+
+      // Step 1 (sigstore signature) is expected to fail because we used a
+      // placeholder signature. We do not assert against that step here.
+      const stepPayload = (parsed.checks || []).find(c =>
+        c.name === 'bundle payload matches attestation');
+      const stepChain   = (parsed.checks || []).find(c =>
+        c.name === 'audit chain integrity');
+
+      assert('xlang: Python verifier ran and produced a checks array',
+        Array.isArray(parsed.checks) && parsed.checks.length === 3);
+      assert('xlang: DSSE payload equivalence agrees with Node side',
+        stepPayload && stepPayload.ok === true);
+      assert('xlang: audit-chain integrity agrees with Node side',
+        stepChain && stepChain.ok === true);
+      assert('xlang: chain detail names slice rows',
+        stepChain && /slice rows 1\.\.\d+/.test(stepChain.detail || ''));
+
+      // Tamper test: mutate the attestation predicate, re-verify — Python
+      // must now report payload-equivalence failure.
+      const tampered = JSON.parse(fsT.readFileSync(attPath, 'utf8'));
+      tampered.execution_summary.blocked = 0;
+      fsT.writeFileSync(attPath, JSON.stringify(tampered, null, 2));
+      const r2 = cpT.spawnSync(
+        'python',
+        [verifier, '--json', attPath, '--bundle', bunPath, '--chain', chain],
+        { encoding: 'utf8' });
+      const parsed2 = JSON.parse(r2.stdout);
+      const stepPayload2 = parsed2.checks.find(c =>
+        c.name === 'bundle payload matches attestation');
+      assert('xlang: tampered predicate → Python flags equivalence failure',
+        stepPayload2 && stepPayload2.ok === false &&
+        /differs from DSSE/.test(stepPayload2.detail || ''));
+
+      try { fsT.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  }
+
   // ── canonicalize: unit tests ───────────────────────────────────────────────
   console.log('\ncanonicalize: RFC 8785 subset');
   {

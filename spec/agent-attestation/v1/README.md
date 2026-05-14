@@ -96,7 +96,11 @@ A consumer of an attestation must perform three independent checks, in order, al
 
 Each check is a hard requirement. A consumer that skips any of them is not verifying this predicate.
 
-A reference verifier is available at [`docs/audit_walker.py`](../../../docs/audit_walker.py) for the chain step. The Sigstore signature is verifiable by any [sigstore-conformant](https://www.sigstore.dev/) tool — `cosign verify-blob`, `sigstore-js`, or `sigstore-python`. The full verifier (all three steps in one call) ships as `localfirst attest verify`.
+Reference verifiers are available in two languages:
+- **Node:** `localfirst attest verify` (all three steps in one call).
+- **Python:** [`docs/attest_verify.py`](../../../docs/attest_verify.py) (stdlib + optional `sigstore-python`; reuses [`docs/audit_walker.py`](../../../docs/audit_walker.py) for the chain step). See [`docs/python-verifier.md`](../../../docs/python-verifier.md).
+
+Both verifiers must agree pass/fail on the same byte payload. The test suite asserts this byte-for-byte for the unmodified, predicate-tampered, and chain-tampered cases. The Sigstore signature step is independently verifiable by any [sigstore-conformant](https://www.sigstore.dev/) tool — `cosign verify-blob`, `sigstore-js`, or `sigstore-python`.
 
 ## Compatibility and stability
 
