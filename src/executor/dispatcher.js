@@ -44,7 +44,7 @@ const NATIVE_HANDLERS = {
   // but nativeHandle returned null, fall back to the exec subprocess. The
   // returned `native` field tells the caller which path was taken.
   [CANONICAL.SHELL_BASH]: async (input) => {
-    const cmd = (input?.command || '').trim();
+    const cmd = (typeof input?.command === 'string' ? input.command : '').trim();
     if (!cmd) return null;
     const nr = nativeHandle(cmd);
     if (nr !== null) {
@@ -63,7 +63,7 @@ const NATIVE_HANDLERS = {
   // then native-only execution. expandedCmd is returned so the caller can
   // record the actually-executed command in toolsRun.
   [CANONICAL.SHELL_POWERSHELL]: (input) => {
-    const rawCmd = (input?.command || '').trim();
+    const rawCmd = (typeof input?.command === 'string' ? input.command : '').trim();
     if (!rawCmd) return null;
     const cmd = expandPsEnvVars(rawCmd);
     const nr = nativeHandle(cmd);

@@ -48,10 +48,16 @@ function readFileNative(absPath) {
  * Falls back for PDFs/images (need structured rendering), Jupyter notebooks,
  * malformed input, or the `pages` parameter (implies PDF range extraction).
  */
+// UNC / network paths cause blocking SMB resolution on Windows (10+ s).
+// Reject so the agent cannot stall the proxy via `\\server\share\file` or
+// the // equivalent. Local filesystem only — a deliberate restriction.
+const UNC_PREFIX_RE = /^[/\\]{2}/;
+
 function isReadHandleable(input) {
   if (!input || typeof input !== 'object') return false;
   const fp = input.file_path;
   if (!fp || typeof fp !== 'string' || !fp.trim()) return false;
+  if (UNC_PREFIX_RE.test(fp)) return false;
   if (input.pages != null) return false;
   const ext = path.extname(fp).toLowerCase();
   return !READ_SKIP_EXTENSIONS.has(ext);
@@ -63,7 +69,7 @@ function isReadHandleable(input) {
  * that the Claude Code Read tool sends for partial reads.
  */
 function handleReadTool(input) {
-  const fp  = (input?.file_path || '').trim();
+  const fp  = (typeof input?.file_path === 'string' ? input.file_path : '').trim();
   if (!fp) return { output: '(no file_path provided)', exitCode: 1 };
 
   const abs = path.resolve(process.cwd(), fp);

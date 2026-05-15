@@ -688,11 +688,11 @@ function isInterceptable(block) {
   if (block.name === 'TodoWrite') return isTodoHandleable(block.input, 'TodoWrite');
   if (block.name === 'TodoRead')  return isTodoHandleable(block.input, 'TodoRead');
   if (block.name === 'PowerShell') {
-    const cmd = (block.input?.command || '').trim();
+    const cmd = (typeof block.input?.command === 'string' ? block.input.command : '').trim();
     return cmd ? isPowerShellNativeHandleable(cmd) : false;
   }
   if (block.name !== 'Bash') return false;
-  const cmd = (block.input?.command || '').trim();
+  const cmd = (typeof block.input?.command === 'string' ? block.input.command : '').trim();
   if (!cmd) return false;
   if (isNativeHandleable(cmd)) return true;
   if (SHELL_META.test(cmd)) return false;
@@ -737,7 +737,7 @@ function classifyBlock(block) {
   }
 
   if (block.name === 'PowerShell') {
-    const rawCmd = (block.input?.command || '').trim();
+    const rawCmd = (typeof block.input?.command === 'string' ? block.input.command : '').trim();
     if (!rawCmd) return { handled: false, reason: FALLBACK_REASONS.BASH_EMPTY_CMD };
     const expanded = expandPsEnvVars(rawCmd);
     let normalized = expanded.trim();
@@ -759,7 +759,7 @@ function classifyBlock(block) {
   }
 
   // Bash
-  const cmd = (block.input?.command || '').trim();
+  const cmd = (typeof block.input?.command === 'string' ? block.input.command : '').trim();
   if (!cmd) return { handled: false, reason: FALLBACK_REASONS.BASH_EMPTY_CMD };
   if (isNativeHandleable(cmd)) return { handled: true, reason: 'ok' };
   if (SHELL_META.test(cmd)) return { handled: false, reason: FALLBACK_REASONS.BASH_SHELL_META };
