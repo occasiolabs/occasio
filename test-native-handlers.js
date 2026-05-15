@@ -215,8 +215,92 @@ try {
   }
 
 } finally {
-  try { fs.unlinkSync(tmpRead); } catch {}
+  try { fs.unlinkSync(tmpRead); } catch { /* tmp cleanup best-effort */ }
 }
+
+// ── 3. Public API surface — drift guard ────────────────────────────────────
+// Lock the set of exported names from src/interceptor and src/runtime so any
+// accidental removal (e.g. dropping a re-export during a refactor) fails the
+// suite loudly. ADD entries here deliberately; REMOVALS must be deliberate too.
+console.log('\n3. Public API surface — drift guard');
+
+const interceptorExports = Object.keys(require('./src/interceptor')).sort();
+const runtimeExports     = Object.keys(require('./src/runtime')).sort();
+
+const expectedInterceptor = [
+  'FALLBACK_REASONS',
+  'LOCAL_BASH_CMDS',
+  'READ_SKIP_EXTENSIONS',
+  'blocksToContent',
+  'buildFollowUpHeaders',
+  'classifyBlock',
+  'expandPsEnvVars',
+  'globToRegex',
+  'handleGlobTool',
+  'handleGrepTool',
+  'handleReadTool',
+  'handleTodoReadTool',
+  'handleTodoWriteTool',
+  'isBareGitReadOnly',
+  'isCdSegment',
+  'isCompoundHandleable',
+  'isCompoundSegment',
+  'isEchoSegment',
+  'isGitCSegment',
+  'isGlobHandleable',
+  'isGrepHandleable',
+  'isInterceptable',
+  'isNativeHandleable',
+  'isPowerShellNativeHandleable',
+  'isReadHandleable',
+  'isSetLocationSegment',
+  'isTodoHandleable',
+  'nativeHandle',
+  'parseSSE',
+  'readFileNative',
+  'runLocally',
+  'runOneRound',
+  'scanToolResults',
+].sort();
+
+const expectedRuntime = [
+  'GLOB_INJECTION_RE',
+  'GLOB_MAX',
+  'GLOB_SKIP',
+  'GREP_FILE_CAP',
+  'GREP_MAX_RESULTS',
+  'GREP_TYPE_EXTS',
+  'MAX_OUTPUT',
+  'READ_SKIP_EXTENSIONS',
+  'VALID_GREP_MODES',
+  'executeLocalTool',
+  'globToRegex',
+  'handleGlobTool',
+  'handleGrepTool',
+  'handleReadTool',
+  'handleTodoReadTool',
+  'handleTodoWriteTool',
+  'isGlobHandleable',
+  'isGrepHandleable',
+  'isReadHandleable',
+  'isTodoHandleable',
+  'readFileNative',
+  'tryReadGrep',
+  'walkGlob',
+  'walkGrepFiles',
+].sort();
+
+function diffSets(label, actual, expected) {
+  const missing = expected.filter(k => !actual.includes(k));
+  const extra   = actual.filter(k => !expected.includes(k));
+  assert(`${label}: no missing exports`, missing.length === 0,
+    missing.length ? `missing=[${missing.join(',')}]` : '');
+  assert(`${label}: no unexpected exports`, extra.length === 0,
+    extra.length ? `extra=[${extra.join(',')}] — update snapshot if intentional` : '');
+}
+
+diffSets('src/interceptor', interceptorExports, expectedInterceptor);
+diffSets('src/runtime',     runtimeExports,     expectedRuntime);
 
 console.log('\n────────────────────────────────────────');
 if (failed === 0) {
