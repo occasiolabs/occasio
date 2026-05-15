@@ -14,7 +14,7 @@
     "NOTICE"
   ],
   "scripts": {
-    "test": "node test-interceptor.js && node test-audit-chain.js && node test-attest.js && node test-policy-paths.js && node test-anomaly.js",
+    "test": "node test-interceptor.js && node test-native-handlers.js && node test-audit-chain.js && node test-attest.js && node test-policy-paths.js && node test-anomaly.js",
     "lint": "eslint src/audit src/attest",
     "lint:all": "eslint src bin",
     "smoke": "node test-smoke.js",
