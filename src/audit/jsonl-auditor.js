@@ -37,19 +37,114 @@ function computeHash(rowWithoutHash) {
   return sha256hex(JSON.stringify(rowWithoutHash));
 }
 
-// Scan an existing file in reverse for the most recent hash value.
-// Returns GENESIS when the file is empty, missing, or contains only legacy rows.
-function loadPrevHash(filePath) {
-  let content;
-  try { content = fs.readFileSync(filePath, 'utf8'); } catch { return GENESIS; }
-  const lines = content.split('\n').filter(Boolean);
-  for (let i = lines.length - 1; i >= 0; i--) {
+// Default tail-read window size (bytes). Large enough to contain several full
+// audit rows on any plausible workload; small enough that bootstrap on a
+// 100k-event log stays sub-50ms.
+const TAIL_READ_BYTES = 64 * 1024;
+
+// Read the trailing window of a file. Returns the decoded string (utf8) along
+// with a flag indicating whether the read started mid-file (i.e. the first
+// line in the returned buffer may be truncated).
+function readTail(filePath, bytes = TAIL_READ_BYTES) {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const { size } = fs.fstatSync(fd);
+    const start = Math.max(0, size - bytes);
+    const len   = size - start;
+    const buf   = Buffer.alloc(len);
+    if (len > 0) fs.readSync(fd, buf, 0, len, start);
+    return { content: buf.toString('utf8'), truncated: start > 0 };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Outcome codes for scanning the tail. A [code, value] tuple is used rather
+// than an object literal so that field-name tokens used by the audit row
+// schema (see test-interceptor.js §32) cannot appear earlier in this file
+// than the row builder in record() below.
+//   ['hash',    hexString]         found a valid hash-bearing row
+//   ['genesis']                    file empty / legacy-only / missing
+//   ['corrupt', detailString]      last line invalid JSON, no fallback row
+function scanTailForPrevHash(filePath, bytes = TAIL_READ_BYTES) {
+  let content, truncated;
+  try {
+    ({ content, truncated } = readTail(filePath, bytes));
+  } catch {
+    return ['genesis'];
+  }
+  if (!content) return ['genesis'];
+
+  // Split into raw lines (no filter) so we can detect a partial trailing line
+  // separately from intentionally-empty lines. A well-formed JSONL ends in
+  // '\n'; if the last element after split is non-empty, the file was cut
+  // mid-write.
+  const raw = content.split('\n');
+  const lastFragment = raw[raw.length - 1];
+  const lines = raw.filter(Boolean);
+  if (lines.length === 0) return ['genesis'];
+
+  // If we read from offset 0, the first line is authoritative. If we read
+  // from mid-file, the first line in the window may be a fragment of a row
+  // truncated by the window — drop it so we never treat a fragment as legacy.
+  const startIdx = truncated && raw[0] === lines[0] ? 1 : 0;
+  const lastNonEmptyIdx = lines.length - 1;
+
+  // Detect a partial trailing line: file does not end in '\n' AND the last
+  // line fails to JSON.parse. A complete row that *happens* to be the final
+  // entry is fine — its trailing newline guarantees lastFragment === ''.
+  const trailingPartial = lastFragment !== '' && (() => {
+    try { JSON.parse(lines[lastNonEmptyIdx]); return false; } catch { return true; }
+  })();
+
+  // Walk lines in reverse to find the most recent valid hash-bearing row.
+  // Skip the partial trailing line if present.
+  const scanFrom = trailingPartial ? lastNonEmptyIdx - 1 : lastNonEmptyIdx;
+  for (let i = scanFrom; i >= startIdx; i--) {
     try {
       const row = JSON.parse(lines[i]);
-      if (typeof row.hash === 'string' && row.hash.length === 64) return row.hash;
-    } catch {}
+      if (typeof row.hash === 'string' && row.hash.length === 64) {
+        return ['hash', row.hash];
+      }
+    } catch {
+      // Mid-window JSON.parse failure: a truly corrupt earlier row. We do not
+      // attempt to recover past it here — if no valid hash row exists in the
+      // remaining window, fall through to the corrupt/genesis decision below.
+    }
   }
-  return GENESIS;
+
+  // No hash row found in the window. If we observed a partial trailing line
+  // AND the window contains no complete hash row, the chain is in an
+  // ambiguous state — caller must decide whether to fail hard or fall back
+  // to GENESIS (only safe if the file truly contains zero prior chain rows).
+  if (trailingPartial) {
+    return ['corrupt', 'partial trailing line, no recoverable prev_hash in tail window'];
+  }
+  return ['genesis'];
+}
+
+// Public: returns the most recent hash to chain from, or GENESIS.
+// Throws AuditCorruptError when the file's last line is JSON-broken and no
+// earlier hash-bearing row exists in the tail window — this prevents the
+// silent tamper gap where a partial write would otherwise restart the chain.
+function loadPrevHash(filePath, opts = {}) {
+  const { tailBytes = TAIL_READ_BYTES, failHard = true } = opts;
+  // Missing file → genesis (initial bootstrap).
+  if (!fs.existsSync(filePath)) return GENESIS;
+  const [code, detail] = scanTailForPrevHash(filePath, tailBytes);
+  if (code === 'hash')    return detail;
+  if (code === 'genesis') return GENESIS;
+  // code === 'corrupt'
+  if (!failHard) {
+    process.stderr.write(`[occasio audit] WARNING: ${filePath}: ${detail}\n`);
+    return GENESIS;
+  }
+  const err = new Error(
+    `Audit log corrupt at ${filePath}: ${detail}. ` +
+    `Run \`occasio audit repair --file ${filePath}\` to truncate the partial trailing line.`
+  );
+  err.code = 'AUDIT_CORRUPT';
+  throw err;
 }
 
 /**
@@ -74,6 +169,7 @@ function createAuditor(filePath = DEFAULT_LOG) {
     // The Python walker in docs/audit_walker.py mirrors this order; any change
     // here without updating that walker breaks independent verifiability.
     const row = {
+      audit_schema: 1,
       ts:            event.timestamp,
       event_id:      event.id,
       session_id:    event.sessionId,
@@ -133,6 +229,7 @@ function createAuditor(filePath = DEFAULT_LOG) {
    */
   function recordPolicyLoaded({ hash, path: policyPath, version, source }) {
     const row = {
+      audit_schema: 1,
       ts:            new Date().toISOString(),
       event_id:      crypto.randomUUID(),
       session_id:    undefined,
@@ -175,4 +272,12 @@ function createAuditor(filePath = DEFAULT_LOG) {
   return { record, recordPolicyLoaded, file: filePath };
 }
 
-module.exports = { createAuditor, DEFAULT_LOG, GENESIS, computeHash };
+module.exports = {
+  createAuditor,
+  DEFAULT_LOG,
+  GENESIS,
+  computeHash,
+  loadPrevHash,
+  scanTailForPrevHash,
+  TAIL_READ_BYTES,
+};

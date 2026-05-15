@@ -55,6 +55,8 @@ function verifyFile(filePath = DEFAULT_LOG) {
   let legacy = 0, chained = 0;
   let expectedPrevHash = null;  // null = no chained row seen yet
   let firstHash = null, lastHash = null;
+  const seenSchemaVersions = new Set();
+  const SUPPORTED_SCHEMA_VERSIONS = new Set([1]);
 
   for (let i = 0; i < lines.length; i++) {
     let row;
@@ -71,6 +73,23 @@ function verifyFile(filePath = DEFAULT_LOG) {
     }
 
     chained++;
+
+    // Schema-version policy:
+    //   - rows with audit_schema=undefined are legacy (pre-versioning) and
+    //     verify as before — they are valid.
+    //   - rows with audit_schema=1 verify normally.
+    //   - rows with audit_schema=N for unknown N record a non-fatal warning
+    //     in errors with a `warning: true` marker; ok-state is unaffected.
+    if (row.audit_schema !== undefined) {
+      seenSchemaVersions.add(row.audit_schema);
+      if (!SUPPORTED_SCHEMA_VERSIONS.has(row.audit_schema)) {
+        errors.push({
+          line: i + 1,
+          detail: `unknown audit_schema version ${row.audit_schema} (this build supports: ${[...SUPPORTED_SCHEMA_VERSIONS].join(',')})`,
+          warning: true,
+        });
+      }
+    }
 
     if (expectedPrevHash === null) {
       // First chained row: prev_hash must be GENESIS.
@@ -99,15 +118,30 @@ function verifyFile(filePath = DEFAULT_LOG) {
     lastHash = storedHash;
   }
 
-  return { ok: errors.length === 0, total: lines.length, legacy, chained, errors, firstHash, lastHash };
+  // Warnings (unknown schema versions) do not flip ok=false — they are
+  // forward-compatibility hints, not chain breakage.
+  const fatal = errors.filter(e => !e.warning);
+  return {
+    ok: fatal.length === 0,
+    total: lines.length, legacy, chained,
+    errors,
+    firstHash, lastHash,
+    schemaVersions: [...seenSchemaVersions],
+  };
 }
 
 function runAuditCli(args) {
   const sub = args[0];
 
+  // Dispatch sub-commands. `repair` is forwarded to src/audit/repair.js.
+  if (sub === 'repair') {
+    const { runRepairCli } = require('./repair');
+    return runRepairCli(args.slice(1));
+  }
+
   // Accept: `occasio audit`, `occasio audit verify`, `occasio audit verify --file <path>`
   if (sub && sub !== 'verify' && !sub.startsWith('-')) {
-    console.error(`Unknown audit subcommand: ${sub}\nUsage: occasio audit [verify] [--file <path>]`);
+    console.error(`Unknown audit subcommand: ${sub}\nUsage: occasio audit [verify|repair] [--file <path>]`);
     process.exit(1);
   }
 
