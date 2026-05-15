@@ -35,7 +35,7 @@ moving a handler **without** also moving its tests and without breaking
 
 | Step | Module | Origin | Proposed destination | Notes |
 |---|---|---|---|---|
-| 5 | Bash / PowerShell native dispatch | `src/interceptor.js` `nativeHandle` + `extractShellReadPaths` | `src/executor/native-handlers/shell.js` | The exec path is still Decision-shape mismatched (Stage-1 caveat). Don't move until `nativeHandle` returns a canonical Decision. |
+| 5 | Bash / PowerShell native dispatch | `src/interceptor.js` `nativeHandle` + per-family branches | `src/executor/native-handlers/shell-*.js` | Too big to land as a single step. Sub-plan in **`docs/STAGE-2-STEP-5-SHELL-PLAN.md`** decomposes it into 5a–5g (file-read / file-stat / list / search / git / compound / router). The original "Decision-shape mismatch" caveat is partially stale: `executor/dispatcher.js` already canonicalises the return value via `NATIVE_HANDLERS[SHELL_BASH]`. |
 | 6 | `executeLocalTool()` wrapper | `src/runtime.js` | `src/executor/index.js` | Once steps 2–5 are done, the wrapper becomes the executor module's public surface. `runtime.js` is then a thin compatibility shim and can be deprecated. |
 | 7 | Remove `runtime.js` shim | — | — | After two minor versions with `runtime.js` re-exporting from `executor/`, drop the file. |
 
