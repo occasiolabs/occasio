@@ -87,7 +87,8 @@ function evaluate(windowRows, historicalRows, opts) {
   }
 
   if (p95 === 0) return [];
-  if (winSet.size < p95 * P95_MULTIPLIER) return [];
+  const effectiveMult = P95_MULTIPLIER * (opts.thresholdMultiplier || 1);
+  if (winSet.size < p95 * effectiveMult) return [];
 
   const ratio = winSet.size / Math.max(p95, 1);
   const severity = ratio > 4 ? 'high' : 'medium';

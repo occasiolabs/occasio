@@ -51,6 +51,7 @@ function runAnomaliesCli(args = []) {
     process.stdout.write(
       'Usage:\n' +
       '  occasio anomalies [--window 15m] [--since <ISO>] [--chain <path>] [--json]\n' +
+      '                    [--threshold-multiplier <n>]   raise (>1) or lower (<1) deny/file-read thresholds\n' +
       '\n' +
       'Detectors:\n' +
       '  deny-rate           BLOCK rate spike vs historical baseline\n' +
@@ -65,8 +66,10 @@ function runAnomaliesCli(args = []) {
   const since    = flag(args, '--since');
   const chain    = flag(args, '--chain') || DEFAULT_CHAIN;
   const asJson   = bool(args, '--json');
+  const mult     = parseFloat(flag(args, '--threshold-multiplier', '1') || '1');
+  const thresholdMultiplier = Number.isFinite(mult) && mult > 0 ? mult : 1;
 
-  const result = runDetectors({ chainFile: chain, windowMs, now: since });
+  const result = runDetectors({ chainFile: chain, windowMs, now: since, thresholdMultiplier });
 
   if (asJson) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');

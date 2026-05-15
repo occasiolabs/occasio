@@ -63,7 +63,8 @@ function evaluate(windowRows, historicalRows, opts) {
   }
 
   const ratio = winBlocks / histRatePerWindow;
-  if (ratio < MULTIPLIER_THRESHOLD) return [];
+  const effectiveThreshold = MULTIPLIER_THRESHOLD * (opts.thresholdMultiplier || 1);
+  if (ratio < effectiveThreshold) return [];
 
   const severity = ratio > 10 ? 'high' : 'medium';
   return [{

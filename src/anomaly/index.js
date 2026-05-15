@@ -110,6 +110,10 @@ function runDetectors({
   windowMs  = DEFAULT_WINDOW_MS,
   now       = null,
   detectors = null,
+  // Multiplier applied to detector internal thresholds. >1 = more permissive
+  // (fewer alerts), <1 = more sensitive. Detectors choose how to apply this;
+  // categorical detectors may ignore it.
+  thresholdMultiplier = 1,
   // For tests: pass rows directly instead of reading from disk.
   rows      = null,
 } = {}) {
@@ -123,6 +127,7 @@ function runDetectors({
     try {
       const out = d.evaluate(split.window, split.historical, {
         windowMs, windowStartMs: split.windowStartMs, windowEndMs: split.windowEndMs,
+        thresholdMultiplier,
       });
       if (!Array.isArray(out)) continue;
       for (const a of out) {

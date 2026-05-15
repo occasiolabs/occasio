@@ -66,6 +66,35 @@ node scripts/calibrate-anomaly-detectors.js --window 30m --step 10m
 
 The script prints per-detector tallies, alert rates, one example per severity level, and a heuristic suggestion ("threshold likely too tight" if a detector fires >1 HIGH/day on normal usage). Use the suggestion as a starting point, not a verdict — your chain's activity profile may legitimately push a detector higher than the heuristic expects.
 
+## Synthetic profiles (false-positive matrix)
+
+`scripts/edr-synthetic.js` generates a hash-chained `pipeline-events.jsonl` matching one of four profiles. Use it to validate detector behavior without relying on your own chain history.
+
+```bash
+node scripts/edr-synthetic.js --profile low-activity --rows 600 --out /tmp/lo.jsonl
+node bin/occasio.js anomalies --chain /tmp/lo.jsonl --window 15m
+```
+
+| Profile         | What it models                                              | deny-rate | file-read-volume | secret-redact-rate | unknown-tool-input |
+|---              |---                                                          |---:       |---:              |---:                |---:                |
+| `low-activity`  | 1 tool-call / 5 min, no BLOCKs, no redactions               | quiet     | quiet            | quiet              | quiet              |
+| `bursty`        | 60 distinct file reads in 5-min spike late in the window    | quiet     | **fires**        | quiet              | quiet              |
+| `secret-heavy`  | Periodic redaction stretches (8-15 per window) over 10 hrs  | quiet     | quiet            | **fires** MED/HIGH | quiet              |
+| `denied-heavy`  | 12 BLOCK rows clustered in the final 15 minutes             | **fires** HIGH | quiet      | quiet              | quiet              |
+
+The `low-activity` profile is the canonical FP smoke: any HIGH-severity alert on this profile is a regression. `test-anomaly.js` asserts this on every CI run.
+
+### Threshold overrides per profile
+
+If your own chain looks more like `bursty` or `secret-heavy` on a steady-state basis (legitimately busy team), raise the threshold with `--threshold-multiplier`:
+
+```bash
+occasio anomalies --threshold-multiplier 2     # halve sensitivity
+occasio anomalies --threshold-multiplier 0.5   # double sensitivity
+```
+
+The multiplier currently affects `deny-rate` and `file-read-volume` (the two rate detectors with a continuous threshold). Categorical detectors (`unknown-tool-input`, `secret-redact-rate`'s "first-time-leak" branch) ignore it on purpose — those signals are not threshold-tunable.
+
 ## What this is not
 
 - **Not a replacement for adversarial validation.** Calibration tells us whether the threshold is too tight for normal use. It does not tell us whether the threshold is loose enough to catch genuine attacks. That is the job of `occasio demo anomalies` (which constructs a synthetic adversarial chain that must trigger all four detectors) and the [EDR demo walkthrough](edr-demo.md) (which runs a real Claude Code session against the policy and confirms the detectors fire on the resulting chain).
