@@ -224,9 +224,8 @@ async function runToolLoop({
   const fs   = require('fs');
   const path = require('path');
   const {
-    classifyBlock, isInterceptable,
     blocksToContent, runOneRound,
-    scanToolResults, FALLBACK_REASONS,
+    FALLBACK_REASONS,
   } = require('../interceptor');
 
   const { blocks: initialBlocks, stopReason: initialStop, message: initialMessage } =

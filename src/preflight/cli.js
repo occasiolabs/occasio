@@ -11,7 +11,6 @@
  */
 
 const os   = require('os');
-const path = require('path');
 const {
   mine,
   getGitRoot,

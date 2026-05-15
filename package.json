@@ -14,7 +14,7 @@
     "NOTICE"
   ],
   "scripts": {
-    "pretest": "npm run lint",
+    "pretest": "npm run lint:all",
     "test": "node test-interceptor.js && node test-native-handlers.js && node test-audit-chain.js && node test-attest.js && node test-policy-paths.js && node test-anomaly.js",
     "lint": "eslint src/audit src/attest src/core src/executor",
     "lint:all": "eslint src bin",

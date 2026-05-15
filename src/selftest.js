@@ -171,7 +171,7 @@ async function runSelfTest(opts = {}) {
 
   } finally {
     loader._resetCache();
-    try { fs.rmSync(fixtures.root, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(fixtures.root, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 
   const failed = scenarios.filter(s => s.status === 'fail').length;

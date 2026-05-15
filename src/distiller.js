@@ -120,7 +120,7 @@ const FAIL_RE = /\b(FAIL|FAILED|ERROR|error:|✗|×|AssertionError|not ok|ERRORE
  * Keeps all failure-related lines (plus 1 line of context each side) and the
  * last 15 lines (usually the summary).  Clips total to TEST_MAX_LINES.
  */
-function distillTestOutput(output, rawBytes, cmd) {
+function distillTestOutput(output, rawBytes, _cmd) {
   const lines = output.split('\n');
   const none  = { content: output, distilled: false, savedTokens: 0, label: '', rawBytes, rawContent: null };
   if (lines.length <= TEST_MAX_LINES) return none;

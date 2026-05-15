@@ -16,7 +16,6 @@ const path = require('path');
 const os   = require('os');
 
 const DASHBOARD_PORT = 3001;
-const PROXY_PORT     = 8081;
 const LOG_DIR      = path.join(os.homedir(), '.occasio');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
 
@@ -97,8 +96,8 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.url === '/api/clear' && req.method === 'POST') {
-    try { fs.writeFileSync(todayLogFile(), ''); } catch {}
-    try { fs.writeFileSync(SESSION_FILE, '{}'); } catch {}
+    try { fs.writeFileSync(todayLogFile(), ''); } catch { /* ignore */ }
+    try { fs.writeFileSync(SESSION_FILE, '{}'); } catch { /* ignore */ }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end('{"ok":true}');
     broadcast({ type: 'update', session: {}, entries: [] });

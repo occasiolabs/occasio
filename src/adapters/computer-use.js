@@ -134,7 +134,7 @@ const RESERVED_SHELL_BLACKLIST = [
   /\bsudo\b/i, /\bsu\b/i,
   /\brm\s+-rf\s+\//i,
   /\bmkfs\b/i, /\bdd\s+if=/i,
-  /:\(\)\s*\{\s*:\|:\&/,   // fork bomb
+  /:\(\)\s*\{\s*:\|:&/,   // fork bomb
 ];
 
 // Compile a policy pattern string into a JS RegExp. PCRE/RE2-style inline

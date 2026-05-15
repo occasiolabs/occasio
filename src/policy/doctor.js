@@ -56,10 +56,10 @@ function readRecentLogs(days, logsDir) {
     for (const f of files) {
       for (const line of fs.readFileSync(path.join(dir, f), 'utf8').split('\n')) {
         if (!line.trim()) continue;
-        try { entries.push(JSON.parse(line)); } catch {}
+        try { entries.push(JSON.parse(line)); } catch { /* ignore */ }
       }
     }
-  } catch {}
+  } catch { /* ignore */ }
   return entries;
 }
 

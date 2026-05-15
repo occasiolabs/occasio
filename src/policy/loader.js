@@ -264,7 +264,7 @@ function normalize(parsed) {
       try {
         const regex = new RegExp(rawPattern);
         patterns.push(Object.freeze({ label, regex }));
-      } catch (e) {
+      } catch {
         process.stderr.write(`[Occasio] policy.yml: deny_patterns.${label} — invalid RegExp "${rawPattern}", entry skipped\n`);
       }
     }
@@ -276,7 +276,7 @@ function normalize(parsed) {
     // module load (loader.js is imported by other code paths that don't
     // need the registry).
     let toolNames;
-    try { toolNames = require('../core/tool-names'); } catch {}
+    try { toolNames = require('../core/tool-names'); } catch { /* ignore */ }
     const tools = {};
     for (const name of Object.keys(parsed.tools)) {
       const entry = normalizeToolEntry(parsed.tools[name]);
@@ -351,7 +351,7 @@ function _firePolicyChange(filePath, policy, hash, fileWasPresent) {
       });
     } catch (e) {
       // Listener crash must not break the proxy — surface to stderr only.
-      try { process.stderr.write(`[occasio] policy-change listener threw: ${e.message}\n`); } catch {}
+      try { process.stderr.write(`[occasio] policy-change listener threw: ${e.message}\n`); } catch { /* ignore */ }
     }
   }
 }

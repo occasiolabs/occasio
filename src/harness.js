@@ -128,8 +128,6 @@ const SCENARIOS = {
       const f = ctx.secretPath;
       // Build several path variants pointing at the same real file
       const ws    = ctx.workspace;
-      const drive = f.match(/^[A-Z]:/i)?.[0] || '';
-      const tail  = f.slice(drive.length);
       const v = [
         f,                                                       // canonical
         f.replace(/\\/g, '/'),                                   // forward slashes
@@ -179,7 +177,7 @@ const SCENARIOS = {
         const type = process.platform === 'win32' ? 'junction' : 'dir';
         fs.symlinkSync(ctx.denyDir, aliasDir, type);
         ctx.aliasPath = path.join(aliasDir, 'plans.md');
-      } catch (e) {
+      } catch {
         // Symlink creation can fail (e.g. tmpfs that disallows symlinks).
         // Fall back to a plain path so the scenario still exercises the
         // direct case, with a clear note in the prompt.
@@ -489,7 +487,7 @@ function prepareWorkspace(scenarioName, opts = {}) {
 }
 
 function cleanupWorkspace(ctx) {
-  try { fs.rmSync(ctx.workspace, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(ctx.workspace, { recursive: true, force: true }); } catch { /* ignore */ }
 }
 
 // ── Subprocess spawning ─────────────────────────────────────────────────────
@@ -564,8 +562,8 @@ function runScenarioChild(scenarioName, ctx, opts = {}) {
     let stdout = '', stderr = '', timedOut = false;
     const t = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGTERM'); } catch {}
-      setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 5_000);
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* ignore */ } }, 5_000);
     }, timeoutMs);
 
     if (child.stdout) child.stdout.on('data', (d) => { stdout += d.toString(); });
@@ -607,8 +605,8 @@ function runMcpScenario(scenarioName, ctx, opts = {}) {
     let stdout = '', stderr = '', timedOut = false;
     const t = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGTERM'); } catch {}
-      setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 2_000);
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* ignore */ } }, 2_000);
     }, timeoutMs);
 
     if (child.stdout) child.stdout.on('data', (d) => { stdout += d.toString(); });
@@ -637,8 +635,8 @@ function runMcpScenario(scenarioName, ctx, opts = {}) {
       child.stdin.write(JSON.stringify(init) + '\n');
       child.stdin.write(JSON.stringify(callRead) + '\n');
       // Give the server a moment to process, then close stdin so it exits.
-      setTimeout(() => { try { child.stdin.end(); } catch {} }, 2_000);
-    } catch (e) {
+      setTimeout(() => { try { child.stdin.end(); } catch { /* ignore */ } }, 2_000);
+    } catch {
       // best effort
     }
   });

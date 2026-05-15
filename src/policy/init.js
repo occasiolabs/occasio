@@ -101,7 +101,7 @@ function runInitCli(args, opts = {}) {
 
   // Guard: refuse to overwrite without --force
   let exists = false;
-  try { fsMod.statSync(filePath); exists = true; } catch {}
+  try { fsMod.statSync(filePath); exists = true; } catch { /* ignore */ }
 
   if (exists && !force) {
     console.log(`  File:    ${filePath}  ${col.y('(already exists)')}\n`);

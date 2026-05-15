@@ -26,7 +26,7 @@ function todayStr() {
 function getLogFile() { return path.join(LOG_DIR, 'logs', `${todayStr()}.jsonl`); }
 
 function run() {
-  let s = null; try { s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch {}
+  let s = null; try { s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch { /* ignore */ }
   console.log(col.b('\n⚡ Occasio\n'));
   if (!s) { console.log(col.d('  No session data yet. Run: occasio claude\n')); return; }
 

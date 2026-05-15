@@ -24,7 +24,6 @@
 const fs   = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const https    = require('https');
 const { routeLocally } = require('./classifier');
 const { distill }      = require('./distiller');
 const { scanSecrets }  = require('./analyzer');

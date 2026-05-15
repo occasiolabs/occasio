@@ -25,10 +25,6 @@ const LOGS_DIR    = path.join(LOG_DIR, 'logs');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function todayStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
 function cutoffMs(days) {
   const d = new Date();
   d.setDate(d.getDate() - days);

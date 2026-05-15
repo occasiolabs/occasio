@@ -33,7 +33,7 @@ function runStats() {
   try {
     mcpEntries = fs.readFileSync(MCP_LOG, 'utf8').trim().split('\n')
       .filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-  } catch {}
+  } catch { /* ignore */ }
 
   // ── Built-in path: read today's session log, count intercepted Read/Glob/Grep ─
   let builtinTools = [];
@@ -44,9 +44,9 @@ function runStats() {
         const entry = JSON.parse(line);
         const tools = (entry.tools || []).filter(t => ['Read', 'Glob', 'Grep'].includes(t.tool));
         builtinTools.push(...tools);
-      } catch {}
+      } catch { /* ignore */ }
     }
-  } catch {}
+  } catch { /* ignore */ }
 
   const mcpTotal     = mcpEntries.length;
   const builtinTotal = builtinTools.length;
@@ -116,7 +116,7 @@ function runStats() {
 }
 
 function runClear() {
-  try { fs.unlinkSync(MCP_LOG); console.log(col.g('✓ mcp-experiment.jsonl cleared')); } catch {}
+  try { fs.unlinkSync(MCP_LOG); console.log(col.g('✓ mcp-experiment.jsonl cleared')); } catch { /* ignore */ }
 }
 
 function runRaw() {

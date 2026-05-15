@@ -40,13 +40,13 @@ function run(args) {
     const blockedDir = path.join(LOG_DIR, 'blocked');
     let n = 0;
     for (const dir of [logsDir, blockedDir]) {
-      try { for (const f of fs.readdirSync(dir)) { fs.unlinkSync(path.join(dir, f)); n++; } } catch {}
+      try { for (const f of fs.readdirSync(dir)) { fs.unlinkSync(path.join(dir, f)); n++; } } catch { /* ignore */ }
     }
-    try { fs.unlinkSync(SESSION_FILE); } catch {}
+    try { fs.unlinkSync(SESSION_FILE); } catch { /* ignore */ }
     console.log(col.g(`✓ Cleared all history (${n} log files) and session data`));
   } else {
-    try { fs.unlinkSync(getLogFile()); } catch {}
-    try { fs.unlinkSync(SESSION_FILE); } catch {}
+    try { fs.unlinkSync(getLogFile()); } catch { /* ignore */ }
+    try { fs.unlinkSync(SESSION_FILE); } catch { /* ignore */ }
     console.log(col.g("✓ Cleared today's log and session data"));
     console.log(col.d('  Use --history to wipe all historical logs'));
   }

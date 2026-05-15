@@ -75,8 +75,6 @@ function getBlockedFile() { return path.join(LOG_DIR, 'blocked', `${todayStr()}-
 // MODEL_PRICES table + cost-arithmetic helpers. Re-exported here so the
 // rest of index.js keeps its existing call sites unchanged.
 const {
-  MODEL_PRICES,
-  getPrice,
   calcCost,
   calcCacheSavings,
   calcCompoundingSavings,
@@ -102,7 +100,7 @@ function updateSession(e) {
     lao_tokens_saved:0, lao_cost_saved:0, tools_local_count:0, tools_mcp_count:0,
     tools_attempted:0,
   };
-  try { s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch {}
+  try { s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch { /* ignore */ }
   s.requests++;
   s.input_tokens       += e.input_tokens       || 0;
   s.output_tokens      += e.output_tokens      || 0;
@@ -562,7 +560,7 @@ if (cmd === 'doctor' || cmd === 'check') {
           stdio: ['pipe', 'pipe', 'pipe'],
         }).toString().trim();
         ok('Python (LAO)', out); pyFound = true;
-      } catch {}
+      } catch { /* ignore */ }
     }
     if (!pyFound) bad('Python (LAO)', 'not found — context trimming disabled');
     if (laoPyExists) ok('LAO scorer', laoPyPath);
@@ -688,7 +686,7 @@ const sessionAuditor = _createAuditor(process.env.OCCASIO_AUDIT_FILE || undefine
       process.stderr.write(`\n${col.r('[occasio][audit-fatal]')} policy_loaded write failed: ${status.error?.message}\n`);
       process.stderr.write(`${col.r('[occasio][audit-fatal] dropped row:')} ${dropped}\n`);
       process.stderr.write(`${col.r('[occasio][audit-fatal] proxy aborting; supervisor will restart.')}\n`);
-      try { server && server.close && server.close(); } catch {}
+      try { server && server.close && server.close(); } catch { /* ignore */ }
       setTimeout(() => process.exit(1), 250);
     }
   });
@@ -727,7 +725,7 @@ if (budget !== null) {
   const { execSync: _ex } = require('child_process');
   let _pyOk = false;
   for (const _cmd of ['python', 'python3']) {
-    try { _ex(`${_cmd} --version`, { shell: process.platform === 'win32', timeout: 3000, stdio: 'pipe' }); _pyOk = true; break; } catch {}
+    try { _ex(`${_cmd} --version`, { shell: process.platform === 'win32', timeout: 3000, stdio: 'pipe' }); _pyOk = true; break; } catch { /* ignore */ }
   }
   if (!_pyOk) process.stderr.write(col.y(`  ⚠ LAO disabled — Python not found (context trimming inactive)\n`));
 }
@@ -775,7 +773,7 @@ const server = http.createServer((req, res) => {
           try {
             const rules = JSON.parse(fs.readFileSync(rp, 'utf8'));
             blocked = files.filter(f => (rules.block || []).some(p => f.includes(p.replace(/\*\*/g, '').replace(/\*/g, ''))));
-          } catch {}
+          } catch { /* ignore */ }
         }
 
         const shouldBlock = (mode === 'block_secrets' && secrets.length) || (mode === 'block_rules' && blocked.length);
@@ -808,7 +806,7 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ error: { type: 'blocked', reason: secrets.length ? secrets[0].label : 'rule', by: 'Occasio' } }));
           return;
         }
-      } catch {}
+      } catch { /* ignore */ }
     }
 
     // ── Budget enforcement (Stage 2: policy-driven BLOCK) ─────────────────────
@@ -842,7 +840,7 @@ const server = http.createServer((req, res) => {
           const s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
           s.budget_exceeded_count = (s.budget_exceeded_count || 0) + 1;
           fs.writeFileSync(SESSION_FILE, JSON.stringify(s));
-        } catch {}
+        } catch { /* ignore */ }
         const synth = decision.syntheticResponse;
         res.writeHead(synth.status, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(synth.body));
@@ -870,7 +868,7 @@ const server = http.createServer((req, res) => {
             }
           }
         }
-      } catch {}
+      } catch { /* ignore */ }
     }
     // ──────────────────────────────────────────────────────────────────────────
 
@@ -1057,7 +1055,7 @@ const server = http.createServer((req, res) => {
         }
         forwardBody = Buffer.from(JSON.stringify(b));
         outboundMessageCount = b.messages?.length ?? outboundMessageCount;
-      } catch {}
+      } catch { /* ignore */ }
     }
     if (laoDropped.length > 0) {
       const ts0  = new Date().toTimeString().slice(0, 8);
@@ -1183,7 +1181,7 @@ const server = http.createServer((req, res) => {
               process.stderr.write(`\n${col.r('[occasio][audit-fatal]')} ${e.message}\n`);
               process.stderr.write(`${col.r('[occasio][audit-fatal] dropped row:')} ${dropped}\n`);
               process.stderr.write(`${col.r('[occasio][audit-fatal] proxy aborting; supervisor will restart.')}\n`);
-              try { server && server.close && server.close(); } catch {}
+              try { server && server.close && server.close(); } catch { /* ignore */ }
               setTimeout(() => process.exit(1), 250);
               return;
             }
@@ -1212,10 +1210,10 @@ const server = http.createServer((req, res) => {
                     cacheRead  = d.usage.cache_read_input_tokens     || cacheRead;
                   }
                   if (d.type === 'message_delta' && d.usage) out = d.usage.output_tokens || out;
-                } catch {}
+                } catch { /* ignore */ }
               }
             }
-          } catch {}
+          } catch { /* ignore */ }
 
           // When the interceptor ran, Anthropic was billed for N calls:
           //   call #1  → initial tool_use round  (toolCallUsage)
@@ -1450,7 +1448,7 @@ server.listen(PORT, '127.0.0.1', () => {
         if (parts.length) process.stderr.write(col.d(`  Breakdown:   ${parts.join(' + ')}\n`));
       }
       process.stderr.write('────────────────────────────────────────\n\n');
-    } catch {}
+    } catch { /* ignore */ }
     process.exit(code || 0);
   });
 

@@ -122,10 +122,10 @@ function readRecentEntries(days, logsDir) {
       for (const line of raw.split('\n')) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        try { entries.push(JSON.parse(trimmed)); } catch {}
+        try { entries.push(JSON.parse(trimmed)); } catch { /* ignore */ }
       }
     }
-  } catch {}
+  } catch { /* ignore */ }
   return entries;
 }
 
@@ -231,14 +231,11 @@ function mine(opts) {
 
   // project_root → { projectRoot, sessions: Set, toolCounts: Map, legacySessions: number }
   const projects = new Map();
-  let totalLegacy = 0;
 
   for (const [, runEntries] of runsMap) {
     const cwd = runCwd(runEntries);
     if (!cwd) {
-      // Pre-schema run; count it if it falls under the filter project
-      // but we can't know which project it belongs to — just count globally.
-      totalLegacy++;
+      // Pre-schema run with no cwd — can't attribute to a project, skip.
       continue;
     }
 

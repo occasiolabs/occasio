@@ -86,7 +86,7 @@ function logCall(entry) {
     const dir = path.dirname(LOG_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 // ── Tool definitions (lao-compatible schemas) ──────────────────────────────────
@@ -274,7 +274,7 @@ async function handleRequest(req) {
             content: [{ type: 'text', text: 'audit-fatal: MCP server aborting' }],
             isError: true,
           });
-        } catch {}
+        } catch { /* ignore */ }
         setTimeout(() => process.exit(1), 250);
         return;
       }
@@ -301,7 +301,7 @@ process.stdin.on('data', chunk => {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    try { handleRequest(JSON.parse(trimmed)); } catch (e) { /* malformed JSON-RPC frame */ }
+    try { handleRequest(JSON.parse(trimmed)); } catch { /* malformed JSON-RPC frame */ }
   }
 });
 process.stdin.on('end', () => process.exit(0));

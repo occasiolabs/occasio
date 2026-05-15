@@ -12,7 +12,6 @@
  */
 
 const fs   = require('fs');
-const path = require('path');
 
 // Transforms currently implemented in the dispatcher.
 const KNOWN_TRANSFORMS = new Set(['redact-secrets', 'distill-output']);
@@ -88,7 +87,7 @@ function runPolicyCli(args, opts = {}) {
     const text = fs.readFileSync(filePath, 'utf8');
     fileExists = true;
     userParsed = loader.parse(text);
-  } catch {}
+  } catch { /* ignore */ }
 
   const active   = loader.load();
   const defaults = loader.DEFAULT_POLICY;

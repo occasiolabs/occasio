@@ -116,7 +116,7 @@ function fmtBytes(b) {
   return `${(b / 1024).toFixed(1)} KB`;
 }
 
-function renderBoundaryView(view, opts = {}) {
+function renderBoundaryView(view, _opts = {}) {
   if (!view) return '';
   const lines = [];
   const tag = view.event_type ? `[${view.event_type}]` : '';

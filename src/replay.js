@@ -386,7 +386,7 @@ function runReplayCli(args) {
     for (const raw of lines) {
       const line = raw.trim();
       if (!line) continue;
-      try { entries.push(JSON.parse(line)); } catch {}
+      try { entries.push(JSON.parse(line)); } catch { /* ignore */ }
     }
   }
 

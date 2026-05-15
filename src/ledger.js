@@ -26,7 +26,7 @@ function readDayLog(dateStr) {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
-    try { result.push(JSON.parse(line)); } catch {}
+    try { result.push(JSON.parse(line)); } catch { /* ignore */ }
   }
   return result;
 }
@@ -119,7 +119,6 @@ function printEntry(e, idx) {
 
 function printSummary(totals, scope, runId) {
   const { requests, cloud_sent = 0, local_only = 0, blocked = 0, trimmed = 0,
-          budget_exceeded = 0,
           input_tokens, output_tokens, cost,
           cache_savings, lao_cost_saved, distill_cost_saved = 0,
           distill_tokens_saved = 0, tools_local_count } = totals;
@@ -167,7 +166,7 @@ function runLedgerCli(args) {
   if (args.includes('--summary')) showSummary = true;
 
   let session = null;
-  try { session = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch {}
+  try { session = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch { /* ignore */ }
 
   const todayEntries = readDayLog(todayStr());
   const entries = scope === 'session'

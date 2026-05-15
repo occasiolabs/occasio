@@ -16,7 +16,6 @@
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
-const adapter = require('../adapters/claude-code');
 const { PASS, LOCAL, BLOCK, TRANSFORM, TRANSFORM_CHAIN } = require('../core/decision');
 const loader = require('./loader');
 const builtIn = require('./built-in-classifiers');

@@ -30,7 +30,7 @@ function incrementSessionMcpCount(n = 1) {
     if (!s || !s.run_id) return;  // no active proxy session — don't create a stale entry
     s.tools_mcp_count = (s.tools_mcp_count || 0) + n;
     fs.writeFileSync(SESSION_FILE, JSON.stringify(s));
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 module.exports = { SESSION_FILE, incrementSessionMcpCount };

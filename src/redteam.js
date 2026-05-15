@@ -33,7 +33,6 @@
  */
 
 const fs   = require('fs');
-const path = require('path');
 const harness = require('./harness');
 
 const C = (() => {
@@ -411,7 +410,7 @@ async function runRedteamCli(args = []) {
     return result;
   } finally {
     if (!keepScratch && !process.env.OCC_REDTEAM_KEEP) {
-      try { fs.rmSync(ctx.workspace, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(ctx.workspace, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   }
 }

@@ -37,7 +37,7 @@ const FEEDBACK_LOG = path.join(os.homedir(), '.occasio', 'routing-feedback.jsonl
  * @param {string} [context]  reserved for future ML use
  * @returns {{ local: boolean, confidence: number, reason: string }}
  */
-function routeLocally(toolName, command, context = '') {
+function routeLocally(toolName, command, _context = '') {
   if (toolName !== 'Bash') {
     return { local: false, confidence: 1.0, reason: 'non-bash tool' };
   }

@@ -268,7 +268,7 @@ function printBoundaryEntry(entry, idxLabel, total) {
 
 function runInspectCli(args) {
   let session = null;
-  try { session = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch {}
+  try { session = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch { /* ignore */ }
 
   const todayEntries = readDayLog(todayStr());
 
