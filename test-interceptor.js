@@ -1802,97 +1802,12 @@ console.log('\n3. runLocally');
     assert('auth: content-length set from payloadLength', h['content-length'] === '1234');
   }
 
-  // ── 21. Glob tool support ───────────────────────────────────────────────────
-  console.log('\n21. Glob tool — isGlobHandleable, globToRegex, handleGlobTool');
+  // ── 21. Glob tool — isInterceptable routing ─────────────────────────────────
+  // Handler-level tests for isGlobHandleable / globToRegex / handleGlobTool
+  // moved to test-native-handlers.js (Stage-2 Step 3, see
+  // docs/ADAPTER-STAGE-2-MIGRATION.md). The asserts kept here cover routing.
+  console.log('\n21. Glob tool — isInterceptable routing');
 
-  const { isGlobHandleable, globToRegex, handleGlobTool } = require('./src/interceptor');
-
-  // isGlobHandleable
-  assert('isGlobHandleable: null → false',            !isGlobHandleable(null));
-  assert('isGlobHandleable: empty object → false',    !isGlobHandleable({}));
-  assert('isGlobHandleable: empty pattern → false',   !isGlobHandleable({ pattern: '' }));
-  assert('isGlobHandleable: valid pattern → true',    isGlobHandleable({ pattern: '**/*.js' }));
-  assert('isGlobHandleable: with path → true',        isGlobHandleable({ pattern: '*.ts', path: 'src' }));
-  assert('isGlobHandleable: semicolon injection → false',  !isGlobHandleable({ pattern: '*.js;rm -rf' }));
-  assert('isGlobHandleable: pipe injection → false',       !isGlobHandleable({ pattern: '*.js|cat' }));
-  assert('isGlobHandleable: backtick injection → false',   !isGlobHandleable({ pattern: '`ls`' }));
-  assert('isGlobHandleable: dollar injection → false',     !isGlobHandleable({ pattern: '$HOME/**' }));
-  assert('isGlobHandleable: non-string path → false',      !isGlobHandleable({ pattern: '*.js', path: 42 }));
-  assert('isGlobHandleable: non-string pattern → false',   !isGlobHandleable({ pattern: 123 }));
-
-  // globToRegex — pattern correctness
-  {
-    const r1 = globToRegex('**/*.js');
-    assert('globToRegex: **/*.js matches src/foo.js',    r1.test('src/foo.js'));
-    assert('globToRegex: **/*.js matches deep/a/b/c.js', r1.test('deep/a/b/c.js'));
-    assert('globToRegex: **/*.js rejects foo.ts',        !r1.test('foo.ts'));
-
-    const r2 = globToRegex('*.ts');
-    assert('globToRegex: *.ts matches foo.ts',           r2.test('foo.ts'));
-    assert('globToRegex: *.ts rejects src/foo.ts',       !r2.test('src/foo.ts'));
-
-    const r3 = globToRegex('src/*.{ts,tsx}');
-    assert('globToRegex: {ts,tsx} matches src/app.ts',   r3.test('src/app.ts'));
-    assert('globToRegex: {ts,tsx} matches src/app.tsx',  r3.test('src/app.tsx'));
-    assert('globToRegex: {ts,tsx} rejects src/app.js',   !r3.test('src/app.js'));
-
-    const r4 = globToRegex('src/?oo.js');
-    assert('globToRegex: ? matches single char',         r4.test('src/foo.js'));
-    assert('globToRegex: ? rejects empty',               !r4.test('src/oo.js'));
-
-    const r5 = globToRegex('**');
-    assert('globToRegex: ** matches any path',           r5.test('a/b/c.js'));
-    assert('globToRegex: ** matches single file',        r5.test('readme.md'));
-  }
-
-  // handleGlobTool — live filesystem tests
-  {
-    const os  = require('os');
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lf-glob-test-'));
-    try {
-      // Build a small directory tree
-      fs.mkdirSync(path.join(tmpDir, 'src'));
-      fs.mkdirSync(path.join(tmpDir, 'src', 'utils'));
-      fs.writeFileSync(path.join(tmpDir, 'src', 'index.ts'),   'a');
-      fs.writeFileSync(path.join(tmpDir, 'src', 'app.tsx'),    'b');
-      fs.writeFileSync(path.join(tmpDir, 'src', 'utils', 'helpers.ts'), 'c');
-      fs.writeFileSync(path.join(tmpDir, 'readme.md'),         'd');
-      fs.writeFileSync(path.join(tmpDir, 'package.json'),      '{}');
-
-      // Pattern matches all .ts / .tsx files recursively
-      const r1 = handleGlobTool({ pattern: '**/*.{ts,tsx}', path: tmpDir });
-      assert('handleGlobTool: exitCode 0',               r1.exitCode === 0);
-      assert('handleGlobTool: finds index.ts',           r1.output.includes('index.ts'));
-      assert('handleGlobTool: finds app.tsx',            r1.output.includes('app.tsx'));
-      assert('handleGlobTool: finds helpers.ts',         r1.output.includes('helpers.ts'));
-      assert('handleGlobTool: excludes readme.md',       !r1.output.includes('readme.md'));
-      assert('handleGlobTool: matchCount = 3',           r1.matchCount === 3);
-
-      // Pattern matches only root-level .md
-      const r2 = handleGlobTool({ pattern: '*.md', path: tmpDir });
-      assert('handleGlobTool *.md: finds readme.md',     r2.output.includes('readme.md'));
-      assert('handleGlobTool *.md: matchCount = 1',      r2.matchCount === 1);
-
-      // No matches
-      const r3 = handleGlobTool({ pattern: '*.go', path: tmpDir });
-      assert('handleGlobTool no matches: exitCode 0',    r3.exitCode === 0);
-      assert('handleGlobTool no matches: no-matches msg', r3.output.includes('(no matches)'));
-      assert('handleGlobTool no matches: matchCount = 0', r3.matchCount === 0);
-
-      // Empty pattern
-      const r4 = handleGlobTool({ pattern: '' });
-      assert('handleGlobTool empty pattern: exitCode 1', r4.exitCode === 1);
-
-      // null input
-      const r5 = handleGlobTool(null);
-      assert('handleGlobTool null: exitCode 1',          r5.exitCode === 1);
-
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  }
-
-  // isInterceptable delegates to isGlobHandleable for Glob blocks
   assert('isInterceptable Glob valid → true',
     isInterceptable({ name: 'Glob', input: { pattern: '**/*.js' } }));
   assert('isInterceptable Glob no pattern → false',
@@ -1905,10 +1820,6 @@ console.log('\n3. runLocally');
     isInterceptable({ name: 'Glob', input: { pattern: '**/*.ts' } }));
   assert('isInterceptable batch Glob+Read → true (Read)',
     isInterceptable({ name: 'Read', input: { file_path: 'src/index.ts' } }));
-
-  // Windows-style backslash in path is accepted by isGlobHandleable
-  assert('isGlobHandleable Windows backslash path → true',
-    isGlobHandleable({ pattern: '**/*.ts', path: 'C:\\Users\\example\\src' }));
 
   // ── 22. Grep tool support ───────────────────────────────────────────────────
   console.log('\n22. Grep tool — isGrepHandleable, handleGrepTool');
