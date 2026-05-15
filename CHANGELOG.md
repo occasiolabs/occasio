@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.4] — 2026-05-15  Audit pillar hardening
+
+Internal hardening of the audit chain; no API breaks.
+
+### Added
+
+- `loadPrevHash()` now tail-reads instead of walking the full file — O(1)
+  startup on large logs.
+- Crash recovery: a partial trailing line (interrupted append) is detected
+  on load and surfaces a clear instruction to run `occasio audit repair`.
+- `occasio audit repair --file <path> [--dry-run]` — truncates a
+  crash-partial trailing line, writes a `.bak` before mutating.
+- `audit_schema=1` field on new rows. Forward-compatible: the Python
+  walker (`docs/audit_walker.py`) is field-agnostic and continues to
+  verify the chain over rows with or without the field.
+- Opt-in file locking for multi-process writers (`proper-lockfile`).
+  Off by default; enable via env var when multiple agents share one log.
+- ESLint scoped to `src/audit` and `src/attest` (`npm run lint`).
+- Test suites: H1 (loadPrevHash tail-read), H2 (crash-recovery surface),
+  H3 (attest policy-read loud-fail), H4 (locking semantics).
+- `CONTRIBUTING.md` and `docs/ARCHITECTURE.md`.
+
 ## [0.8.1] — 2026-05-14  Behavioral attestation v1 + EDR + Computer-Use scaffold
 
 Three new top-level capabilities, all building on the v0.8.0 audit chain

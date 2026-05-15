@@ -45,6 +45,7 @@ ${col.b('Usage:')}
                                 Use --template strict|finance for a non-default starter
   occasio policy doctor      Cross-reference session logs with policy; surface suggestions
   occasio audit [verify]     Verify tamper-evident hash chain in pipeline-events.jsonl
+  occasio audit repair       Truncate a crash-partial trailing line (--file <path> [--dry-run])
   occasio report             Governance export: file access log, blocked paths, secret events
   occasio anomalies          Live anomaly detection over the audit chain (--window 15m, --json)
   occasio computer-use       Apply a Computer-Use policy to a JSONL of tool_use blocks (--dry-run --example)

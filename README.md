@@ -83,6 +83,7 @@ occasio attest --run-id <uuid>  # Build a behavioral attestation for one session
 | `occasio distill` | Inspect distilled tool outputs |
 | `occasio dashboard` | Live browser dashboard at http://localhost:3001 |
 | `occasio audit verify` | Re-walk the SHA-256 audit chain end-to-end |
+| `occasio audit repair --file <path>` | Truncate a crash-partial trailing line (writes `.bak`) |
 | `occasio report` | Governance summary export (`--days N`, `--format csv`) |
 | `occasio anomalies` | EDR detection over the audit chain (`--window 15m`, `--json`) |
 | `occasio attest --run-id <uuid>` | Build a behavioral attestation predicate v1 |
