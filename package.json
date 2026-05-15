@@ -14,7 +14,9 @@
     "NOTICE"
   ],
   "scripts": {
-    "test": "node test-interceptor.js",
+    "test": "node test-interceptor.js && node test-audit-chain.js && node test-attest.js && node test-policy-paths.js",
+    "lint": "eslint src/audit src/attest",
+    "lint:all": "eslint src bin",
     "smoke": "node test-smoke.js",
     "test:mcp": "node test-mcp-server.js",
     "restart-check": "node scripts/restart-check.js",
@@ -65,5 +67,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "sigstore": "^3.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.4"
   }
 }

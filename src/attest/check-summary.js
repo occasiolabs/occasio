@@ -42,7 +42,7 @@ function mdText(s) {
   if (s === null || s === undefined) return '';
   return String(s)
     .replace(/[\r\n]+/g, ' ')
-    .replace(/([\\`*_{}\[\]()#+\-.!|<>])/g, '\\$1')
+    .replace(/([\\`*_{}[\]()#+\-.!|<>])/g, '\\$1')
     .slice(0, 256);
 }
 

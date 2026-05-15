@@ -159,7 +159,8 @@ function loadPrevHash(filePath, opts = {}) {
  * in-memory chain consistent with what is on disk if the proxy is restarted.
  */
 function createAuditor(filePath = DEFAULT_LOG) {
-  try { fs.mkdirSync(path.dirname(filePath), { recursive: true }); } catch {}
+  try { fs.mkdirSync(path.dirname(filePath), { recursive: true }); }
+  catch { /* directory already exists, or unwritable — surface on first append */ }
 
   let prevHash = loadPrevHash(filePath);
 
