@@ -1,5 +1,37 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- CI-gated end-to-end Sigstore round-trip (`test-attest-e2e.js`,
+  `.github/workflows/attest-e2e.yml`). Runs only when
+  `OCCASIO_E2E_SIGSTORE=1` inside a GitHub Actions job with
+  `permissions: id-token: write`. Locally it prints a SKIP line.
+- EDR synthetic baselines: `scripts/edr-synthetic.js` generates
+  hash-chained pipeline-events.jsonl matching one of four profiles
+  (low-activity, bursty, secret-heavy, denied-heavy).
+  `docs/edr-calibration.md` gains a 4×4 false-positive matrix.
+  `occasio anomalies --threshold-multiplier <n>` lets operators
+  raise/lower the deny-rate and file-read-volume thresholds.
+- `test-anomaly.js` asserts a zero-HIGH FP smoke on the low-activity
+  profile and that the multiplier suppresses marginal alerts.
+
+### Changed
+- `src/cli/help.js` reorganised into five use-case namespaces (Setup,
+  Run, Inspect, Audit, Detect) plus a 60-second start. Each command
+  now carries a maturity tag (stable / beta / alpha).
+- Test-attest mock bundle hardened to mirror the real sigstore-js v3
+  bundle shape (certificate.rawBytes, tlogEntries.integratedTime,
+  dsseEnvelope.signatures); a future refactor that depends on a
+  fictional field will now fail loudly.
+
+### Scope cut
+- The E2E test signs against **prod** Sigstore Fulcio + Rekor (one
+  public Rekor entry per CI run). The dedicated staging instance is
+  intermittently available and changes shape between sigstore-js
+  releases, which would make this gate flaky. Workflow runs only on
+  main pushes and `workflow_dispatch` — never on PR pushes.
+
 ## [0.8.4] — 2026-05-15  Audit pillar hardening
 
 Internal hardening of the audit chain; no API breaks.

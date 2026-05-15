@@ -1,0 +1,48 @@
+name: attest-e2e
+
+# End-to-end Sigstore round-trip for `occasio attest --sign` / `occasio attest verify`.
+# Signs a synthetic attestation against the real (prod) Sigstore Fulcio CA
+# and writes one entry to the public Rekor transparency log per run, then
+# re-verifies the bundle + audit chain via the same code path the CLI uses.
+#
+# Gating
+#   - Triggered only on main pushes + manual dispatch — NOT on PRs from
+#     forks (forks have no id-token, and we do not want PR pushes to
+#     pollute Rekor).
+#   - Skipped when OCCASIO_E2E_SIGSTORE != '1' (test-attest-e2e.js
+#     enforces this defensively in addition to the workflow gate).
+#
+# Why prod, not staging
+#   sigstore-js's staging endpoints have shifted between releases and the
+#   public staging Rekor is intermittently unreachable. Prod is the actual
+#   signing surface the product uses, so an E2E gate against prod is the
+#   only signal that actually validates the production path. Cost is one
+#   public Rekor entry per merge-to-main — comparable to npm publish.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/attest/**'
+      - 'test-attest-e2e.js'
+      - '.github/workflows/attest-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sigstore-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OCCASIO_E2E_SIGSTORE: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: npm ci || npm install
+      - name: E2E Sigstore round-trip (prod Fulcio + Rekor)
+        run: npm run test:e2e

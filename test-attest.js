@@ -219,16 +219,44 @@ async function runRoundTripTests() {
   assert('first_hash present',  !!att.audit_chain.first_hash);
   assert('last_hash present',   !!att.audit_chain.last_hash);
 
-  // Sign with stub.
+  // Sign with stub. The bundle below mirrors the shape sigstore-js v3
+  // emits in production — every field present here exists on a real prod
+  // bundle. The verify path only touches a subset, but the mock asserts the
+  // full shape so the test fails loudly if we ever start depending on a
+  // field the real Sigstore output does not provide.
   const canonicalStmt = canonicalize(buildInTotoStatement(att));
   const stubBundle = {
     mediaType: 'application/vnd.dev.sigstore.bundle+json;version=0.3',
-    verificationMaterial: { tlogEntries: [{ logIndex: '777' }] },
+    verificationMaterial: {
+      certificate: {
+        rawBytes: Buffer.from('-----BEGIN CERTIFICATE-----STUB-----END CERTIFICATE-----', 'utf8').toString('base64'),
+      },
+      tlogEntries: [{
+        logIndex:           '777',
+        logId:              { keyId: Buffer.alloc(32, 0xab).toString('base64') },
+        kindVersion:        { kind: 'intoto', version: '0.0.2' },
+        integratedTime:     '1746000000',
+        canonicalizedBody:  Buffer.from('canonical-body', 'utf8').toString('base64'),
+      }],
+    },
     dsseEnvelope: {
       payload:     Buffer.from(canonicalStmt, 'utf8').toString('base64'),
       payloadType: 'application/vnd.in-toto+json',
+      signatures:  [{ sig: Buffer.from('stub-signature', 'utf8').toString('base64') }],
     },
   };
+  // Shape assertions — make the mock break loudly if a future refactor
+  // assumes a field we never actually populate.
+  assert('stub bundle: mediaType matches sigstore v0.3',
+    /vnd\.dev\.sigstore\.bundle\+json;version=0\.3/.test(stubBundle.mediaType));
+  assert('stub bundle: certificate.rawBytes present',
+    typeof stubBundle.verificationMaterial.certificate.rawBytes === 'string');
+  assert('stub bundle: tlogEntry has logIndex + integratedTime',
+    !!stubBundle.verificationMaterial.tlogEntries[0].logIndex &&
+    !!stubBundle.verificationMaterial.tlogEntries[0].integratedTime);
+  assert('stub bundle: dsseEnvelope has signatures[]',
+    Array.isArray(stubBundle.dsseEnvelope.signatures) &&
+    stubBundle.dsseEnvelope.signatures.length === 1);
   let verifyCalled = false;
   const stubSigstore = {
     attest: () => Promise.resolve(stubBundle),

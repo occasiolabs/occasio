@@ -18,6 +18,7 @@
     "lint": "eslint src/audit src/attest",
     "lint:all": "eslint src bin",
     "smoke": "node test-smoke.js",
+    "test:e2e": "node test-attest-e2e.js",
     "test:mcp": "node test-mcp-server.js",
     "restart-check": "node scripts/restart-check.js",
     "check-validation": "node scripts/check-validation.js",
