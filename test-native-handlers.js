@@ -16,10 +16,17 @@
  * future loss of the re-export surface fails this test loudly.
  */
 
+const fs   = require('fs');
+const path = require('path');
+
 const {
   isTodoHandleable,
   handleTodoWriteTool,
   handleTodoReadTool,
+  isReadHandleable,
+  handleReadTool,
+  readFileNative,
+  READ_SKIP_EXTENSIONS,
 } = require('./src/interceptor');
 
 let passed = 0, failed = 0;
@@ -131,6 +138,84 @@ assert('isTodoHandleable unknown tool → false',
   const parsed = JSON.parse(r.output);
   assert('Session: read after overwrite → 2', parsed.length === 2);
   assert('Session: read reflects last write',  parsed[0].id === '2');
+}
+
+// ── 2. Read tool — isReadHandleable, handleReadTool ────────────────────────
+console.log('\n2. Read tool — isReadHandleable, handleReadTool');
+
+// Re-export shape: any future loss of the re-export surface should fail loudly.
+assert('interceptor re-exports isReadHandleable',  typeof isReadHandleable  === 'function');
+assert('interceptor re-exports handleReadTool',    typeof handleReadTool    === 'function');
+assert('interceptor re-exports readFileNative',    typeof readFileNative    === 'function');
+assert('interceptor re-exports READ_SKIP_EXTENSIONS', READ_SKIP_EXTENSIONS instanceof Set);
+
+const tmpRead  = path.join(require('os').tmpdir(), 'lf-read-test.txt');
+const tmpLines = ['alpha', 'beta', 'gamma', 'delta', 'epsilon'];
+fs.writeFileSync(tmpRead, tmpLines.join('\n') + '\n', 'utf8');
+
+try {
+  // isReadHandleable — routing decisions
+  assert('isReadHandleable: valid text path',        isReadHandleable({ file_path: '/src/index.js' }));
+  assert('isReadHandleable: relative path',          isReadHandleable({ file_path: 'src/index.js' }));
+  assert('isReadHandleable: null input → false',     !isReadHandleable(null));
+  assert('isReadHandleable: missing file_path',      !isReadHandleable({}));
+  assert('isReadHandleable: empty string path',      !isReadHandleable({ file_path: '' }));
+  assert('isReadHandleable: .pdf → false',           !isReadHandleable({ file_path: 'guide.pdf' }));
+  assert('isReadHandleable: .PDF uppercase → false', !isReadHandleable({ file_path: 'GUIDE.PDF' }));
+  assert('isReadHandleable: .ipynb → false',         !isReadHandleable({ file_path: 'nb.ipynb' }));
+  assert('isReadHandleable: .png → false',           !isReadHandleable({ file_path: 'img.png' }));
+  assert('isReadHandleable: pages param → false',    !isReadHandleable({ file_path: 'doc.txt', pages: '1-3' }));
+  assert('isReadHandleable: .ts file → true',        isReadHandleable({ file_path: 'src/foo.ts' }));
+  assert('isReadHandleable: Windows backslash path accepted',
+    isReadHandleable({ file_path: 'C:\\Users\\example\\src\\index.js' }));
+
+  // handleReadTool — output correctness
+  {
+    const r = handleReadTool({ file_path: tmpRead });
+    assert('handleReadTool: exitCode 0',              r.exitCode === 0);
+    assert('handleReadTool: output contains alpha',   r.output.includes('alpha'));
+    assert('handleReadTool: line numbers present',    r.output.includes('     1\t'));
+    assert('handleReadTool: line 3 labeled correctly', r.output.includes('     3\tgamma'));
+  }
+
+  // offset and limit
+  {
+    const r = handleReadTool({ file_path: tmpRead, offset: 1, limit: 2 });
+    assert('handleReadTool offset/limit: exitCode 0',  r.exitCode === 0);
+    assert('handleReadTool offset/limit: starts at line 2', r.output.startsWith('     2\tbeta'));
+    assert('handleReadTool offset/limit: only 2 lines',
+      r.output.trim().split('\n').length === 2);
+    assert('handleReadTool offset/limit: line numbering reflects file pos',
+      r.output.includes('     3\tgamma'));
+  }
+
+  // offset=0 explicit (same as default)
+  {
+    const r = handleReadTool({ file_path: tmpRead, offset: 0, limit: 1 });
+    assert('handleReadTool offset=0: starts at line 1', r.output.startsWith('     1\talpha'));
+  }
+
+  // missing file
+  {
+    const r = handleReadTool({ file_path: '/nonexistent-path-xyz-123/file.txt' });
+    assert('handleReadTool missing file: exitCode 1',   r.exitCode === 1);
+    assert('handleReadTool missing file: error message', r.output.includes('No such file'));
+  }
+
+  // empty file_path
+  {
+    const r = handleReadTool({ file_path: '' });
+    assert('handleReadTool empty path: exitCode 1', r.exitCode === 1);
+  }
+
+  // null input
+  {
+    const r = handleReadTool(null);
+    assert('handleReadTool null input: exitCode 1', r.exitCode === 1);
+  }
+
+} finally {
+  try { fs.unlinkSync(tmpRead); } catch {}
 }
 
 console.log('\n────────────────────────────────────────');
