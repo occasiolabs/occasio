@@ -36,134 +36,18 @@ const {
 } = require('./executor/native-handlers/read');
 
 // ── Glob tool support ──────────────────────────────────────────────────────────
-
-// Characters that indicate shell injection in a glob pattern.
-// We reject patterns containing these so handleGlobTool stays read-only.
-const GLOB_INJECTION_RE = /[;&|`$<>!]/;
-
-// Directories skipped during recursive glob walks.
-const GLOB_SKIP = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'build', '__pycache__', '.venv', 'venv']);
-
-// Maximum number of matches returned to avoid overwhelming the model context.
-const GLOB_MAX = 500;
-
-function isGlobHandleable(input) {
-  if (!input || typeof input !== 'object') return false;
-  const pattern = input.pattern;
-  if (!pattern || typeof pattern !== 'string' || !pattern.trim()) return false;
-  if (GLOB_INJECTION_RE.test(pattern)) return false;
-  if (input.path != null && typeof input.path !== 'string') return false;
-  return true;
-}
-
-// Escape regex metacharacters in a literal string segment.
-function escapeRegexChars(s) {
-  return s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Convert a glob pattern to a RegExp.
- * Supports: ** (any path depth), * (single segment), ? (single char),
- * {ts,tsx} (alternation), [abc] (character classes).
- * Exported for unit testing.
- */
-function globToRegex(pattern) {
-  // Normalise Windows separators in the pattern.
-  const p = pattern.replace(/\\/g, '/');
-
-  let re = '';
-  let i = 0;
-  while (i < p.length) {
-    // ** — match any path segments (including none), consuming the trailing /
-    if (p[i] === '*' && p[i + 1] === '*') {
-      re += '.*';
-      i += 2;
-      if (p[i] === '/') i++; // consume separator after **
-      continue;
-    }
-    // * — match within a single path segment
-    if (p[i] === '*') { re += '[^/]*'; i++; continue; }
-    // ? — match a single character within a segment
-    if (p[i] === '?') { re += '[^/]'; i++; continue; }
-    // {a,b,c} — alternation
-    if (p[i] === '{') {
-      const end = p.indexOf('}', i);
-      if (end !== -1) {
-        const alts = p.slice(i + 1, end).split(',').map(escapeRegexChars);
-        re += `(?:${alts.join('|')})`;
-        i = end + 1;
-        continue;
-      }
-    }
-    // [abc] / [^abc] — pass character classes through verbatim
-    if (p[i] === '[') {
-      const end = p.indexOf(']', i);
-      if (end !== -1) { re += p.slice(i, end + 1); i = end + 1; continue; }
-    }
-    re += escapeRegexChars(p[i]);
-    i++;
-  }
-
-  // On Windows, matching is case-insensitive; on POSIX it's case-sensitive.
-  const flags = process.platform === 'win32' ? 'i' : '';
-  return new RegExp(`^${re}$`, flags);
-}
-
-/**
- * Walk `dir` recursively, collecting paths that match `regex`.
- * Results are relative to `baseDir`.
- */
-function walkGlob(dir, baseDir, regex, results) {
-  if (results.length >= GLOB_MAX) return;
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-  catch { return; }
-
-  for (const entry of entries) {
-    if (results.length >= GLOB_MAX) break;
-    if (GLOB_SKIP.has(entry.name)) continue;
-    const abs     = path.join(dir, entry.name);
-    // Normalise to forward slashes for matching (consistent on all platforms).
-    const rel     = path.relative(baseDir, abs).replace(/\\/g, '/');
-    if (entry.isDirectory()) {
-      walkGlob(abs, baseDir, regex, results);
-    } else if (regex.test(rel)) {
-      results.push(rel);
-    }
-  }
-}
-
-/**
- * Resolve glob pattern + optional base path to a sorted list of matching paths,
- * relative to CWD.  Returns { output, exitCode, matchCount }.
- */
-function handleGlobTool(input) {
-  const pattern = (input?.pattern || '').trim();
-  if (!pattern) return { output: '(no pattern provided)', exitCode: 1, matchCount: 0 };
-
-  const baseDir = input?.path
-    ? path.resolve(process.cwd(), input.path)
-    : process.cwd();
-
-  // Reject if base path escapes CWD for safety.
-  const cwd = process.cwd();
-  if (!baseDir.startsWith(cwd) && baseDir !== cwd) {
-    // Allow absolute paths outside CWD — Glob is read-only and safe.
-  }
-
-  let regex;
-  try { regex = globToRegex(pattern); }
-  catch (e) { return { output: `Glob: invalid pattern: ${e.message}`, exitCode: 1, matchCount: 0 }; }
-
-  const results = [];
-  walkGlob(baseDir, baseDir, regex, results);
-  results.sort();
-
-  const truncated = results.length >= GLOB_MAX;
-  const lines = results.map(r => path.join(baseDir !== cwd ? baseDir : '', r).replace(/\\/g, '/'));
-  const output = lines.join('\n') + (truncated ? `\n(truncated at ${GLOB_MAX} results)` : '');
-  return { output: output || '(no matches)', exitCode: 0, matchCount: results.length };
-}
+// Moved to src/executor/native-handlers/glob.js as Stage-2 Step 3 of the
+// executor migration. GLOB_SKIP and globToRegex are also consumed by the Grep
+// code below.
+const {
+  GLOB_INJECTION_RE,
+  GLOB_SKIP,
+  GLOB_MAX,
+  isGlobHandleable,
+  globToRegex,
+  walkGlob,
+  handleGlobTool,
+} = require('./executor/native-handlers/glob');
 
 // ── Grep tool support ──────────────────────────────────────────────────────────
 
