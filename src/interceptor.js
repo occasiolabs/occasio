@@ -455,7 +455,7 @@ function nativeHandle(cmd) {
             }
           }
         }
-      } catch {}
+      } catch { /* skip unreadable dir */ }
     }
     walk(abs);
     return { output: results.join('\n') || '', exitCode: 0 };
@@ -487,7 +487,7 @@ function nativeHandle(cmd) {
     if (!filePart) return null;
     const abs = path.resolve(cwd, filePart);
     let exists = false;
-    try { fs.statSync(abs); exists = true; } catch {}
+    try { fs.statSync(abs); exists = true; } catch { /* missing → exists stays false */ }
     return { output: exists ? 'True' : 'False', exitCode: exists ? 0 : 1 };
   }
 
@@ -889,27 +889,6 @@ function buildFollowUpHeaders(authHeaders, payloadLength) {
   if (authHeaders['authorization'])  h['authorization']   = authHeaders['authorization'];
   if (authHeaders['anthropic-beta']) h['anthropic-beta']  = authHeaders['anthropic-beta'];
   return h;
-}
-
-function anthropicRequest(body, authHeaders) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({ ...body, stream: false });
-    const headers = buildFollowUpHeaders(authHeaders, Buffer.byteLength(payload));
-
-    const req = https.request(
-      { hostname: 'api.anthropic.com', port: 443, path: '/v1/messages', method: 'POST', headers },
-      res => {
-        const chunks = [];
-        res.on('data', c => chunks.push(c));
-        res.on('end', () => {
-          try   { resolve({ status: res.statusCode, body: JSON.parse(Buffer.concat(chunks).toString()) }); }
-          catch (e) { reject(e); }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.end(payload);
-  });
 }
 
 // ── Main export ────────────────────────────────────────────────────────────────
