@@ -18,7 +18,8 @@ dispatch-loop awareness.
 
 | Step | Module | Origin | Destination | Status |
 |---|---|---|---|---|
-| 1 | TodoWrite / TodoRead native handlers | `src/runtime.js` | `src/executor/native-handlers/todo.js` | ✅ this commit |
+| 1 | TodoWrite / TodoRead native handlers | `src/runtime.js` | `src/executor/native-handlers/todo.js` | ✅ |
+| 2 | Read native handler (+ `MAX_OUTPUT`, `READ_SKIP_EXTENSIONS`, `readFileNative`) | `src/runtime.js` | `src/executor/native-handlers/read.js` | ✅ this commit |
 
 `src/runtime.js` re-exports the moved symbols, so every existing import
 path (`src/interceptor.js`, tests, the MCP server) continues to work
@@ -32,7 +33,6 @@ moving a handler **without** also moving its tests and without breaking
 
 | Step | Module | Origin | Proposed destination | Notes |
 |---|---|---|---|---|
-| 2 | Read tool native handler | `src/runtime.js` `handleReadTool` | `src/executor/native-handlers/read.js` | Largest unit. Depends on `analyzer` (secret scanning) and `distill`. The distillation step is *not* part of the native handler — it lives one level up in `executeLocalTool`. Keep the boundary there. |
 | 3 | Glob native handler | `src/runtime.js` `handleGlobTool`, `globToRegex` | `src/executor/native-handlers/glob.js` | Self-contained except for `path` and `fs` calls. |
 | 4 | Grep native handler | `src/runtime.js` `handleGrepTool` | `src/executor/native-handlers/grep.js` | Self-contained. Shares `head_limit` / `offset` semantics with Glob — extract the small helper once both are moved. |
 | 5 | Bash / PowerShell native dispatch | `src/interceptor.js` `nativeHandle` + `extractShellReadPaths` | `src/executor/native-handlers/shell.js` | The exec path is still Decision-shape mismatched (Stage-1 caveat). Don't move until `nativeHandle` returns a canonical Decision. |

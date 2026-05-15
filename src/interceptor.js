@@ -31,7 +31,7 @@ const { scanSecrets }  = require('./analyzer');
 
 const {
   MAX_OUTPUT,
-  readFileNative,
+  readFileNative, READ_SKIP_EXTENSIONS,
   isReadHandleable, handleReadTool,
   isGlobHandleable, handleGlobTool, globToRegex,
   isGrepHandleable, handleGrepTool,
@@ -1185,6 +1185,8 @@ module.exports = {
   isGrepHandleable,
   isTodoHandleable,
   nativeHandle,
+  readFileNative,
+  READ_SKIP_EXTENSIONS,
   handleReadTool,
   handleGlobTool,
   globToRegex,
