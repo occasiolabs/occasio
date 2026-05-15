@@ -1,6 +1,11 @@
 // `occasio help` — top-level usage. Pure text; no side effects other
 // than console.log. Each CLI command lives in its own file under
 // src/cli/ as part of the index.js decomposition (see CHANGELOG).
+//
+// Maturity tags follow the bewertung pillars:
+//   (stable) — load-bearing, has test coverage and field validation
+//   (beta)   — works end-to-end but missing breadth (one detector, one preset)
+//   (alpha)  — scaffold; needs operator calibration before relying on it
 
 'use strict';
 
@@ -19,42 +24,58 @@ function run() {
   console.log(`
 ${col.b(`⚡ Occasio v${VERSION}`)}
 
-${col.b('Usage:')}
-  occasio claude [args...]   Start Claude with local proxy (intercept + log)
-  occasio demo               10-second proof: see Occasio block real secrets
-  occasio demo attest        End-to-end attestation pipeline against a synthetic audit chain
-  occasio demo anomalies     End-to-end EDR test: synthetic adversarial chain → all 4 detectors
-  occasio dashboard          Open live dashboard for the running session
-  occasio register           Register shell alias (type 'claude' directly)
-  occasio status             Show session stats and savings breakdown
-  occasio doctor             Check setup: Node, claude CLI, port, Python, profile
-  occasio clear              Reset today's log and session data
-  occasio clear --history    Wipe all historical logs
-  occasio ledger             Inspect token ledger (--last N, --summary, --scope session|today)
-  occasio replay             Replay run audit (--last N, --detail, --run <id>, --attribute)
-  occasio distill            Inspect distilled outputs (--last N, --entry <N> for raw)
-  occasio inspect            Cloud-boundary manifest (--last N, --entry N, --run <id>)
-  occasio boundary           Per-request three-column view: produced / re-entered / prevented
-  occasio baseline           Behavior baseline: [learn|show|compare|reset] (per project cwd)
-  occasio harness            Run a real Claude Code session against scratch fixtures and verify governance claims (needs ANTHROPIC_API_KEY)
-  occasio redteam            Autonomous adversarial test — tester LLM probes a subject Claude Code session under Occasio (needs ANTHROPIC_API_KEY + @anthropic-ai/sdk)
-  occasio policy [show]      Show active policy: flags, tool routing, overrides
-  occasio policy show --diff Only values that differ from defaults
-  occasio policy validate    Validate policy.yml and report errors/warnings
-  occasio policy init        Create a starter policy.yml (safe, non-destructive)
-                                Use --template strict|finance for a non-default starter
-  occasio policy doctor      Cross-reference session logs with policy; surface suggestions
-  occasio audit [verify]     Verify tamper-evident hash chain in pipeline-events.jsonl
-  occasio audit repair       Truncate a crash-partial trailing line (--file <path> [--dry-run])
-  occasio report             Governance export: file access log, blocked paths, secret events
-  occasio anomalies          Live anomaly detection over the audit chain (--window 15m, --json)
-  occasio computer-use       Apply a Computer-Use policy to a JSONL of tool_use blocks (--dry-run --example)
-  occasio attest --run-id <uuid>  AI-Agent Behavioral Attestation v1: hash-chain commitment + execution summary for one run
-                              Add --sign in GitHub Actions (with permissions: id-token: write) for Sigstore keyless signing
-  occasio attest verify <file>   Re-verify a signed attestation: Sigstore bundle + DSSE payload match + audit chain integrity
-  occasio selftest           Run governance self-checks on a scratch chain (does not touch your audit log)
-  occasio report --format csv  CSV export for auditors / SIEM import
-  occasio mcp-experiment     MCP vs. built-in tool adoption stats (experiment)
+${col.b('60-Second Start:')}
+  ${col.c('occasio init')}        Create policy.yml from a template
+  ${col.c('occasio register')}    Install shell alias so 'claude' uses the proxy
+  ${col.c('claude --version')}    Confirm the wrapper resolves Claude Code
+
+${col.b('Usage:')}  occasio <command> [args...]   (or  oc <command>)
+
+${col.b('Setup')} ${col.d('— one-time, per project')}
+  init                       ${col.d('(stable)')} Create starter policy.yml (--template strict|finance)
+  register                   ${col.d('(stable)')} Register shell alias (type 'claude' directly)
+  doctor                     ${col.d('(stable)')} Check setup: Node, claude CLI, port, Python, profile
+
+${col.b('Run')} ${col.d('— start a session, observe live state')}
+  claude [args...]           ${col.d('(stable)')} Start Claude with local proxy (intercept + log)
+  status                     ${col.d('(stable)')} Session stats, savings breakdown, coverage
+  clear                      ${col.d('(stable)')} Reset today's log and session data
+  clear --history            ${col.d('(stable)')} Wipe all historical logs
+  ledger                     ${col.d('(stable)')} Inspect token ledger (--last N, --summary, --scope)
+  dashboard                  ${col.d('(beta)')}   Open live dashboard at http://localhost:3001
+
+${col.b('Inspect')} ${col.d('— forensics over what the agent did')}
+  replay                     ${col.d('(stable)')} Replay run audit (--last N, --detail, --run <id>)
+  boundary                   ${col.d('(stable)')} Per-request: produced / re-entered / prevented
+  inspect                    ${col.d('(stable)')} Cloud-boundary manifest (--last N, --entry N)
+  distill                    ${col.d('(stable)')} Inspect distilled outputs (--last N, --entry <N>)
+  report                     ${col.d('(stable)')} Governance export (--format csv for SIEM)
+  preflight                  ${col.d('(beta)')}   Read-only miner over past logs
+  baseline                   ${col.d('(beta)')}   Behavior baseline: [learn|show|compare|reset]
+
+${col.b('Audit')} ${col.d('— tamper-evidence and attestation')}
+  audit verify               ${col.d('(stable)')} Verify hash chain in pipeline-events.jsonl
+  audit repair               ${col.d('(stable)')} Truncate crash-partial trailing line (--file --dry-run)
+  attest --run-id <uuid>     ${col.d('(stable)')} Behavioral attestation: hash-chain + execution summary
+                             ${col.d('Add --sign in GitHub Actions for Sigstore keyless signing')}
+  attest verify <file>       ${col.d('(stable)')} Re-verify signed attestation (bundle + DSSE + chain)
+  selftest                   ${col.d('(stable)')} Run governance self-checks on scratch chain
+
+${col.b('Detect')} ${col.d('— anomalies, adversarial probes')}
+  anomalies                  ${col.d('(beta)')}   Windowed EDR over the audit chain (--window 15m --json)
+  harness                    ${col.d('(alpha)')}  Real Claude Code run vs. governance claims (API key required)
+  redteam                    ${col.d('(alpha)')}  Autonomous adversarial probe (API key + SDK required)
+
+${col.b('Policy & extras')}
+  policy [show]              ${col.d('(stable)')} Show active policy: flags, routing, overrides
+  policy show --diff         ${col.d('(stable)')} Only values that differ from defaults
+  policy validate            ${col.d('(stable)')} Validate policy.yml and report errors/warnings
+  policy doctor              ${col.d('(beta)')}   Cross-reference logs with policy; suggest tightening
+  computer-use               ${col.d('(alpha)')}  Apply policy to a JSONL of tool_use blocks (--dry-run --example)
+  mcp-experiment             ${col.d('(beta)')}   MCP vs. built-in tool adoption stats
+  demo                       ${col.d('(stable)')} 10-second proof: see Occasio block real secrets
+  demo attest                ${col.d('(stable)')} End-to-end attestation pipeline against a synthetic chain
+  demo anomalies             ${col.d('(stable)')} End-to-end EDR test: synthetic adversarial chain
 
 ${col.b('Presets:')}
   --preset balanced  (default)  Intercept safe reads locally, log all requests
@@ -68,7 +89,7 @@ ${col.b('Flags:')}
   --log-only                    Alias for --preset off
   --dashboard                   Open live dashboard at http://localhost:3001
   --port <N>                    Proxy port (default: 8081)
-  --verbose                     Print live per-request chatter (off by default — quiet for Claude Code's TUI)
+  --verbose                     Print live per-request chatter (off by default)
 
 ${col.b('Multi-agent routing:')}
   Default               → Claude Code adapter

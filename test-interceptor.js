@@ -4432,7 +4432,7 @@ console.log('\n3. runLocally');
       assert('index.js handles audit command',   indexSrc.includes("cmd === 'audit'"));
       assert('index.js calls runAuditCli',       indexSrc.includes('runAuditCli('));
       assert('help text includes audit command',
-        fs.readFileSync('./src/cli/help.js', 'utf8').includes('occasio audit'));
+        /\baudit verify\b/.test(fs.readFileSync('./src/cli/help.js', 'utf8')));
     }
   })();
 
