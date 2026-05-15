@@ -65,7 +65,20 @@ function offsetSeconds(start, then) {
 function readPolicyRulesDigest(policyFile) {
   let text;
   try { text = fs.readFileSync(policyFile, 'utf8'); }
-  catch { return null; }
+  catch (e) {
+    // Loud-fail: a missing/unreadable policy file is operationally significant
+    // for an attestation (the rules_digest in the output will be defaults, not
+    // the file's real contents). Surface it on stderr; the caller still falls
+    // back to schema defaults so attestation generation does not abort.
+    // ENOENT is the common, expected case when no user policy exists; demote
+    // it to a single-line note. Anything else (EACCES, EIO, etc.) is louder.
+    if (e && e.code === 'ENOENT') {
+      process.stderr.write(`[Occasio] attest: no policy file at ${policyFile} — using schema defaults for rules_digest\n`);
+    } else {
+      process.stderr.write(`[Occasio] attest: cannot read policy ${policyFile}: ${e.message} — rules_digest will use schema defaults\n`);
+    }
+    return null;
+  }
 
   // Tiny line-level scan — full parsing is overkill for a digest. Counts only.
   let denyPaths = 0, denyPatterns = 0, blockSecrets = null;
