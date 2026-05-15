@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.occasiolabs/occasio",
+  "description": "Tamper-evident, Sigstore-signed audit trail for Claude Code agents.",
+  "repository": {
+    "url": "https://github.com/occasiolabs/occasio",
+    "source": "github"
+  },
+  "version": "0.8.5",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@occasiolabs/occasio",
+      "version": "0.8.5",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

@@ -8,8 +8,12 @@
 # bloats the tarball and risks Python-3.13-specific bytecode failing on
 # 3.12 or earlier.
 __pycache__/
+docs/__pycache__/
 *.pyc
 *.pyo
+
+# Internal planning / strategy docs — NOT for public consumption.
+docs/ROADMAP.md
 
 # OS scratch / editor leftovers (defensive)
 .DS_Store
