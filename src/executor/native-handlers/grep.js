@@ -19,8 +19,8 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { MAX_OUTPUT }              = require('./read');
-const { globToRegex, GLOB_SKIP }  = require('./glob');
+const { MAX_OUTPUT }                                            = require('./read');
+const { globToRegex, GLOB_SKIP, GLOB_MAX_DEPTH, GLOB_MAX_MS }   = require('./glob');
 
 // ── Grep tool support ──────────────────────────────────────────────────────────
 
@@ -72,17 +72,20 @@ function tryReadGrep(absPath) {
 }
 
 // Walk directory collecting absolute file paths, honouring glob and type filters.
-function walkGrepFiles(dir, baseDir, globRegex, globHasDir, typeExts, results) {
+function walkGrepFiles(dir, baseDir, globRegex, globHasDir, typeExts, results, depth = 0, deadline = Infinity) {
   if (results.length >= GREP_FILE_CAP) return;
+  if (depth >= GLOB_MAX_DEPTH) return;
+  if (Date.now() >= deadline) return;
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
   catch { return; }
   for (const entry of entries) {
     if (results.length >= GREP_FILE_CAP) break;
+    if (Date.now() >= deadline) break;
     if (GLOB_SKIP.has(entry.name)) continue;
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      walkGrepFiles(abs, baseDir, globRegex, globHasDir, typeExts, results);
+      walkGrepFiles(abs, baseDir, globRegex, globHasDir, typeExts, results, depth + 1, deadline);
     } else {
       if (typeExts && !typeExts.includes(path.extname(abs).toLowerCase())) continue;
       if (globRegex) {
@@ -107,7 +110,7 @@ function walkGrepFiles(dir, baseDir, globRegex, globHasDir, typeExts, results) {
  * Does NOT support multiline (cross-line regex) — isGrepHandleable rejects those.
  */
 function handleGrepTool(input) {
-  const pattern = (input?.pattern || '').trim();
+  const pattern = (typeof input?.pattern === 'string' ? input.pattern : '').trim();
   if (!pattern) return { output: '(no pattern provided)', exitCode: 1, matchCount: 0 };
 
   const searchRoot = input?.path
@@ -151,12 +154,13 @@ function handleGrepTool(input) {
 
   // Collect candidate files.
   let files = [];
+  const deadline = Date.now() + GLOB_MAX_MS;
   try {
     const stat = fs.statSync(searchRoot);
     if (stat.isFile()) {
       files.push(searchRoot);
     } else {
-      walkGrepFiles(searchRoot, searchRoot, globRegex, globHasDir, typeExts, files);
+      walkGrepFiles(searchRoot, searchRoot, globRegex, globHasDir, typeExts, files, 0, deadline);
       files.sort();
     }
   } catch (e) {
@@ -166,7 +170,11 @@ function handleGrepTool(input) {
   const outputLines = [];
   let totalMatches  = 0;
   let truncated     = false;
-  const wantMore    = () => outputLines.length < skipLines + headLimit;
+  // wantMore also enforces the per-call wall-clock budget so the
+  // file-read+match loop can't blow past it even if walkGrepFiles already
+  // collected thousands of paths before the walk-deadline tripped.
+  const wantMore    = () => outputLines.length < skipLines + headLimit
+                         && Date.now() < deadline;
   const relOf       = abs => path.relative(searchRoot, abs).replace(/\\/g, '/') || path.basename(abs);
 
   if (outputMode === 'files_with_matches') {
@@ -229,9 +237,12 @@ function handleGrepTool(input) {
     }
   }
 
-  const sliced = outputLines.slice(skipLines, skipLines + headLimit);
-  const text   = sliced.join('\n') || '(no matches)';
-  const suffix = truncated ? '\n(truncated — use head_limit/offset to paginate)' : '';
+  const sliced  = outputLines.slice(skipLines, skipLines + headLimit);
+  const text    = sliced.join('\n') || '(no matches)';
+  const timedOut = Date.now() >= deadline;
+  const suffix  = truncated ? '\n(truncated — use head_limit/offset to paginate)'
+                : timedOut  ? `\n(truncated — walk exceeded ${GLOB_MAX_MS} ms)`
+                : '';
   return { output: text + suffix, exitCode: 0, matchCount: totalMatches };
 }
 

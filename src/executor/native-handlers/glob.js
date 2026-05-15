@@ -28,6 +28,16 @@ const GLOB_SKIP = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'build
 // Maximum number of matches returned to avoid overwhelming the model context.
 const GLOB_MAX = 500;
 
+// Maximum recursion depth from baseDir. Hard cap on path-traversal DoS
+// (a fuzz-discovered class — see THREAT-MODEL.md residual risk #5).
+// Tunable via env for special-case repos.
+const GLOB_MAX_DEPTH = Number(process.env.OCCASIO_GLOB_MAX_DEPTH) || 16;
+
+// Soft wall-clock limit per walk in ms. Stops a walk that strayed onto a huge
+// subtree (e.g. agent globbed up from /) before it burns seconds. Stop is
+// best-effort — the caller still receives whatever was collected so far.
+const GLOB_MAX_MS = Number(process.env.OCCASIO_GLOB_MAX_MS) || 2_000;
+
 function isGlobHandleable(input) {
   if (!input || typeof input !== 'object') return false;
   const pattern = input.pattern;
@@ -94,20 +104,23 @@ function globToRegex(pattern) {
  * Walk `dir` recursively, collecting paths that match `regex`.
  * Results are relative to `baseDir`.
  */
-function walkGlob(dir, baseDir, regex, results) {
+function walkGlob(dir, baseDir, regex, results, depth = 0, deadline = Infinity) {
   if (results.length >= GLOB_MAX) return;
+  if (depth >= GLOB_MAX_DEPTH) return;
+  if (Date.now() >= deadline) return;
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
   catch { return; }
 
   for (const entry of entries) {
     if (results.length >= GLOB_MAX) break;
+    if (Date.now() >= deadline) break;
     if (GLOB_SKIP.has(entry.name)) continue;
     const abs     = path.join(dir, entry.name);
     // Normalise to forward slashes for matching (consistent on all platforms).
     const rel     = path.relative(baseDir, abs).replace(/\\/g, '/');
     if (entry.isDirectory()) {
-      walkGlob(abs, baseDir, regex, results);
+      walkGlob(abs, baseDir, regex, results, depth + 1, deadline);
     } else if (regex.test(rel)) {
       results.push(rel);
     }
@@ -119,7 +132,7 @@ function walkGlob(dir, baseDir, regex, results) {
  * relative to CWD.  Returns { output, exitCode, matchCount }.
  */
 function handleGlobTool(input) {
-  const pattern = (input?.pattern || '').trim();
+  const pattern = (typeof input?.pattern === 'string' ? input.pattern : '').trim();
   if (!pattern) return { output: '(no pattern provided)', exitCode: 1, matchCount: 0 };
 
   const baseDir = input?.path
@@ -133,12 +146,17 @@ function handleGlobTool(input) {
   catch (e) { return { output: `Glob: invalid pattern: ${e.message}`, exitCode: 1, matchCount: 0 }; }
 
   const results = [];
-  walkGlob(baseDir, baseDir, regex, results);
+  const deadline = Date.now() + GLOB_MAX_MS;
+  walkGlob(baseDir, baseDir, regex, results, 0, deadline);
+  const timedOut = Date.now() >= deadline;
   results.sort();
 
   const truncated = results.length >= GLOB_MAX;
   const lines = results.map(r => path.join(baseDir !== cwd ? baseDir : '', r).replace(/\\/g, '/'));
-  const output = lines.join('\n') + (truncated ? `\n(truncated at ${GLOB_MAX} results)` : '');
+  const suffix = truncated ? `\n(truncated at ${GLOB_MAX} results)`
+               : timedOut  ? `\n(truncated — walk exceeded ${GLOB_MAX_MS} ms)`
+               : '';
+  const output = lines.join('\n') + suffix;
   return { output: output || '(no matches)', exitCode: 0, matchCount: results.length };
 }
 
@@ -146,6 +164,8 @@ module.exports = {
   GLOB_INJECTION_RE,
   GLOB_SKIP,
   GLOB_MAX,
+  GLOB_MAX_DEPTH,
+  GLOB_MAX_MS,
   isGlobHandleable,
   globToRegex,
   walkGlob,
