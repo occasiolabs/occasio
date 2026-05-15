@@ -20,7 +20,8 @@ dispatch-loop awareness.
 |---|---|---|---|---|
 | 1 | TodoWrite / TodoRead native handlers | `src/runtime.js` | `src/executor/native-handlers/todo.js` | ✅ |
 | 2 | Read native handler (+ `MAX_OUTPUT`, `READ_SKIP_EXTENSIONS`, `readFileNative`) | `src/runtime.js` | `src/executor/native-handlers/read.js` | ✅ |
-| 3 | Glob native handler (+ `globToRegex`, `walkGlob`, `GLOB_*` constants) | `src/runtime.js` | `src/executor/native-handlers/glob.js` | ✅ this commit |
+| 3 | Glob native handler (+ `globToRegex`, `walkGlob`, `GLOB_*` constants) | `src/runtime.js` | `src/executor/native-handlers/glob.js` | ✅ |
+| 4 | Grep native handler (+ `tryReadGrep`, `walkGrepFiles`, `GREP_*` constants) | `src/runtime.js` | `src/executor/native-handlers/grep.js` | ✅ this commit |
 
 `src/runtime.js` re-exports the moved symbols, so every existing import
 path (`src/interceptor.js`, tests, the MCP server) continues to work
@@ -34,7 +35,6 @@ moving a handler **without** also moving its tests and without breaking
 
 | Step | Module | Origin | Proposed destination | Notes |
 |---|---|---|---|---|
-| 4 | Grep native handler | `src/runtime.js` `handleGrepTool` | `src/executor/native-handlers/grep.js` | Self-contained. Imports `globToRegex` and `GLOB_SKIP` from the Glob handler. |
 | 5 | Bash / PowerShell native dispatch | `src/interceptor.js` `nativeHandle` + `extractShellReadPaths` | `src/executor/native-handlers/shell.js` | The exec path is still Decision-shape mismatched (Stage-1 caveat). Don't move until `nativeHandle` returns a canonical Decision. |
 | 6 | `executeLocalTool()` wrapper | `src/runtime.js` | `src/executor/index.js` | Once steps 2–5 are done, the wrapper becomes the executor module's public surface. `runtime.js` is then a thin compatibility shim and can be deprecated. |
 | 7 | Remove `runtime.js` shim | — | — | After two minor versions with `runtime.js` re-exporting from `executor/`, drop the file. |
