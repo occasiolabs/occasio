@@ -1821,146 +1821,11 @@ console.log('\n3. runLocally');
   assert('isInterceptable batch Glob+Read → true (Read)',
     isInterceptable({ name: 'Read', input: { file_path: 'src/index.ts' } }));
 
-  // ── 22. Grep tool support ───────────────────────────────────────────────────
-  console.log('\n22. Grep tool — isGrepHandleable, handleGrepTool');
+  // ── 22. Grep tool — isInterceptable routing ─────────────────────────────────
+  // Handler-level tests for isGrepHandleable / handleGrepTool moved to
+  // test-native-handlers.js (Stage-2 Step 4). Routing-only asserts remain.
+  console.log('\n22. Grep tool — isInterceptable routing');
 
-  // isGrepHandleable — guard cases
-  assert('isGrepHandleable: null → false',              !isGrepHandleable(null));
-  assert('isGrepHandleable: empty object → false',      !isGrepHandleable({}));
-  assert('isGrepHandleable: empty pattern → false',     !isGrepHandleable({ pattern: '' }));
-  assert('isGrepHandleable: non-string pattern → false',!isGrepHandleable({ pattern: 42 }));
-  assert('isGrepHandleable: valid pattern → true',      isGrepHandleable({ pattern: 'foo' }));
-  assert('isGrepHandleable: with path → true',          isGrepHandleable({ pattern: 'foo', path: 'src' }));
-  assert('isGrepHandleable: with glob → true',          isGrepHandleable({ pattern: 'foo', glob: '*.ts' }));
-  assert('isGrepHandleable: with type → true',          isGrepHandleable({ pattern: 'foo', type: 'ts' }));
-  assert('isGrepHandleable: content mode → true',       isGrepHandleable({ pattern: 'foo', output_mode: 'content' }));
-  assert('isGrepHandleable: count mode → true',         isGrepHandleable({ pattern: 'foo', output_mode: 'count' }));
-  assert('isGrepHandleable: bad output_mode → false',   !isGrepHandleable({ pattern: 'foo', output_mode: 'xml' }));
-  assert('isGrepHandleable: multiline true → false',    !isGrepHandleable({ pattern: 'foo', multiline: true }));
-  assert('isGrepHandleable: multiline false → true',    isGrepHandleable({ pattern: 'foo', multiline: false }));
-  assert('isGrepHandleable: non-string path → false',   !isGrepHandleable({ pattern: 'foo', path: 123 }));
-  assert('isGrepHandleable: non-string glob → false',   !isGrepHandleable({ pattern: 'foo', glob: true }));
-  assert('isGrepHandleable: non-string type → false',   !isGrepHandleable({ pattern: 'foo', type: [] }));
-
-  // handleGrepTool — live filesystem
-  {
-    const os     = require('os');
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lf-grep-test-'));
-    try {
-      fs.mkdirSync(path.join(tmpDir, 'src'));
-      fs.writeFileSync(path.join(tmpDir, 'src', 'index.ts'),
-        'import foo from "bar";\nexport function greet() {}\nconst SECRET_KEY = "abc";\n');
-      fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'),
-        'const greeting = "hello world";\nfunction hello() { return 42; }\n');
-      fs.writeFileSync(path.join(tmpDir, 'readme.md'),
-        '# Hello\nThis project says hello.\n');
-      fs.writeFileSync(path.join(tmpDir, 'config.json'),
-        '{"hello": true}\n');
-
-      // files_with_matches (default)
-      {
-        const r = handleGrepTool({ pattern: 'hello', path: tmpDir });
-        assert('grep fwm: exitCode 0',              r.exitCode === 0);
-        assert('grep fwm: finds app.ts',            r.output.includes('app.ts'));
-        assert('grep fwm: finds readme.md',         r.output.includes('readme.md'));
-        assert('grep fwm: finds config.json',       r.output.includes('config.json'));
-        assert('grep fwm: not index.ts (no hello)', !r.output.includes('index.ts'));
-        assert('grep fwm: matchCount ≥ 3',          r.matchCount >= 3);
-      }
-
-      // content mode — matching lines with line numbers
-      {
-        const r = handleGrepTool({ pattern: 'hello', path: tmpDir, output_mode: 'content' });
-        assert('grep content: exitCode 0',          r.exitCode === 0);
-        // ripgrep-style format: file:linenum:content
-        assert('grep content: line number present', /:\d+:/.test(r.output));
-        assert('grep content: hello in output',     r.output.toLowerCase().includes('hello'));
-      }
-
-      // count mode
-      {
-        const r = handleGrepTool({ pattern: 'hello', path: tmpDir, output_mode: 'count' });
-        assert('grep count: exitCode 0',            r.exitCode === 0);
-        assert('grep count: has :N format',         /:\d+$/.test(r.output.trim().split('\n')[0]));
-        assert('grep count: matchCount ≥ 3',        r.matchCount >= 3);
-      }
-
-      // case-insensitive (-i)
-      {
-        const sensitive   = handleGrepTool({ pattern: 'IMPORT', path: tmpDir });
-        const insensitive = handleGrepTool({ pattern: 'IMPORT', path: tmpDir, '-i': true });
-        assert('grep -i: sensitive finds nothing',  sensitive.matchCount === 0 || !sensitive.output.includes('index.ts'));
-        assert('grep -i: insensitive finds import', insensitive.output.includes('index.ts'));
-      }
-
-      // context lines (-C)
-      {
-        const r = handleGrepTool({
-          pattern: 'greet', path: tmpDir, output_mode: 'content', '-C': 1,
-        });
-        assert('grep -C: context lines present',    r.output.split('\n').length > 1);
-        assert('grep -C: greet line included',      r.output.includes('greet'));
-      }
-
-      // glob filter
-      {
-        const r = handleGrepTool({ pattern: 'hello', path: tmpDir, glob: '*.md' });
-        assert('grep glob *.md: finds readme.md',   r.output.includes('readme.md'));
-        assert('grep glob *.md: no .ts files',      !r.output.includes('.ts'));
-        assert('grep glob *.md: no .json files',    !r.output.includes('.json'));
-      }
-
-      // type filter
-      {
-        const r = handleGrepTool({ pattern: 'hello', path: tmpDir, type: 'ts' });
-        assert('grep type ts: finds app.ts',        r.output.includes('app.ts'));
-        assert('grep type ts: no readme.md',        !r.output.includes('readme.md'));
-        assert('grep type ts: no config.json',      !r.output.includes('.json'));
-      }
-
-      // head_limit
-      {
-        const r = handleGrepTool({ pattern: 'hello', path: tmpDir, head_limit: 1 });
-        assert('grep head_limit: exactly 1 result', r.output.split('\n').filter(l => !l.startsWith('(')).length === 1);
-      }
-
-      // no matches
-      {
-        const r = handleGrepTool({ pattern: 'zzzznothere9999', path: tmpDir });
-        assert('grep no matches: exitCode 0',       r.exitCode === 0);
-        assert('grep no matches: no-matches msg',   r.output.includes('(no matches)'));
-        assert('grep no matches: matchCount 0',     r.matchCount === 0);
-      }
-
-      // direct file target
-      {
-        const r = handleGrepTool({ pattern: 'hello', path: path.join(tmpDir, 'src', 'app.ts') });
-        assert('grep direct file: exitCode 0',      r.exitCode === 0);
-        assert('grep direct file: finds match',     r.matchCount >= 1);
-      }
-
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  }
-
-  // error cases
-  {
-    const r1 = handleGrepTool({ pattern: '' });
-    assert('grep empty pattern: exitCode 1',          r1.exitCode === 1);
-
-    const r2 = handleGrepTool(null);
-    assert('grep null input: exitCode 1',             r2.exitCode === 1);
-
-    const r3 = handleGrepTool({ pattern: '[invalid regex' });
-    assert('grep invalid regex: exitCode 1',          r3.exitCode === 1);
-    assert('grep invalid regex: error in output',     r3.output.includes('invalid pattern'));
-
-    const r4 = handleGrepTool({ pattern: 'foo', path: '/nonexistent-path-xyz-9999' });
-    assert('grep bad path: exitCode 1',               r4.exitCode === 1);
-  }
-
-  // isInterceptable delegates to isGrepHandleable
   assert('isInterceptable Grep valid → true',
     isInterceptable({ name: 'Grep', input: { pattern: 'foo' } }));
   assert('isInterceptable Grep empty pattern → false',
@@ -1977,10 +1842,6 @@ console.log('\n3. runLocally');
     isInterceptable({ name: 'Glob', input: { pattern: '**/*.ts' } }));
   assert('batch Grep+Glob+Read: Read interceptable',
     isInterceptable({ name: 'Read', input: { file_path: 'src/index.ts' } }));
-
-  // Windows-style path accepted
-  assert('isGrepHandleable Windows backslash path → true',
-    isGrepHandleable({ pattern: 'foo', path: 'C:\\Users\\example\\src' }));
 
   // ── 23. Todo tool — native handler unit tests live in test-native-handlers.js ─
   // (extracted as Stage-2 of the test-file split; see
