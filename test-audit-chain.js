@@ -432,7 +432,66 @@ console.log('\n18. legacy rows without audit_schema still accepted');
   fs.unlinkSync(f);
 }
 
+// ── 19. file-locking: two concurrent writers preserve the chain ─────────────
+console.log('\n19. file-locking — concurrent writers');
+{
+  let lockAvailable = true;
+  try { require('proper-lockfile'); } catch { lockAvailable = false; }
+  if (!lockAvailable) {
+    console.log('  (skipped — proper-lockfile not installed)');
+  } else {
+    const { spawnSync } = require('child_process');
+    const f = tmpFile();
+    fs.writeFileSync(f, '');  // start from empty chain
+
+    const N = 25;
+    const workerScript = path.join(__dirname, 'test-audit-lock-worker.js');
+    // Launch two writers in parallel via detached spawn; wait on both via
+    // spawnSync would serialize them, so we use the child_process module
+    // directly with non-blocking spawn + a small wait loop.
+    const { spawn } = require('child_process');
+    const w1 = spawn(process.execPath, [workerScript, f, String(N), 'A'], { stdio: 'inherit' });
+    const w2 = spawn(process.execPath, [workerScript, f, String(N), 'B'], { stdio: 'inherit' });
+
+    const waitFor = (proc) => new Promise(res => proc.on('exit', code => res(code)));
+    (async () => {
+      const [c1, c2] = await Promise.all([waitFor(w1), waitFor(w2)]);
+      assert('both writers exit 0', c1 === 0 && c2 === 0);
+
+      const rows = readRows(f);
+      assert(`${2 * N} total rows written`, rows.length === 2 * N);
+
+      // Chain continuity: every row's prev_hash must equal the previous row's hash.
+      let ok = true, where = -1;
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i].prev_hash !== rows[i - 1].hash) { ok = false; where = i; break; }
+      }
+      assert(`chain unbroken across interleaved writers (break at ${where})`, ok);
+
+      const v = verifyFile(f);
+      assert('multi-writer chain verifies', v.ok === true);
+      assert(`verifyFile chained=${2 * N}`, v.chained === 2 * N);
+
+      // Both writers should be represented (no writer was starved out).
+      const tagA = rows.filter(r => r.event_id?.startsWith('A-')).length;
+      const tagB = rows.filter(r => r.event_id?.startsWith('B-')).length;
+      assert(`writer A produced ${N} rows`, tagA === N);
+      assert(`writer B produced ${N} rows`, tagB === N);
+
+      fs.unlinkSync(f);
+      // Clean up potential stale .lock directory.
+      try { fs.rmSync(f + '.lock', { recursive: true, force: true }); } catch { /* not present */ }
+    })().then(() => {
+      // Final summary printout runs only after the async block completes.
+      printSummary();
+    });
+    // Skip the synchronous summary at end-of-file; the async block owns it.
+    return;
+  }
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────────
+function printSummary() {
 console.log(`\n${'─'.repeat(40)}`);
 const total = passed + failed;
 if (failed === 0) {
@@ -442,3 +501,9 @@ if (failed === 0) {
   console.error(`✗ ${failed}/${total} audit-chain tests failed\n`);
   process.exit(1);
 }
+}
+
+// If the multi-process block above did not opt to handle the summary (because
+// proper-lockfile is unavailable and the block skipped its async handler),
+// run it synchronously now.
+printSummary();

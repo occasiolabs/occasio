@@ -158,14 +158,70 @@ function loadPrevHash(filePath, opts = {}) {
  * call. prevHash is only advanced on a successful append, keeping the
  * in-memory chain consistent with what is on disk if the proxy is restarted.
  */
-function createAuditor(filePath = DEFAULT_LOG) {
+function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
+  // lock=true wraps each append in a proper-lockfile lockSync/unlockSync pair
+  // and re-reads prev_hash from disk inside the lock. This is the only safe
+  // way to share an audit log between two concurrent writers (e.g. proxy +
+  // MCP server on the same machine). Default off because single-writer
+  // workloads do not pay the I/O cost.
+  const { lock = false } = opts;
+  let lockfile = null;
+  if (lock) {
+    // Lazy-require so a missing proper-lockfile install does not break
+    // single-writer setups that never opt in.
+    try { lockfile = require('proper-lockfile'); }
+    catch (e) {
+      throw new Error(`createAuditor({ lock: true }) requires proper-lockfile: ${e.message}`);
+    }
+    // The lockfile target must exist before lockSync can create its companion
+    // directory marker. Touch it.
+    if (!fs.existsSync(filePath)) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, '');
+    }
+  }
+
   try { fs.mkdirSync(path.dirname(filePath), { recursive: true }); }
   catch { /* directory already exists, or unwritable — surface on first append */ }
 
   let prevHash = loadPrevHash(filePath);
 
+  function withLock(fn) {
+    if (!lock) return fn();
+    // proper-lockfile uses mkdir(2) for atomicity; staleness keeps the lock
+    // self-healing across crashes. realpath:false avoids extra syscalls for
+    // a path we already control.
+    // proper-lockfile's sync API forbids `retries` — it must busy-loop on
+     // EEXIST itself. Keep stale-cleanup so a crashed writer cannot freeze
+     // siblings forever.
+    let release = null;
+    const start = Date.now();
+    while (release === null) {
+      try {
+        release = lockfile.lockSync(filePath, { stale: 10000, realpath: false });
+      } catch (e) {
+        if (e.code !== 'ELOCKED') throw e;
+        if (Date.now() - start > 10000) throw e;
+        // tight spin — node has no sleepSync; a microtask burst is fine for
+        // contention durations expected here (single-digit ms per writer)
+        const until = Date.now() + 2;
+        while (Date.now() < until) { /* spin */ }
+      }
+    }
+    // Inside the lock we MUST re-read prev_hash — another process may have
+    // appended since we last advanced it. Without this, two concurrent
+    // writers would produce two rows with the same prev_hash → chain break.
+    prevHash = loadPrevHash(filePath, { failHard: false });
+    try { return fn(); }
+    finally { try { release(); } catch { /* lock already released by stale-timeout reaper */ } }
+  }
+
   function record(event, decision, result) {
     if (!event || !decision) return { ok: true };
+    return withLock(() => recordInner(event, decision, result));
+  }
+
+  function recordInner(event, decision, result) {
     // Field order is explicit and must remain stable — computeHash depends on it.
     // The Python walker in docs/audit_walker.py mirrors this order; any change
     // here without updating that walker breaks independent verifiability.
@@ -228,7 +284,11 @@ function createAuditor(filePath = DEFAULT_LOG) {
    * append failure, mirroring record()'s contract so the caller can
    * propagate AuditWriteError uniformly.
    */
-  function recordPolicyLoaded({ hash, path: policyPath, version, source }) {
+  function recordPolicyLoaded(args) {
+    return withLock(() => recordPolicyLoadedInner(args));
+  }
+
+  function recordPolicyLoadedInner({ hash, path: policyPath, version, source }) {
     const row = {
       audit_schema: 1,
       ts:            new Date().toISOString(),
