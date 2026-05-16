@@ -22,6 +22,8 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
+const { readLastConversation } = require('./conversation');
+
 const CHAIN_FILE = path.join(os.homedir(), '.occasio', 'pipeline-events.jsonl');
 
 const col = {
@@ -168,7 +170,7 @@ function lastActionsLines(toolCalls, root, n = 5) {
   });
 }
 
-function renderMarkdown(run, root) {
+function renderMarkdown(run, root, conv) {
   const a = aggregate(run.rows);
   const dur = durationStr(a.start, a.end);
   const date = a.start ? new Date(a.start).toISOString().replace('T', ' ').slice(0, 16) : 'unknown';
@@ -176,6 +178,17 @@ function renderMarkdown(run, root) {
   const lines = [];
   lines.push(`# Previous session — ${date}, ${dur}`);
   lines.push('');
+
+  if (conv && (conv.lastUser || conv.lastAssistant)) {
+    lines.push('## Last conversation');
+    if (conv.lastUser) {
+      lines.push(`- **You said:** ${conv.lastUser}`);
+    }
+    if (conv.lastAssistant) {
+      lines.push(`- **Agent replied:** ${conv.lastAssistant}`);
+    }
+    lines.push('');
+  }
 
   if (a.readPaths.length || a.modifyPaths.length) {
     lines.push('## Files touched');
@@ -244,18 +257,22 @@ function renderMarkdown(run, root) {
   return lines.join('\n');
 }
 
-function renderText(run, root) {
+function renderText(run, root, conv) {
   // Plain text variant, no markdown noise — convenient for CLI piping.
-  return renderMarkdown(run, root).replace(/^#+\s*/gm, '').replace(/\n{3,}/g, '\n\n');
+  return renderMarkdown(run, root, conv).replace(/^#+\s*/gm, '').replace(/\n{3,}/g, '\n\n');
 }
 
-function renderJson(run, root) {
+function renderJson(run, root, conv) {
   const a = aggregate(run.rows);
   return JSON.stringify({
     run_id: run.id,
     started_at: a.start,
     ended_at:   a.end,
     duration:   durationStr(a.start, a.end),
+    conversation: conv ? {
+      last_user:      conv.lastUser || null,
+      last_assistant: conv.lastAssistant || null,
+    } : null,
     files: {
       read:     a.readPaths.map(p => shortPath(p, root)),
       modified: a.modifyPaths.map(p => shortPath(p, root)),
@@ -326,14 +343,20 @@ function run(argv) {
   }
 
   const root = process.cwd();
+  // Conversation snippet from Claude Code's own session files for the cwd.
+  // Only attach to the most-recent run; older runs in --last N get none
+  // (we have no way to map run_id to a specific Claude session reliably).
+  const conv = readLastConversation(root);
   const parts = [];
-  for (const r of runs) {
+  for (let i = 0; i < runs.length; i++) {
+    const r = runs[i];
+    const useConv = i === 0 ? conv : null;
     if (opts.format === 'json') {
-      parts.push(renderJson(r, root));
+      parts.push(renderJson(r, root, useConv));
     } else if (opts.format === 'text') {
-      parts.push(renderText(r, root));
+      parts.push(renderText(r, root, useConv));
     } else {
-      parts.push(renderMarkdown(r, root));
+      parts.push(renderMarkdown(r, root, useConv));
     }
   }
 

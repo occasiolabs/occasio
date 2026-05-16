@@ -46,6 +46,18 @@ const C = {
 const GENESIS = '0'.repeat(64);
 const DENIED_PATH = '/etc/secrets/db.yml';
 
+// Strip the OS temp prefix so demo output is screen-recording-safe
+// (Windows TEMP contains the username; macOS/Linux less so but still
+// machine-specific). Internal use still uses the real path.
+function displayPath(p) {
+  const tmp = os.tmpdir();
+  if (p && p.startsWith(tmp)) {
+    const suffix = p.slice(tmp.length).replace(/^[\\/]+/, '');
+    return process.platform === 'win32' ? `%TEMP%\\${suffix}` : `$TMPDIR/${suffix}`;
+  }
+  return p;
+}
+
 function appendRow(file, prevHash, row) {
   const withPrev = { ...row, prev_hash: prevHash };
   const hash = crypto.createHash('sha256').update(JSON.stringify(withPrev), 'utf8').digest('hex');
@@ -206,7 +218,7 @@ async function runAuditDemoCli(_args = []) {
   console.log(C.b('1.') + ' Synthesizing the CI-run audit chain  ' + C.d('(12 rows, hash-linked)'));
   const { runId, blockedHashes } = buildAuditScenarioChain(chainFile, policyFile);
   console.log('   ' + C.g('✓') + ' run_id: ' + C.c(runId));
-  console.log('   ' + C.d('chain: ' + chainFile));
+  console.log('   ' + C.d('chain: ' + displayPath(chainFile)));
   console.log('');
 
   // ── Step 2: verify ─────────────────────────────────────────────────────
@@ -227,7 +239,7 @@ async function runAuditDemoCli(_args = []) {
     return 1;
   }
   fs.writeFileSync(attFile, JSON.stringify(att, null, 2));
-  console.log('   ' + C.g('✓') + ' ' + C.d(attFile));
+  console.log('   ' + C.g('✓') + ' ' + C.d(displayPath(attFile)));
   console.log('   ' + C.d('tool_calls: ' + att.execution_summary.tool_calls
     + '  blocked: ' + att.execution_summary.blocked
     + '  transformed: ' + att.execution_summary.transformed
@@ -282,7 +294,7 @@ async function runAuditDemoCli(_args = []) {
     console.log('   ' + C.d('   in real CI with --sign, all three rows would show OK)'));
   } else {
     console.log('   ' + C.y('○') + ' Python verifier ran but did not produce the expected check lines');
-    console.log('   ' + C.d('  exit ' + py.exitCode + ' — see ' + attFile + ' for the artifact'));
+    console.log('   ' + C.d('  exit ' + py.exitCode + ' — see ' + displayPath(attFile) + ' for the artifact'));
   }
   console.log('');
 
@@ -309,7 +321,7 @@ async function runAuditDemoCli(_args = []) {
   console.log('  ' + C.d('Add .github/workflows/attest-on-pr.yml from docs/reference-pipeline.md'));
   console.log('');
   console.log('  ' + C.b('Spec:') + ' https://github.com/occasiolabs/occasio/tree/main/spec/agent-attestation/v1');
-  console.log('  ' + C.b('Scratch artifacts kept at:') + ' ' + C.d(tmpDir));
+  console.log('  ' + C.b('Scratch artifacts kept at:') + ' ' + C.d(displayPath(tmpDir)));
   console.log('');
 
   return 0;

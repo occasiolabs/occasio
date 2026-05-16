@@ -132,6 +132,60 @@ const col = {
   d: s => `\x1b[2m${s}\x1b[0m`,  b: s => `\x1b[1m${s}\x1b[0m`,
 };
 
+// Print a compact recap banner just before claude starts — gives the user
+// (and the agent, via on-screen context) a memory anchor for the previous
+// session in this cwd. Silent if no prior data exists.
+function printSessionRecapBanner() {
+  let conv = null;
+  try { conv = require('./cli/conversation').readLastConversation(process.cwd()); }
+  catch { /* module load issue → skip */ }
+
+  // Last run summary from the audit chain.
+  let runLine = null;
+  try {
+    const chainFile = path.join(LOG_DIR, 'pipeline-events.jsonl');
+    if (fs.existsSync(chainFile)) {
+      const text = fs.readFileSync(chainFile, 'utf8');
+      const rows = [];
+      for (const line of text.split('\n')) {
+        if (!line) continue;
+        try { rows.push(JSON.parse(line)); } catch { /* skip */ }
+      }
+      const byRun = new Map();
+      for (const r of rows) {
+        const id = r.run_id || 'legacy';
+        if (!byRun.has(id)) byRun.set(id, []);
+        byRun.get(id).push(r);
+      }
+      const newest = [...byRun.entries()].map(([id, rs]) => ({
+        id, rs, end: rs[rs.length - 1]?.ts || '',
+      })).sort((a, b) => a.end < b.end ? 1 : -1)[0];
+      if (newest) {
+        const tc = newest.rs.filter(r => r.kind === 'tool_call').length;
+        const blocked = newest.rs.filter(r => r.action === 'BLOCK').length;
+        const date = newest.end ? new Date(newest.end).toISOString().slice(0, 16).replace('T', ' ') : 'unknown';
+        runLine = `${tc} tool calls, ${blocked} blocked  ·  ${date}`;
+      }
+    }
+  } catch { /* skip */ }
+
+  if (!conv && !runLine) return;
+
+  const oneLine = (s, max = 160) => {
+    const flat = String(s).replace(/\s+/g, ' ').trim();
+    return flat.length > max ? flat.slice(0, max - 1) + '…' : flat;
+  };
+  process.stderr.write('\n' + col.b('── previous session in this directory ──') + '\n');
+  if (runLine) process.stderr.write('  ' + col.d(runLine) + '\n');
+  if (conv && conv.lastUser) {
+    process.stderr.write('  ' + col.y('You: ') + oneLine(conv.lastUser) + '\n');
+  }
+  if (conv && conv.lastAssistant) {
+    process.stderr.write('  ' + col.g('Agent: ') + oneLine(conv.lastAssistant) + '\n');
+  }
+  process.stderr.write(col.d('  (suppress with --no-recap)') + '\n\n');
+}
+
 // ── Pre-send manifest ─────────────────────────────────────────────────────────
 
 function fmtTok(n) {
@@ -650,6 +704,9 @@ if (prIdx >= 0) {
 const di = claudeArgs.indexOf('--dashboard');
 const useDashboard = di >= 0;
 if (di >= 0) claudeArgs.splice(di, 1);
+const noRecapIdx = claudeArgs.indexOf('--no-recap');
+const showRecap = noRecapIdx < 0;
+if (noRecapIdx >= 0) claudeArgs.splice(noRecapIdx, 1);
 const pi = claudeArgs.indexOf('--port');
 if (pi >= 0) {
   const parsed = parseInt(claudeArgs[pi+1], 10);
@@ -1386,6 +1443,15 @@ server.on('error', e => {
 server.listen(PORT, '127.0.0.1', () => {
   PORT = server.address().port;
   process.stderr.write(col.d(`occasio proxy listening on 127.0.0.1:${PORT}\n`));
+
+  // Best-effort: print a 3-line recap of the previous session so the user
+  // (and via screen-context, the agent itself) has a memory anchor before
+  // typing the next prompt. Silent if no prior session in this cwd.
+  // Disable with --no-recap.
+  if (showRecap) {
+    try { printSessionRecapBanner(); } catch { /* never block startup */ }
+  }
+
   const env = { ...process.env, ANTHROPIC_BASE_URL: `http://localhost:${PORT}` };
   // On Windows, npm installs binaries as .cmd wrappers (claude.cmd).
   // spawn() without shell:true calls CreateProcess directly, which won't
