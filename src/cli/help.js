@@ -88,7 +88,7 @@ ${col.b('Flags:')}
   --block-secrets               Alias for --preset strict
   --log-only                    Alias for --preset off
   --dashboard                   Open live dashboard at http://localhost:3001
-  --port <N>                    Proxy port (default: 8081)
+  --port <N>                    Proxy port (default: auto-assigned by OS)
   --verbose                     Print live per-request chatter (off by default)
 
 ${col.b('Multi-agent routing:')}

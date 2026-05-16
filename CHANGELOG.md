@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+- Proxy port now defaults to OS auto-assignment instead of hard-coded 8081,
+  so multiple `occasio claude` sessions can run in parallel without
+  EADDRINUSE. Explicit overrides (`OCCASIO_PORT=N`, `--port N`) still pin
+  a fixed port. `occasio doctor` skips the port probe when no explicit
+  port is set. Note: `~/.occasio/session.json` is still a single shared
+  file — parallel sessions co-exist port-wise but will overwrite each
+  other's session totals; a follow-up will scope session state per run.
+
 ### Added
 - CI-gated end-to-end Sigstore round-trip (`test-attest-e2e.js`,
   `.github/workflows/attest-e2e.yml`). Runs only when

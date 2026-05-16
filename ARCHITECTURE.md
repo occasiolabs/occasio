@@ -259,7 +259,7 @@ The Cline adapter is exercised by synthetic SSE fixtures based on Cline's publis
 ```
 Cline VS Code extension (configured with proxy URL + custom header)
        ↓ Anthropic API request with `x-occasio-agent: cline` header
-   proxy at localhost:8081
+   proxy at localhost:<auto-assigned port; see ANTHROPIC_BASE_URL>
        ↓ selectAdapter(req.headers) → cline adapter
    cline.runToolLoop(...) → canonical pipeline → agent: 'cline' in audit
        ↓ forwardToCloud (header stripped before leaving the machine)

@@ -56,10 +56,11 @@ const VERSION = (() => {
   catch { return '0.0.0-unknown'; }
 })();
 const LOG_SCHEMA_VERSION = 2;
-// Port override via env var (used by `occasio harness` and redteam to
-// run isolated proxies against scratch audit chains on free ports). Default
-// is 8081 to preserve existing user-facing behaviour.
-let PORT = parseInt(process.env.OCCASIO_PORT, 10) || 8081;
+// Port: defaults to 0 (auto-assigned by the OS) so multiple `occasio claude`
+// sessions can run in parallel. Explicit overrides via OCCASIO_PORT env or
+// --port flag still pin a fixed port (and surface EADDRINUSE if taken).
+let PORT = parseInt(process.env.OCCASIO_PORT, 10) || 0;
+let PORT_EXPLICIT = PORT !== 0;
 const ANTHROPIC_REAL = 'api.anthropic.com';
 const LOG_DIR      = path.join(os.homedir(), '.occasio');
 const SESSION_FILE = path.join(LOG_DIR, 'session.json');
@@ -537,16 +538,22 @@ if (cmd === 'doctor' || cmd === 'check') {
       ok('log dir', LOG_DIR);
     } catch (e) { bad('log dir', e.message); }
 
-    // 4. Port availability (async)
-    await new Promise(resolve => {
-      const srv = net.createServer();
-      srv.once('error', () => {
-        bad(`port ${PORT}`, `already in use — kill it: netstat -ano | findstr :${PORT}`);
-        resolve();
+    // 4. Port availability (async) — only probe when an explicit port is pinned.
+    // With auto-assignment (default), the OS picks a free port at listen-time
+    // so there's nothing meaningful to probe in advance.
+    if (PORT_EXPLICIT) {
+      await new Promise(resolve => {
+        const srv = net.createServer();
+        srv.once('error', () => {
+          bad(`port ${PORT}`, `already in use — kill it: netstat -ano | findstr :${PORT}`);
+          resolve();
+        });
+        srv.once('listening', () => { srv.close(); ok(`port ${PORT}`, 'available'); resolve(); });
+        srv.listen(PORT, '127.0.0.1');
       });
-      srv.once('listening', () => { srv.close(); ok(`port ${PORT}`, 'available'); resolve(); });
-      srv.listen(PORT, '127.0.0.1');
-    });
+    } else {
+      ok('port', 'auto-assigned at runtime');
+    }
 
     // 5. Python + LAO scorer script
     const laoPyPath = path.join(__dirname, 'lao_prep.py');
@@ -633,7 +640,11 @@ const di = claudeArgs.indexOf('--dashboard');
 const useDashboard = di >= 0;
 if (di >= 0) claudeArgs.splice(di, 1);
 const pi = claudeArgs.indexOf('--port');
-if (pi >= 0) { PORT = parseInt(claudeArgs[pi+1], 10) || PORT; claudeArgs.splice(pi, 2); }
+if (pi >= 0) {
+  const parsed = parseInt(claudeArgs[pi+1], 10);
+  if (parsed > 0) { PORT = parsed; PORT_EXPLICIT = true; }
+  claudeArgs.splice(pi, 2);
+}
 
 // Budget flag: --budget <N> sets a session dollar limit.
 const bgtIdx = claudeArgs.indexOf('--budget');
@@ -1353,7 +1364,7 @@ const server = http.createServer((req, res) => {
 
 server.on('error', e => {
   if (e.code === 'EADDRINUSE') {
-    process.stderr.write(col.r(`\n❌ Port ${PORT} already in use. Kill the old process first:\n`));
+    process.stderr.write(col.r(`\n❌ Port ${PORT} already in use. Kill the old process first or omit --port / OCCASIO_PORT to let the OS auto-assign:\n`));
     process.stderr.write(col.d(`   netstat -ano | findstr :${PORT}  → then: taskkill /PID <pid> /F\n\n`));
   } else {
     process.stderr.write(col.r(`\n❌ ${e.message}\n`));
@@ -1362,6 +1373,8 @@ server.on('error', e => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
+  PORT = server.address().port;
+  process.stderr.write(col.d(`occasio proxy listening on 127.0.0.1:${PORT}\n`));
   const env = { ...process.env, ANTHROPIC_BASE_URL: `http://localhost:${PORT}` };
   // On Windows, npm installs binaries as .cmd wrappers (claude.cmd).
   // spawn() without shell:true calls CreateProcess directly, which won't
