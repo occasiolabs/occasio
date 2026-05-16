@@ -285,6 +285,10 @@ if (cmd === 'replay') {
   process.exit(0);
 }
 
+if (cmd === 'recap') {
+  process.exit(require('./cli/recap').run(args.slice(1)));
+}
+
 if (cmd === 'distill') {
   runDistillCli(args.slice(1));
   process.exit(0);

@@ -46,6 +46,7 @@ ${col.b('Run')} ${col.d('— start a session, observe live state')}
 
 ${col.b('Inspect')} ${col.d('— forensics over what the agent did')}
   replay                     ${col.d('(stable)')} Replay run audit (--last N, --detail, --run <id>)
+  recap                      ${col.d('(stable)')} Markdown session summary for agent context (--last N, --run, --format)
   boundary                   ${col.d('(stable)')} Per-request: produced / re-entered / prevented
   inspect                    ${col.d('(stable)')} Cloud-boundary manifest (--last N, --entry N)
   distill                    ${col.d('(stable)')} Inspect distilled outputs (--last N, --entry <N>)
