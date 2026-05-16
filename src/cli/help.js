@@ -91,7 +91,7 @@ ${col.b('Flags:')}
   --log-only                    Alias for --preset off
   --dashboard                   Open live dashboard at http://localhost:3001
   --port <N>                    Proxy port (default: auto-assigned by OS)
-  --no-recap                    Skip the previous-session banner at startup
+  --recap                       Print a previous-session banner at startup
   --verbose                     Print live per-request chatter (off by default)
 
 ${col.b('Multi-agent routing:')}

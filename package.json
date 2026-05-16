@@ -1,6 +1,6 @@
 {
   "name": "@occasiolabs/occasio",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "mcpName": "io.github.occasiolabs/occasio",
   "description": "Occasio — cryptographically verifiable behavioral attestation for AI coding agents. Tool-call interception + policy enforcement + tamper-evident audit chain + Sigstore-signed in-toto attestations + windowed EDR detection. Same engine for Claude Code and MCP; Computer-Use scaffold included.",
   "main": "src/index.js",
@@ -15,6 +15,7 @@
     "NOTICE"
   ],
   "scripts": {
+    "prepack": "node -e \"const fs=require('fs'),p=require('path');function rm(d){if(!fs.existsSync(d))return;for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=p.join(d,e.name);if(e.isDirectory())rm(f);else fs.unlinkSync(f);}fs.rmdirSync(d);}rm('docs/__pycache__');console.log('prepack: cleared docs/__pycache__');\"",
     "pretest": "npm run lint:all",
     "test": "node test-interceptor.js && node test-native-handlers.js && node test-audit-chain.js && node test-attest.js && node test-policy-paths.js && node test-anomaly.js",
     "lint": "eslint src/audit src/attest src/core src/executor",

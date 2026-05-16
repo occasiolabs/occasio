@@ -1,17 +1,24 @@
 # Changelog
 
-## [Unreleased]
-
-### Fixed
-- Proxy port now defaults to OS auto-assignment instead of hard-coded 8081,
-  so multiple `occasio claude` sessions can run in parallel without
-  EADDRINUSE. Explicit overrides (`OCCASIO_PORT=N`, `--port N`) still pin
-  a fixed port. `occasio doctor` skips the port probe when no explicit
-  port is set. Note: `~/.occasio/session.json` is still a single shared
-  file — parallel sessions co-exist port-wise but will overwrite each
-  other's session totals; a follow-up will scope session state per run.
+## [0.8.6] — 2026-05-16
 
 ### Added
+- `occasio demo audit` — hero demo for the auditor scenario. Synthesizes a
+  12-row CI-run audit chain, builds an unsigned attestation predicate,
+  answers the framed auditor question with row-level evidence (BLOCK hashes
+  on the asked path), and re-verifies the artifact with the independent
+  Python verifier (`docs/attest_verify.py`) to demonstrate cross-language
+  agreement on the chain. Anonymized TEMP-path display so the demo is
+  screen-recording safe (no leaked username).
+- `occasio recap` — markdown session summary sized to paste into a new
+  Claude prompt. Reads `pipeline-events.jsonl` (tool calls, decisions,
+  files touched) and Claude Code's own per-project session JSONL
+  (last user message + last assistant reply). Flags: `--last N`,
+  `--run <id>`, `--format md|text|json`.
+- `--recap` flag on `occasio claude` — opt-in previous-session banner
+  printed at startup. Compact 4-line summary so the user (and the next
+  agent via on-screen context) has a memory anchor before the next prompt.
+  Default off to avoid surprising existing users.
 - CI-gated end-to-end Sigstore round-trip (`test-attest-e2e.js`,
   `.github/workflows/attest-e2e.yml`). Runs only when
   `OCCASIO_E2E_SIGSTORE=1` inside a GitHub Actions job with
@@ -24,6 +31,15 @@
   raise/lower the deny-rate and file-read-volume thresholds.
 - `test-anomaly.js` asserts a zero-HIGH FP smoke on the low-activity
   profile and that the multiplier suppresses marginal alerts.
+
+### Fixed
+- Proxy port now defaults to OS auto-assignment instead of hard-coded 8081,
+  so multiple `occasio claude` sessions can run in parallel without
+  EADDRINUSE. Explicit overrides (`OCCASIO_PORT=N`, `--port N`) still pin
+  a fixed port. `occasio doctor` skips the port probe when no explicit
+  port is set. Note: `~/.occasio/session.json` is still a single shared
+  file — parallel sessions co-exist port-wise but will overwrite each
+  other's session totals; a follow-up will scope session state per run.
 
 ### Changed
 - `src/cli/help.js` reorganised into five use-case namespaces (Setup,

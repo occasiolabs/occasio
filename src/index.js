@@ -183,7 +183,7 @@ function printSessionRecapBanner() {
   if (conv && conv.lastAssistant) {
     process.stderr.write('  ' + col.g('Agent: ') + oneLine(conv.lastAssistant) + '\n');
   }
-  process.stderr.write(col.d('  (suppress with --no-recap)') + '\n\n');
+  process.stderr.write(col.d('  (enabled via --recap; suppress next time by omitting it)') + '\n\n');
 }
 
 // ── Pre-send manifest ─────────────────────────────────────────────────────────
@@ -704,9 +704,9 @@ if (prIdx >= 0) {
 const di = claudeArgs.indexOf('--dashboard');
 const useDashboard = di >= 0;
 if (di >= 0) claudeArgs.splice(di, 1);
-const noRecapIdx = claudeArgs.indexOf('--no-recap');
-const showRecap = noRecapIdx < 0;
-if (noRecapIdx >= 0) claudeArgs.splice(noRecapIdx, 1);
+const recapIdx = claudeArgs.indexOf('--recap');
+const showRecap = recapIdx >= 0;
+if (recapIdx >= 0) claudeArgs.splice(recapIdx, 1);
 const pi = claudeArgs.indexOf('--port');
 if (pi >= 0) {
   const parsed = parseInt(claudeArgs[pi+1], 10);
