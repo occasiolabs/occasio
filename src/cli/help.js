@@ -73,9 +73,10 @@ ${col.b('Policy & extras')}
   policy doctor              ${col.d('(beta)')}   Cross-reference logs with policy; suggest tightening
   computer-use               ${col.d('(alpha)')}  Apply policy to a JSONL of tool_use blocks (--dry-run --example)
   mcp-experiment             ${col.d('(beta)')}   MCP vs. built-in tool adoption stats
-  demo                       ${col.d('(stable)')} 10-second proof: see Occasio block real secrets
+  demo audit                 ${col.d('(stable)')} Auditor scenario: signed attestation + cross-verifier proof
   demo attest                ${col.d('(stable)')} End-to-end attestation pipeline against a synthetic chain
   demo anomalies             ${col.d('(stable)')} End-to-end EDR test: synthetic adversarial chain
+  demo                       ${col.d('(stable)')} 10-second proof: see Occasio block real secrets
 
 ${col.b('Presets:')}
   --preset balanced  (default)  Intercept safe reads locally, log all requests

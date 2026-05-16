@@ -9,12 +9,13 @@ Occasio sits between the agent and the cloud on your own machine, decides every 
 ```bash
 npm install -g @occasiolabs/occasio
 
-occasio demo attest      # End-to-end attestation pipeline (30s, no API key)
-occasio demo anomalies   # Live EDR detection on a synthetic adversarial chain (5s)
+occasio demo audit       # Auditor scenario: signed attestation + cross-verifier proof (10s, no API key)
+occasio demo attest      # End-to-end attestation pipeline against a synthetic chain
+occasio demo anomalies   # Live EDR detection on a synthetic adversarial chain
 occasio harness          # Real Claude Code attacking a denied path — defense holds
 ```
 
-The first two demos run against synthetic data so you can see the full pipeline in under a minute with no external dependencies. The third spawns a real Claude Code subordinate under your Anthropic login (bundled auth — no API key required) and proves the defense end-to-end.
+The first three demos run against synthetic data so you can see the full pipeline in seconds with no external dependencies. The fourth spawns a real Claude Code subordinate under your Anthropic login (bundled auth — no API key required) and proves the defense end-to-end. Start with `demo audit` — it answers the only question that actually matters: *"prove what your AI agent did in CI."*
 
 ---
 

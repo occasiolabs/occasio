@@ -405,6 +405,13 @@ if (cmd === 'demo' && (args[1] === 'anomalies' || args[1] === 'anomaly')) {
   process.exit(runAnomaliesDemoCli(args.slice(2)));
 }
 
+if (cmd === 'demo' && (args[1] === 'audit' || args[1] === 'auditor')) {
+  const { runAuditDemoCli } = require('./demo/audit-demo');
+  runAuditDemoCli(args.slice(2)).then(code => process.exit(code))
+    .catch(e => { process.stderr.write(`[demo audit] ${e.message}\n`); process.exit(1); });
+  return;
+}
+
 if (cmd === 'demo') {
   const { scanSecrets } = require('../src/analyzer');
   // Realistic-looking but synthetic credentials. Each hits exactly one pattern.
