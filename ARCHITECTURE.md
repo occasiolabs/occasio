@@ -334,3 +334,16 @@ One row per tool call that flows through the canonical pipeline. Format:
 ```
 
 This is the foundation for Stage 2's tamper-evident audit (hash-chained log, SIEM-compatible export). Today it is plain JSONL, append-only, local file.
+
+## Audit / economic decoupling
+
+Occasio's audit pillar (in-toto Statement over a JSONL hash-chain, RFC 8785-subset canonicalization, DSSE-wrapped, Sigstore keyless via GitHub Actions OIDC, Rekor inclusion proof in CI) is intentionally decoupled from any economic or settlement layer. Audit correctness does not depend on on-chain mechanics, token issuance, or bonded settlement.
+
+This decoupling is a deliberate scoping choice:
+
+- **Audit** is a property the system must hold for *every* run. Whether the user is running occasio against their own account on their own machine, attesting a CI job, or producing evidence for a compliance review, the audit chain must be cryptographically verifiable end-to-end without external coordination.
+- **Economic enforcement** (slashable bonds, on-chain dispute resolution, programmable settlement constraints) is a property only some deployments need: solver markets, multi-party bidding, dispute resolution against counterparties the principal does not control.
+
+Mixing the two would make audit correctness contingent on economic infrastructure occasio does not require. Conversely, keeping them separable means occasio's audit format can be referenced by systems that *do* layer economic mechanics on top, without those systems leaking back into the audit guarantees.
+
+A related implication: occasio's `agentId` is a routing string (`claude-code`, `cline`, future adapters), not a cryptographic principal. There is no solver market, no bond, no dispute. Identity is OS-user, plus optionally a Sigstore-attested workflow if the run originates from CI. Externally-attested agent identity becomes load-bearing only if occasio is ever used to attest runs by agents the principal does not control; until then, it is intentionally absent for the same reason on-chain settlement is.
