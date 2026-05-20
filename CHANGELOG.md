@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.9.0] — 2026-05-21
+
+### Added
+- `occasio eyes` — local browser UI on http://127.0.0.1:3002 that shows
+  what Claude Code sends to and receives from Anthropic per HTTP exchange.
+  Sidebar groups exchanges by user prompt; main pane has Request / Response /
+  Tools / Diff / Headers / Raw / Session / Stats tabs. Capture is opt-in via
+  `--eyes` on the proxy and writes to `~/.occasio/eyes/` with a
+  content-addressed blob store for dedup. Live SSE updates, native scrollbar,
+  native text selection + copy.
+- `occasio claude --eyes` — opt-in proxy flag that captures, per HTTP
+  exchange: the post-transform outbound body, a pre-transform snapshot (for
+  diff view), sanitized request + response headers (auth / x-api-key /
+  cookie / set-cookie masked), the inbound response (SSE-parsed), the
+  LAO-dropped tool_result bodies in full, and the local tool outputs
+  (Read / Glob / Grep / Bash bytes the interceptor handled).
+- Session-cost view in the Eyes UI: aggregate token usage across all
+  exchanges with attribution between Anthropic's own system prompt and
+  your content (bytes-ratio apportionment). Shows actual vs uncached cost,
+  cache hit-rate, fresh vs cached input tokens, system-prompt bytes shipped.
+- Live "now sending" flash overlay, per-file aggregate sidebar ("which
+  files have I sent to the cloud?"), session sparkline showing outbound
+  size over time, byte-decomposition stacked bar (system / history / new
+  this turn / tools-framing), inline "view original" buttons on redacted
+  tool_results.
+- API endpoints (all 127.0.0.1 only): `GET /api/exchanges`,
+  `GET /api/exchanges/:seq`, `GET /api/content/:sha256`, `GET /api/files`,
+  `GET /api/session-cost`, `GET /events` (SSE).
+
+### Changed
+- README gains a "Live visibility — for developers" section that positions
+  Eyes as the developer-facing companion to the audit/compliance pillar.
+  Includes a Dashboard-vs-Eyes comparison table to disambiguate the two
+  browser UIs.
+
+### Scope cut
+- Eyes capture is off by default; `--eyes` must be passed explicitly.
+  Default-off is intentional: full payload bytes (file contents,
+  conversation history) land on disk, and we want opt-in consent before
+  persisting them.
+- Browser UI binds 127.0.0.1 only with no auth — convenient for local use,
+  never exposed off-box. A multi-user deployment would need an auth layer.
+- Content store ringbuffer: 20 most recent payloads kept, 2 MB per-blob cap.
+  Older sessions don't leak forward (session-start wipes the dir).
+
 ## [0.8.6] — 2026-05-16
 
 ### Added
