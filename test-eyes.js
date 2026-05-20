@@ -600,6 +600,8 @@ httpReady.then(async (port) => {
   assert('GET / has renderTools', /renderTools/.test(root.body));
   assert('GET / has renderDiff',  /renderDiff/.test(root.body));
   assert('GET / has renderHeaders', /renderHeaders/.test(root.body));
+  assert('GET / has Session tab', /data-tab="session"/.test(root.body));
+  assert('GET / has renderSession', /renderSession/.test(root.body));
 
   const list = await get('/api/exchanges');
   assert('GET /api/exchanges → 200', list.status === 200);
@@ -621,6 +623,14 @@ httpReady.then(async (port) => {
 
   const nf = await get('/nope');
   assert('GET /nope → 404', nf.status === 404);
+
+  // Session-cost endpoint: should return JSON with the expected shape
+  const sess = await get('/api/session-cost');
+  assert('GET /api/session-cost → 200', sess.status === 200);
+  const sessJ = JSON.parse(sess.body);
+  assert('session-cost has exchanges', typeof sessJ.exchanges === 'number');
+  assert('session-cost has cost', sessJ.cost && typeof sessJ.cost.actual_usd === 'number');
+  assert('session-cost has attribution', sessJ.attribution && sessJ.attribution.system_prompt);
 
   // Content endpoint: 404 on bogus, 200 on real ref after storing
   const bogus = await get('/api/content/sha256-deadbeef00000000');
@@ -773,6 +783,68 @@ try {
 } catch { /* ignore */ }
 
 function finalize() {
+
+// ── 14. session-cost aggregator ─────────────────────────────────────────────
+console.log('\n14. session-cost — aggregate()');
+
+const { aggregate } = require('./src/eyes/cost');
+
+assert('aggregate([]) → zero', aggregate([]).exchanges === 0);
+assert('aggregate(null) → zero', aggregate(null).exchanges === 0);
+
+// Single payload: opus, 100KB system, 110KB sent total, 1000 fresh + 8000 cached tokens
+const one = aggregate([{
+  model: 'claude-opus-4-7',
+  system: { bytes: 100_000, text: 'x' },
+  byteCount: { after: 110_000, before: 110_000 },
+  responseMeta: { bytes: 2000 },
+  response: { model: 'claude-opus-4-7', usage: {
+    input_tokens: 1000, cache_read_input_tokens: 8000, output_tokens: 200,
+  }},
+}]);
+assert('one exchange counted', one.exchanges === 1);
+assert('one exchange has usage', one.exchanges_with_usage === 1);
+assert('models tracked', one.models['claude-opus-4-7'] === 1);
+assert('system bytes summed', one.bytes.system_shipped === 100_000);
+assert('input fresh summed', one.tokens.input_fresh === 1000);
+assert('input cached summed', one.tokens.input_cached === 8000);
+assert('output summed', one.tokens.output === 200);
+// Opus pricing: in=15, out=75, cache_read=1.50 per Mtok
+// actual: 1000/1M*15 + 8000/1M*1.5 + 200/1M*75 = 0.015 + 0.012 + 0.015 = 0.042
+// uncached: 9000/1M*15 + 200/1M*75 = 0.135 + 0.015 = 0.150
+assert('actual cost reasonable', Math.abs(one.cost.actual_usd - 0.042) < 0.001,
+  `got ${one.cost.actual_usd}`);
+assert('uncached cost reasonable', Math.abs(one.cost.uncached_usd - 0.150) < 0.001);
+assert('cache savings = uncached - actual',
+  Math.abs(one.cost.cache_savings_usd - (one.cost.uncached_usd - one.cost.actual_usd)) < 0.0001);
+// 100/110 ≈ 91% bytes-ratio → system gets 91% of input cost
+assert('system attribution share ≈ 91%',
+  Math.abs(one.attribution.system_prompt.share_pct - 90.9) < 1,
+  `got ${one.attribution.system_prompt.share_pct}%`);
+assert('system attribution actual > 0', one.attribution.system_prompt.actual_usd > 0);
+assert('user attribution actual > 0', one.attribution.your_content.actual_usd > 0);
+
+// Three exchanges summed correctly
+const three = aggregate([
+  { model: 'claude-opus-4-7', system: { bytes: 100_000 }, byteCount: { after: 110_000 },
+    response: { usage: { input_tokens: 1000, cache_read_input_tokens: 0, output_tokens: 100 } } },
+  { model: 'claude-opus-4-7', system: { bytes: 100_000 }, byteCount: { after: 110_000 },
+    response: { usage: { input_tokens: 100, cache_read_input_tokens: 8000, output_tokens: 100 } } },
+  { model: 'claude-opus-4-7', system: { bytes: 100_000 }, byteCount: { after: 110_000 },
+    response: { usage: { input_tokens: 100, cache_read_input_tokens: 8000, output_tokens: 100 } } },
+]);
+assert('three exchanges counted', three.exchanges === 3);
+assert('system bytes summed = 300k', three.bytes.system_shipped === 300_000);
+assert('output tokens summed = 300', three.tokens.output === 300);
+
+// No-usage payload (response not captured yet) doesn't crash and counts in exchanges
+const partial = aggregate([
+  { model: 'claude-opus-4-7', system: { bytes: 100 }, byteCount: { after: 200 } },  // no response
+]);
+assert('payload without response counts in exchanges', partial.exchanges === 1);
+assert('payload without response → 0 usage', partial.exchanges_with_usage === 0);
+assert('payload without response → 0 cost', partial.cost.actual_usd === 0);
+
 // ── done ────────────────────────────────────────────────────────────────────
 console.log(`\n${failed === 0 ? '✓' : '✗'} eyes: ${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

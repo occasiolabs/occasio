@@ -161,6 +161,16 @@ function createServer(opts) {
       return;
     }
 
+    // Session cost: aggregate token usage + cost-attribution across exchanges.
+    // Answers "what is Anthropic's system prompt costing me?".
+    if (url === '/api/session-cost') {
+      const payloads = loadPayloads();
+      const cost = require('./cost').aggregate(payloads);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(cost));
+      return;
+    }
+
     // Files: per-path aggregate across all captured exchanges. Answers
     // "what does Anthropic now know about my codebase?". For each tool_use
     // with a path/file_path input, find the matched tool_result (by

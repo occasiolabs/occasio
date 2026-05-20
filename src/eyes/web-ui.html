@@ -523,6 +523,7 @@
       <button data-tab="diff">Diff <span class="count" id="t-diff"></span></button>
       <button data-tab="headers">Headers</button>
       <button data-tab="raw">Raw <span class="count" id="t-raw"></span></button>
+      <button data-tab="session">Session</button>
       <button data-tab="stats">Stats</button>
     </div>
     <div id="toolbar">
@@ -865,6 +866,7 @@
     else if (state.tab === 'diff') $('#content').innerHTML = renderDiff(p);
     else if (state.tab === 'headers') $('#content').innerHTML = renderHeaders(p);
     else if (state.tab === 'raw') $('#content').innerHTML = renderRaw(p);
+    else if (state.tab === 'session') { $('#content').innerHTML = '<div style="color:var(--fg-dim);padding:20px">Loading session cost…</div>'; renderSession(); }
     else if (state.tab === 'stats') $('#content').innerHTML = renderStats(p);
     wireSections();
     wireContentLoaders();
@@ -1243,6 +1245,84 @@
       </div></div>`;
 
     return html;
+  }
+
+  // ── Session: cross-exchange cost + system-prompt attribution ──
+  async function renderSession() {
+    let data;
+    try {
+      const r = await fetch('/api/session-cost');
+      data = await r.json();
+    } catch {
+      $('#content').innerHTML = '<div style="color:var(--red);padding:20px">Failed to load session cost.</div>';
+      return;
+    }
+    const fmt$ = (n) => '$' + (n < 0.01 ? n.toFixed(4) : n < 1 ? n.toFixed(3) : n.toFixed(2));
+    const fmtTok = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+    const sysShare = data.attribution.system_prompt.share_pct;
+    const sysActual = data.attribution.system_prompt.actual_usd;
+    const sysUncached = data.attribution.system_prompt.uncached_usd;
+    const youActual = data.attribution.your_content.actual_usd;
+    const cacheSavings = data.cost.cache_savings_usd;
+    const cachePct = data.tokens.input_cached + data.tokens.input_fresh > 0
+      ? (data.tokens.input_cached / (data.tokens.input_cached + data.tokens.input_fresh)) * 100
+      : 0;
+    const sysBar = Math.max(2, Math.min(98, sysShare));
+
+    let html = '';
+    // Headline strip
+    html += `<div class="section" style="margin-bottom:14px">
+      <header style="cursor:default"><span class="triangle" style="visibility:hidden">▼</span> Session cost · attribution</header>
+      <div class="body">
+        <div style="font-family:var(--mono);font-size:13px;line-height:1.7">
+          <div>
+            <span style="font-size:24px;font-weight:600;color:var(--red)">${fmt$(sysActual)}</span>
+            <span style="color:var(--fg-dim)"> of </span>
+            <span style="font-size:24px;font-weight:600">${fmt$(data.cost.actual_usd)}</span>
+            <span style="color:var(--fg-dim)"> went to Anthropic's own system prompt (${sysShare.toFixed(0)}%)</span>
+          </div>
+          <div style="margin-top:8px;color:var(--fg-dim);font-size:12px">
+            Across ${data.exchanges} exchange${data.exchanges === 1 ? '' : 's'}, you shipped ${fmtBytes(data.bytes.system_shipped)} of system-prompt bytes
+            (Claude Code's tool definitions, instructions, schemas). Cache made you pay <span style="color:var(--green)">${fmt$(cacheSavings)} less</span> than the uncached price.
+          </div>
+        </div>
+        <div style="margin-top:14px;height:14px;display:flex;border-radius:4px;overflow:hidden">
+          <div style="width:${sysBar}%;background:var(--magenta)" title="system prompt: ${fmt$(sysActual)}"></div>
+          <div style="width:${100 - sysBar}%;background:var(--green)" title="your content: ${fmt$(youActual)}"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--fg-dim)">
+          <span><span style="display:inline-block;width:8px;height:8px;background:var(--magenta);border-radius:2px;margin-right:4px;vertical-align:middle"></span>Anthropic's system prompt · ${fmt$(sysActual)} (would be ${fmt$(sysUncached)} uncached)</span>
+          <span><span style="display:inline-block;width:8px;height:8px;background:var(--green);border-radius:2px;margin-right:4px;vertical-align:middle"></span>Your content · ${fmt$(youActual)}</span>
+        </div>
+      </div>
+    </div>`;
+
+    // Token breakdown grid
+    html += `<div class="stat-grid">
+      <div class="stat"><div class="k">Exchanges</div><div class="v">${data.exchanges}</div></div>
+      <div class="stat"><div class="k">Fresh input</div><div class="v yellow">${fmtTok(data.tokens.input_fresh)}</div></div>
+      <div class="stat"><div class="k">Cached input</div><div class="v green">${fmtTok(data.tokens.input_cached)}</div></div>
+      <div class="stat"><div class="k">Cache hit-rate</div><div class="v green">${cachePct.toFixed(0)}%</div></div>
+      <div class="stat"><div class="k">Output tokens</div><div class="v">${fmtTok(data.tokens.output)}</div></div>
+      <div class="stat"><div class="k">Actual cost</div><div class="v">${fmt$(data.cost.actual_usd)}</div></div>
+      <div class="stat"><div class="k">Without cache</div><div class="v red">${fmt$(data.cost.uncached_usd)}</div></div>
+      <div class="stat"><div class="k">Cache savings</div><div class="v green">${fmt$(cacheSavings)}</div></div>
+      <div class="stat"><div class="k">System bytes shipped</div><div class="v">${fmtBytes(data.bytes.system_shipped)}</div></div>
+      <div class="stat"><div class="k">Total outbound</div><div class="v">${fmtBytes(data.bytes.total_outbound)}</div></div>
+      <div class="stat"><div class="k">Total inbound</div><div class="v">${fmtBytes(data.bytes.total_inbound)}</div></div>
+      <div class="stat"><div class="k">Models</div><div class="v" style="font-size:12px">${Object.keys(data.models).map(m => m.replace('claude-','')).join(', ') || '—'}</div></div>
+    </div>`;
+
+    // Explanation
+    html += `<div style="margin-top:18px;padding:12px;background:var(--bg-side);border-left:2px solid var(--accent);font-size:11px;color:var(--fg-dim);line-height:1.6">
+      <strong style="color:var(--fg)">How this is calculated.</strong>
+      Per exchange, input cost is apportioned to <em>Anthropic's system prompt</em> vs <em>your content</em>
+      by bytes-ratio (system.bytes ÷ outbound.bytes). Output tokens belong to "your content" since
+      the model writes them. Cache savings = (cached tokens × fresh-input price) − (cached tokens × cache-read price).
+      Prices come from <code>src/cost/prices.js</code>.
+    </div>`;
+
+    $('#content').innerHTML = html;
   }
 
   function renderRaw(p) {
