@@ -82,7 +82,8 @@ occasio attest --run-id <uuid>  # Build a behavioral attestation for one session
 | `occasio boundary` | Three-column view: produced / re-entered / prevented |
 | `occasio ledger` | Per-request token ledger |
 | `occasio distill` | Inspect distilled tool outputs |
-| `occasio dashboard` | Live browser dashboard at http://localhost:3001 |
+| `occasio dashboard` | Live browser dashboard at http://localhost:3001 (session metrics) |
+| `occasio eyes` | Browser UI at http://127.0.0.1:3002 (per-exchange traffic, capture opt-in via `--eyes`) |
 | `occasio audit verify` | Re-walk the SHA-256 audit chain end-to-end |
 | `occasio audit repair --file <path>` | Truncate a crash-partial trailing line (writes `.bak`) |
 | `occasio report` | Governance summary export (`--days N`, `--format csv`) |
@@ -108,6 +109,43 @@ Session-level overrides on top of `policy.yml`:
 | `--preset off` | Pure passthrough, log only |
 | `--budget <N>` | Hard cap: HTTP 402 once session cost reaches $N |
 | `--hardened` | Routes Read/Glob/Grep through unified runtime + distill + secret scan |
+| `--eyes` | Capture outbound + inbound payloads for `occasio eyes` browser UI |
+
+---
+
+## Live visibility — for developers
+
+The four layers above answer *"what did the agent do, prove it"* — the auditor's question. Sometimes you also want the simpler one: *"what is the agent doing **right now**?"* What is leaving your machine in this HTTP request. Which files have already gone to Anthropic in this session. What the system prompt looks like. What got redacted before it shipped.
+
+`occasio eyes` is a local browser UI on `http://127.0.0.1:3002` that shows exactly that. Capture is opt-in via `--eyes` on the proxy; nothing leaves the machine, all storage stays under `~/.occasio/eyes/`.
+
+```bash
+occasio eyes --demo            # synthetic data, no proxy needed (10-second tour)
+occasio claude --eyes          # then in another terminal:
+occasio eyes                   # browser tab opens automatically
+```
+
+What you see:
+
+- **Sidebar grouped by user prompt** — one "read the readme" expands into the 3–6 HTTP round-trips it actually took (Claude Code's agentic loop made visible).
+- **Session sparkline + per-file aggregate** — outbound size over time, which files have been sent to the cloud and how often.
+- **Per-exchange byte-decomposition** — stacked bar showing system / history (replay) / new-this-turn / tools-framing. The "small" request that's 124 KB is suddenly explainable: 108 KB of it is the same system prompt every time.
+- **Tabs**: Request · Response · **Tools** (full local tool outputs — Read/Glob/Grep/Bash bytes that the interceptor handled locally and never sent up) · **Diff** (pre-transform vs sent — see the literal secrets that were redacted, in the clear, locally) · **Headers** · **Raw** SSE bytes · **Stats**.
+- **Live flash overlay** when a new outbound lands — useful both for understanding and for demos.
+
+### Dashboard vs. Eyes
+
+Both run as local browser UIs but answer different questions:
+
+| | `occasio dashboard` (3001) | `occasio eyes` (3002) |
+|---|---|---|
+| Focus | Session-level metrics: cost, savings, tokens | Per-exchange traffic: what went out, what came back |
+| Granularity | Aggregate counters + per-request summary table | Full HTTP bodies, decoded SSE, local tool outputs |
+| Capture needed | No — reads `session.json` + daily logs | Yes — pass `--eyes` to the proxy (opt-in) |
+| Data scope | Metadata only | Full payload bytes (kept locally under `~/.occasio/eyes/`) |
+| Best for | "How much have I spent today?" | "What did the agent actually send to Anthropic?" |
+
+Both live on `127.0.0.1` only. No CORS, no auth, no external network.
 
 ---
 
@@ -174,6 +212,10 @@ All data is stored locally at `~/.occasio/`:
   session.json                 # current run_id, totals
   logs/YYYY-MM-DD.jsonl        # per-request log
   baseline/<cwd-hash>.json     # per-project behavior baseline (opt-in)
+  eyes/                        # `occasio eyes` capture (opt-in via --eyes)
+    payload-NNNNNN.json        # per-exchange metadata + extracted blocks
+    content/<sha>              # content-addressed blob store (file bytes,
+                               # tool outputs) — dedup by SHA-256
 ```
 
 The audit-chain row schema is documented in [`docs/AUDIT.md`](docs/AUDIT.md). Each row carries `prev_hash` and `hash` (SHA-256 hex), with the first row chained from a fixed GENESIS sentinel (64 zeros). `occasio audit verify` and `docs/audit_walker.py` are independent implementations of the walker.
