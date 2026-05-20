@@ -1,0 +1,1415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Eyes — Occasio</title>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --bg-side:   #0b0e13;
+    --bg-card:   #131a23;
+    --bg-hover:  #1a232f;
+    --bg-active: #1f2c3d;
+    --fg:        #e6edf3;
+    --fg-dim:    #8b949e;
+    --fg-faint:  #6e7681;
+    --border:    #21262d;
+    --accent:    #58a6ff;
+    --accent-dim:#1f6feb;
+    --green:     #3fb950;
+    --yellow:    #d29922;
+    --red:       #f85149;
+    --magenta:   #bc8cff;
+    --cyan:      #56d4dd;
+    --redact-bg: #d29922;
+    --redact-fg: #0d1117;
+    --mono:      ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans:      -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 13px;
+    overflow: hidden;
+  }
+  #app {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: 100vh;
+    height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    background: var(--bg-side);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #sidebar header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    background: var(--bg-side);
+    z-index: 1;
+  }
+  #sidebar h1 {
+    font-size: 13px; font-weight: 600;
+    margin: 0; letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #sidebar h1 .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  #sidebar h1 .dot.demo  { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  #sidebar h1 .dot.idle  { background: var(--fg-faint); box-shadow: none; animation: none; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.55 } }
+  #sidebar h1 small { color: var(--fg-dim); font-weight: 400; margin-left: auto; }
+  #search {
+    width: 100%;
+    padding: 6px 8px;
+    margin-top: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 12px;
+    border-radius: 4px;
+  }
+  #search:focus { outline: none; border-color: var(--accent-dim); }
+  #exchanges { list-style: none; margin: 0; padding: 0; }
+  #exchanges > li.group { border-bottom: 1px solid var(--border); }
+  #exchanges .group-header {
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg-side);
+    display: flex; flex-direction: column; gap: 3px;
+    transition: background 0.1s;
+  }
+  #exchanges .group-header:hover { background: var(--bg-hover); }
+  #exchanges .group-header .tri { color: var(--fg-faint); margin-right: 6px; font-size: 10px; }
+  #exchanges .group-header .group-prompt {
+    color: var(--fg);
+    font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    max-height: 2.7em;
+    line-height: 1.35;
+  }
+  #exchanges .group-header .group-meta {
+    color: var(--fg-dim); font-family: var(--mono); font-size: 10px;
+    margin-left: 14px;
+  }
+  #exchanges li.group.collapsed .group-items { display: none; }
+  #exchanges .group-items { list-style: none; margin: 0; padding: 0; background: var(--bg-side); }
+  #exchanges li.ex {
+    padding: 8px 14px 8px 28px;
+    cursor: pointer;
+    transition: background 0.1s;
+    border-top: 1px solid var(--border);
+  }
+  #exchanges li.ex:hover { background: var(--bg-hover); }
+  #exchanges li.ex.active { background: var(--bg-active); border-left: 2px solid var(--accent); padding-left: 26px; }
+  #exchanges li .row1 { display: flex; align-items: baseline; gap: 8px; font-family: var(--mono); font-size: 11px; }
+  #exchanges li .seq { color: var(--accent); font-weight: 600; }
+  #exchanges li .time { color: var(--fg-faint); }
+  #exchanges li .bytes { color: var(--fg-dim); margin-left: auto; }
+  #exchanges li .row2 { color: var(--fg); margin-top: 4px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-height: 2.7em; }
+  #exchanges li .row3 { display: flex; gap: 8px; margin-top: 6px; font-size: 10px; color: var(--fg-dim); }
+  #exchanges li .badge { background: var(--bg-card); padding: 1px 6px; border-radius: 3px; }
+  #exchanges li .badge.r { color: var(--yellow); }
+  #exchanges li .badge.b { color: var(--red); }
+  #exchanges li .badge.t { color: var(--cyan); }
+  #empty {
+    padding: 60px 24px; text-align: center; color: var(--fg-dim);
+  }
+
+  /* ── Main ── */
+  #main {
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  #main-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+    background: var(--bg);
+  }
+  #main-header .title {
+    font-family: var(--mono);
+    font-weight: 600;
+  }
+  #main-header .meta { color: var(--fg-dim); font-family: var(--mono); font-size: 11px; }
+  #tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--bg); }
+  #tabs button {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--fg-dim);
+    padding: 10px 18px;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    transition: color 0.1s, border-color 0.1s;
+  }
+  #tabs button:hover { color: var(--fg); }
+  #tabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
+  #tabs button .count { color: var(--fg-faint); margin-left: 4px; font-size: 10px; }
+
+  #content {
+    flex: 1; overflow-y: auto;
+    padding: 16px 20px;
+    /* native scrollbar — explicit so we know it's there */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--bg);
+  }
+  #content::-webkit-scrollbar { width: 12px; }
+  #content::-webkit-scrollbar-track { background: var(--bg); }
+  #content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 2px solid var(--bg); }
+  #content::-webkit-scrollbar-thumb:hover { background: var(--fg-faint); }
+
+  .section {
+    margin-bottom: 18px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .section > header {
+    padding: 10px 14px;
+    background: var(--bg-side);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section > header:hover { background: var(--bg-hover); }
+  .section > header .triangle { display: inline-block; transition: transform 0.15s; }
+  .section.collapsed > header .triangle { transform: rotate(-90deg); }
+  .section > .body { padding: 12px 14px; }
+  .section.collapsed > .body { display: none; }
+  .section > header small { color: var(--fg-dim); font-weight: 400; margin-left: auto; }
+  .section .role {
+    display: inline-block;
+    font-family: var(--mono); font-size: 10px;
+    padding: 1px 6px; border-radius: 3px;
+    margin-right: 8px;
+    background: var(--bg-side);
+  }
+  .section .role.user      { color: var(--cyan); }
+  .section .role.assistant { color: var(--magenta); }
+  .section .role.tool      { color: var(--green); }
+
+  pre.code, pre.text {
+    margin: 0; padding: 10px 14px;
+    background: var(--bg-side);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--mono); font-size: 12px;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--fg);
+    /* native text selection works */
+    user-select: text;
+  }
+  pre.text { white-space: pre-wrap; word-break: break-word; }
+  pre.code .ln { color: var(--fg-faint); display: inline-block; width: 4ch; text-align: right; padding-right: 10px; user-select: none; }
+  pre.code .redact { background: var(--redact-bg); color: var(--redact-fg); padding: 0 4px; border-radius: 2px; }
+  pre.code .str    { color: var(--green); }
+  pre.code .kw     { color: var(--magenta); }
+  pre.code .num    { color: var(--yellow); }
+  pre.code .cmt    { color: var(--fg-faint); font-style: italic; }
+
+  .turn { margin-bottom: 14px; border-left: 2px solid var(--border); padding-left: 12px; }
+  .turn.current { border-left-color: var(--accent); }
+  .turn h3 { font-size: 11px; color: var(--fg-dim); margin: 0 0 8px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .turn.collapsed h3 { color: var(--fg-faint); cursor: pointer; }
+  .turn.collapsed .turn-body { display: none; }
+  .turn.collapsed h3::before { content: "▶ "; }
+  .turn h3::before { content: "▼ "; }
+  .turn h3 .preview { color: var(--fg); font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 6px; font-style: italic; }
+
+  .block { margin: 8px 0; }
+  .block .label { font-size: 10px; color: var(--fg-faint); margin-bottom: 4px; font-family: var(--mono); }
+  .block .label .path { color: var(--accent); }
+  .block .label .arrow.out { color: var(--yellow); }
+  .block .label .arrow.in  { color: var(--green); }
+
+  /* Byte-decomposition stacked bar inside banner */
+  .decomp-bar {
+    display: flex; height: 8px; width: 100%; margin-top: 8px;
+    border-radius: 4px; overflow: hidden; background: var(--bg-side);
+  }
+  .decomp-bar .seg { height: 100%; }
+  .decomp-bar .seg.sys     { background: var(--magenta); }
+  .decomp-bar .seg.history { background: var(--fg-faint); }
+  .decomp-bar .seg.newx    { background: var(--green); }
+  .decomp-bar .seg.over    { background: var(--border); }
+  .decomp-legend {
+    display: flex; gap: 14px; margin-top: 6px;
+    font-family: var(--mono); font-size: 10px; color: var(--fg-dim);
+  }
+  .decomp-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  .decomp-legend .dot.sys { background: var(--magenta); }
+  .decomp-legend .dot.history { background: var(--fg-faint); }
+  .decomp-legend .dot.newx { background: var(--green); }
+  .decomp-legend .dot.over { background: var(--border); }
+
+  /* Sparkline */
+  #spark-wrap {
+    padding: 10px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-side);
+  }
+  #spark-wrap .title {
+    color: var(--fg-dim);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    display: flex; justify-content: space-between;
+  }
+  #spark-wrap .title .total { color: var(--yellow); font-family: var(--mono); }
+  #spark-svg { display: block; width: 100%; height: 44px; }
+  #spark-svg .area { fill: rgba(86, 212, 221, 0.18); }
+  #spark-svg .line { fill: none; stroke: var(--cyan); stroke-width: 1.5; }
+  #spark-svg .max-dot { fill: var(--yellow); }
+  #spark-svg .cur-dot { fill: var(--accent); }
+  #spark-svg .label   { font-family: var(--mono); font-size: 9px; fill: var(--fg-dim); }
+
+  /* Headline banner: "what just went to the cloud" */
+  #headline-banner {
+    padding: 14px 20px;
+    background: linear-gradient(180deg, rgba(248,81,73,0.08), rgba(248,81,73,0.02));
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  #headline-banner .top-row { display: flex; align-items: center; gap: 12px; }
+  #headline-banner.banner-empty { background: var(--bg-side); }
+  #headline-banner .big {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--red);
+  }
+  #headline-banner.no-secrets .big { color: var(--accent); }
+  #headline-banner.banner-empty .big { color: var(--fg-faint); }
+  #headline-banner .lead {
+    color: var(--fg-dim);
+    font-size: 12px;
+  }
+  #headline-banner .files {
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 50%;
+  }
+  #headline-banner .spacer { flex: 1; }
+  #headline-banner .badges { display: flex; gap: 6px; }
+  #headline-banner .badges .b {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  #headline-banner .badges .b.redact { color: var(--yellow); border: 1px solid var(--yellow); }
+  #headline-banner .badges .b.block { color: var(--red); border: 1px solid var(--red); }
+  #headline-banner .badges .b.local { color: var(--green); border: 1px solid var(--green); }
+
+  /* Live flash overlay: new outbound landed */
+  #flash-overlay {
+    position: fixed;
+    top: 24px; left: 50%; transform: translateX(-50%) translateY(-200%);
+    background: var(--bg-card);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 22px;
+    z-index: 1000;
+    font-family: var(--mono);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    transition: transform 0.25s ease-out;
+    pointer-events: none;
+    max-width: 80vw;
+  }
+  #flash-overlay.show { transform: translateX(-50%) translateY(0); }
+  #flash-overlay .glyph { color: var(--accent); margin-right: 8px; font-size: 16px; }
+  #flash-overlay .size { color: var(--yellow); font-weight: 600; }
+  #flash-overlay .target { color: var(--fg); margin-left: 8px; }
+  #flash-overlay .files { color: var(--fg-dim); font-size: 11px; margin-top: 4px; }
+
+  /* Files section in sidebar */
+  #files-section {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-side);
+  }
+  #files-section .header {
+    padding: 10px 16px;
+    color: var(--fg-dim);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #files-section .header:hover { color: var(--fg); }
+  #files-section .header .tri { font-size: 10px; }
+  #files-section.collapsed ul { display: none; }
+  #files-section ul { list-style: none; margin: 0; padding: 0 0 8px 0; }
+  #files-section li {
+    padding: 6px 16px 6px 28px;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex; align-items: baseline; gap: 8px;
+    transition: background 0.1s;
+  }
+  #files-section li:hover { background: var(--bg-hover); }
+  #files-section li .path {
+    color: var(--accent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 1;
+  }
+  #files-section li .bytes { color: var(--yellow); }
+  #files-section li .count { color: var(--fg-faint); font-size: 10px; }
+
+  /* Truncation banner inside code blocks */
+  .trunc-banner {
+    background: rgba(248,81,73,0.12);
+    border-left: 3px solid var(--red);
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--red);
+  }
+
+  /* Inline redaction button */
+  .redact-inline {
+    background: var(--bg-side);
+    border: 1px dashed var(--yellow);
+    color: var(--yellow);
+    padding: 1px 8px;
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: 6px;
+    font-family: var(--mono);
+  }
+  .redact-inline:hover { background: var(--yellow); color: var(--bg); }
+  .original-panel {
+    background: rgba(210,153,34,0.06);
+    border-left: 3px solid var(--yellow);
+    padding: 8px 12px;
+    margin: 6px 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--fg);
+  }
+  .original-panel .label { color: var(--yellow); font-size: 10px; margin-bottom: 4px; }
+
+  #toolbar {
+    padding: 8px 20px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: center;
+  }
+  #toolbar button {
+    background: var(--bg-card); color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+  #toolbar button:hover { background: var(--bg-hover); border-color: var(--accent-dim); }
+  #toolbar button:active { background: var(--bg-active); }
+  #toolbar .spacer { flex: 1; }
+  #toolbar .status { color: var(--fg-dim); font-family: var(--mono); font-size: 11px; }
+  #toolbar .status .toast {
+    color: var(--green); margin-left: 8px;
+    transition: opacity 0.3s;
+  }
+  #toolbar .status .toast.hide { opacity: 0; }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+  }
+  .stat {
+    background: var(--bg-side);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    border-radius: 4px;
+  }
+  .stat .k { color: var(--fg-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .stat .v { color: var(--fg); font-size: 18px; font-family: var(--mono); margin-top: 4px; }
+  .stat .v.green { color: var(--green); }
+  .stat .v.yellow { color: var(--yellow); }
+  .stat .v.red { color: var(--red); }
+</style>
+</head>
+<body>
+<div id="flash-overlay">
+  <span class="glyph">📤</span><span class="size" id="flash-size">0 B</span><span class="target" id="flash-target">→ Anthropic</span>
+  <div class="files" id="flash-files"></div>
+</div>
+<div id="app">
+  <aside id="sidebar">
+    <header>
+      <h1><span class="dot" id="live-dot"></span>AGENT EYES <small id="count">0 exchanges</small></h1>
+      <input id="search" placeholder="filter…" type="text" autocomplete="off">
+    </header>
+    <div id="spark-wrap">
+      <div class="title">
+        <span>session traffic per exchange</span>
+        <span class="total" id="spark-total">0 B total</span>
+      </div>
+      <svg id="spark-svg" viewBox="0 0 200 44" preserveAspectRatio="none"></svg>
+    </div>
+    <div id="files-section" class="collapsed">
+      <div class="header" id="files-toggle">
+        <span class="tri">▶</span>
+        <span>Files sent to cloud</span>
+        <span style="margin-left:auto;color:var(--yellow);font-family:var(--mono);font-size:10px" id="files-total">—</span>
+      </div>
+      <ul id="files-list"></ul>
+    </div>
+    <ul id="exchanges"></ul>
+    <div id="empty" style="display:none">
+      <p>No exchanges captured yet.</p>
+      <p style="font-family:var(--mono);font-size:11px;margin-top:16px">Start the proxy with:<br><code style="color:var(--accent)">occasio claude --eyes</code></p>
+    </div>
+  </aside>
+  <section id="main">
+    <header id="main-header">
+      <span class="title" id="m-title">—</span>
+      <span class="meta" id="m-meta"></span>
+    </header>
+    <div id="headline-banner" class="banner-empty">
+      <div class="top-row">
+        <span class="big" id="hb-bytes">0 B</span>
+        <span class="lead">sent to Anthropic</span>
+        <span class="files" id="hb-files">—</span>
+        <span class="spacer"></span>
+        <span class="badges" id="hb-badges"></span>
+      </div>
+      <div class="decomp-bar" id="decomp-bar"></div>
+      <div class="decomp-legend" id="decomp-legend"></div>
+    </div>
+    <div id="tabs">
+      <button data-tab="request" class="active">Request</button>
+      <button data-tab="response">Response <span class="count" id="t-response"></span></button>
+      <button data-tab="tools">Tools <span class="count" id="t-tools"></span></button>
+      <button data-tab="diff">Diff <span class="count" id="t-diff"></span></button>
+      <button data-tab="headers">Headers</button>
+      <button data-tab="raw">Raw <span class="count" id="t-raw"></span></button>
+      <button data-tab="stats">Stats</button>
+    </div>
+    <div id="toolbar">
+      <button id="copy-btn">📋 Copy exchange</button>
+      <button id="prev-btn">← Prev</button>
+      <button id="next-btn">Next →</button>
+      <div class="spacer"></div>
+      <span class="status" id="status">—<span class="toast hide" id="toast"></span></span>
+    </div>
+    <div id="content"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ── State ──
+  const state = {
+    exchanges: [],     // sidebar metadata
+    current: null,     // full payload
+    currentSeq: null,
+    tab: 'request',
+    filter: '',
+    showAllTurns: false,
+    sectionsCollapsed: { system: true, reminders: true },
+    demo: false,
+    autoFollow: true,
+    expandedGroups: new Set(),
+  };
+
+  // ── DOM helpers ──
+  const $ = (s) => document.querySelector(s);
+  const escapeHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const fmtBytes = (n) => {
+    if (n == null) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    return (n/(1024*1024)).toFixed(2) + ' MB';
+  };
+  const fmtTime = (ts) => {
+    const m = String(ts || '').match(/T(\d\d):(\d\d):(\d\d)/);
+    return m ? m[1]+':'+m[2]+':'+m[3] : '--:--:--';
+  };
+
+  // ── Loaders ──
+  async function loadList() {
+    try {
+      const r = await fetch('/api/exchanges');
+      const j = await r.json();
+      state.exchanges = j.exchanges || [];
+      state.demo = !!j.demo;
+      renderSidebar();
+      $('#live-dot').className = 'dot' + (state.demo ? ' demo' : (state.exchanges.length ? '' : ' idle'));
+      $('#count').textContent = state.exchanges.length + ' exchange' + (state.exchanges.length === 1 ? '' : 's');
+      if (state.demo) $('#count').textContent += ' (demo)';
+      // Auto-select latest if nothing selected
+      if (state.exchanges.length && state.currentSeq == null) {
+        selectExchange(state.exchanges[state.exchanges.length-1].seq);
+      }
+    } catch (e) { console.error(e); }
+  }
+
+  async function loadExchange(seq) {
+    try {
+      const r = await fetch('/api/exchanges/' + seq);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  }
+
+  async function selectExchange(seq) {
+    state.currentSeq = seq;
+    state.current = await loadExchange(seq);
+    renderSidebar();
+    renderMain();
+  }
+
+  // ── Render: sidebar (grouped by turn) ──
+  // A "turn" is a contiguous run of exchanges that share the same
+  // promptPreview (i.e. the agent's tool-loop for one user question).
+  function groupExchanges(list) {
+    const groups = [];
+    for (const e of list) {
+      const key = e.promptPreview || '(no prompt)';
+      const top = groups[groups.length - 1];
+      if (top && top.key === key) top.items.push(e);
+      else groups.push({ key, items: [e] });
+    }
+    return groups;
+  }
+
+  function renderSidebar() {
+    const ul = $('#exchanges');
+    const empty = $('#empty');
+    if (!state.exchanges.length) { ul.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    const filt = state.filter.toLowerCase();
+    const filtered = filt
+      ? state.exchanges.filter(e =>
+          (e.promptPreview || '').toLowerCase().includes(filt) ||
+          (e.responseText || '').toLowerCase().includes(filt) ||
+          ('#'+e.seq).includes(filt))
+      : state.exchanges;
+
+    const groups = groupExchanges(filtered);
+    // newest group first
+    groups.reverse();
+
+    let html = '';
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi];
+      const totalOut = g.items.reduce((s, e) => s + (e.bytesOut || 0), 0);
+      const totalIn  = g.items.reduce((s, e) => s + (e.bytesIn  || 0), 0);
+      const totalTools = g.items.reduce((s, e) => s + (e.toolUses || 0), 0);
+      const totalRedact = g.items.reduce((s, e) => s + (e.redactions || 0), 0);
+      const containsActive = g.items.some(e => e.seq === state.currentSeq);
+      // Default expand: most recent group OR the group containing current selection
+      const expandedSet = state.expandedGroups;
+      if (!expandedSet.has(g.key)) {
+        if (gi === 0 || containsActive) expandedSet.add(g.key);
+      }
+      const expanded = expandedSet.has(g.key);
+      const lastTs = g.items[g.items.length - 1].ts;
+
+      html += `<li class="group ${expanded ? 'expanded' : 'collapsed'}" data-key="${escapeHtml(g.key)}">
+        <div class="group-header">
+          <span class="tri">${expanded ? '▼' : '▶'}</span>
+          <span class="group-prompt">${escapeHtml(g.key)}</span>
+          <span class="group-meta">${g.items.length} ex · ${fmtBytes(totalOut)} → · ← ${fmtBytes(totalIn)}${totalTools ? ' · ' + totalTools + ' tools' : ''}${totalRedact ? ' · ' + totalRedact + ' redact' : ''}</span>
+        </div>
+        <ul class="group-items">`;
+      // newest exchange first within group
+      for (const e of g.items.slice().reverse()) {
+        const active = e.seq === state.currentSeq ? ' active' : '';
+        html += `<li class="ex${active}" data-seq="${e.seq}">
+          <div class="row1">
+            <span class="seq">#${e.seq}</span>
+            <span class="time">${fmtTime(e.ts)}</span>
+            <span class="bytes">${fmtBytes(e.bytesOut)} → · ← ${fmtBytes(e.bytesIn)}</span>
+          </div>
+          <div class="row3">
+            ${e.toolUses ? `<span class="badge t">${e.toolUses} tools</span>` : ''}
+            ${e.redactions ? `<span class="badge r">${e.redactions} redact</span>` : ''}
+            ${e.blocked ? `<span class="badge b">${e.blocked} block</span>` : ''}
+            ${e.stopReason ? `<span class="badge">${e.stopReason}</span>` : ''}
+            ${!e.stopReason && !e.bytesIn ? `<span class="badge" style="color:var(--accent)">in-flight</span>` : ''}
+          </div>
+        </li>`;
+      }
+      html += `</ul></li>`;
+    }
+    ul.innerHTML = html;
+
+    for (const li of ul.querySelectorAll('li.ex')) {
+      li.addEventListener('click', () => selectExchange(parseInt(li.dataset.seq, 10)));
+    }
+    for (const h of ul.querySelectorAll('.group-header')) {
+      h.addEventListener('click', () => {
+        const li = h.parentElement;
+        const key = li.dataset.key;
+        if (state.expandedGroups.has(key)) state.expandedGroups.delete(key);
+        else state.expandedGroups.add(key);
+        renderSidebar();
+      });
+    }
+    renderSparkline();
+  }
+
+  // ── Byte-decomposition: how big is each part of an outbound ──
+  // Returns { system, history, lastTurn, overhead, total } in bytes.
+  // history = all messages except the last; lastTurn = bytes of the last
+  // message (the genuinely new content this round-trip carries); overhead =
+  // total - (system + messages) — JSON framing, tool definitions, headers
+  // that travel inside the body, anything we don't categorize.
+  function decomposeBytes(p) {
+    if (!p) return { system: 0, history: 0, lastTurn: 0, overhead: 0, total: 0 };
+    const total = p.byteCount?.after || 0;
+    const system = p.system?.bytes || 0;
+    const messages = p.messages || [];
+    let messagesBytes = 0;
+    const perMsg = messages.map(m => {
+      let b = 0;
+      for (const blk of m.blocks || []) {
+        if (blk.kind === 'text')         b += (blk.bytes || (blk.text || '').length);
+        else if (blk.kind === 'tool_use')    b += JSON.stringify(blk.input || {}).length + (blk.toolName || '').length + 30;
+        else if (blk.kind === 'tool_result') b += (blk.bytes || (blk.text || '').length);
+        else b += 20;
+      }
+      return b;
+    });
+    messagesBytes = perMsg.reduce((s, x) => s + x, 0);
+    const lastTurn = perMsg.length ? perMsg[perMsg.length - 1] : 0;
+    const history = Math.max(0, messagesBytes - lastTurn);
+    // Whatever's left after system + all messages is JSON framing + tool defs
+    // that Claude Code packs into the body (huge — multiple KB of schema).
+    const overhead = Math.max(0, total - system - messagesBytes);
+    return { system, history, lastTurn, overhead, total };
+  }
+
+  function renderDecomposition(d) {
+    const bar = $('#decomp-bar');
+    const leg = $('#decomp-legend');
+    if (!d || !d.total) {
+      bar.innerHTML = ''; leg.innerHTML = '';
+      return;
+    }
+    const pct = (n) => Math.max(0, Math.min(100, (n / d.total) * 100));
+    const segs = [
+      { cls: 'sys',     bytes: d.system,   pct: pct(d.system),   label: 'system' },
+      { cls: 'history', bytes: d.history,  pct: pct(d.history),  label: 'history (replay)' },
+      { cls: 'newx',    bytes: d.lastTurn, pct: pct(d.lastTurn), label: 'new this turn' },
+      { cls: 'over',    bytes: d.overhead, pct: pct(d.overhead), label: 'tools/framing' },
+    ];
+    bar.innerHTML = segs.map(s => `<div class="seg ${s.cls}" style="width:${s.pct}%" title="${s.label}: ${fmtBytes(s.bytes)}"></div>`).join('');
+    leg.innerHTML = segs.map(s => `<span><span class="dot ${s.cls}"></span>${s.label} <span style="color:var(--fg)">${fmtBytes(s.bytes)}</span> <span style="color:var(--fg-faint)">(${s.pct.toFixed(0)}%)</span></span>`).join('');
+  }
+
+  // ── Sparkline of session traffic ──
+  function renderSparkline() {
+    const svg = $('#spark-svg');
+    const total = $('#spark-total');
+    const items = state.exchanges.slice();
+    if (items.length === 0) {
+      svg.innerHTML = '<text x="100" y="26" text-anchor="middle" class="label">no exchanges yet</text>';
+      total.textContent = '0 B total';
+      return;
+    }
+    const W = 200, H = 44, padX = 4, padY = 4;
+    const max = Math.max(1, ...items.map(e => e.bytesOut || 0));
+    const totalBytes = items.reduce((s, e) => s + (e.bytesOut || 0), 0);
+    total.textContent = fmtBytes(totalBytes) + ' total · max ' + fmtBytes(max);
+    const n = items.length;
+    const xOf = (i) => n <= 1 ? W / 2 : padX + (i / (n - 1)) * (W - padX * 2);
+    const yOf = (b) => H - padY - (b / max) * (H - padY * 2);
+    const pts = items.map((e, i) => [xOf(i), yOf(e.bytesOut || 0)]);
+    const linePath = pts.map(([x, y], i) => (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1)).join(' ');
+    const areaPath = linePath + ' L' + xOf(n - 1).toFixed(1) + ' ' + (H - padY) + ' L' + xOf(0).toFixed(1) + ' ' + (H - padY) + ' Z';
+    // Mark max and current
+    const maxIdx = items.findIndex(e => (e.bytesOut || 0) === max);
+    const curIdx = items.findIndex(e => e.seq === state.currentSeq);
+    let dots = '';
+    if (maxIdx >= 0) {
+      const [x, y] = pts[maxIdx];
+      dots += `<circle cx="${x}" cy="${y}" r="2.5" class="max-dot"><title>peak ${fmtBytes(max)}</title></circle>`;
+    }
+    if (curIdx >= 0 && curIdx !== maxIdx) {
+      const [x, y] = pts[curIdx];
+      dots += `<circle cx="${x}" cy="${y}" r="2.5" class="cur-dot"><title>current</title></circle>`;
+    }
+    svg.innerHTML = `<path d="${areaPath}" class="area"/><path d="${linePath}" class="line"/>${dots}`;
+  }
+
+  // ── Headline banner: "what just went to the cloud" ──
+  function renderBanner(p) {
+    const b = $('#headline-banner');
+    if (!p) {
+      b.className = 'banner-empty';
+      $('#hb-bytes').textContent = '—';
+      $('#hb-files').textContent = '';
+      $('#hb-badges').innerHTML = '';
+      $('#headline-banner .lead').textContent = 'select an exchange';
+      renderDecomposition(null);
+      return;
+    }
+    const sent = p.byteCount?.after || 0;
+    const files = extractFilesSent(p);
+    const fileLabel = files.length === 0
+      ? '(no file payloads — system + messages only)'
+      : files.length === 1
+        ? files[0].name
+        : files.length <= 3
+          ? files.map(f => f.name).join(', ')
+          : files.slice(0, 2).map(f => f.name).join(', ') + ` +${files.length - 2} more`;
+    b.className = (p.redactionCount || p.blockedCount) ? 'no-secrets' : '';
+    if (!p.redactionCount && !p.blockedCount) b.className = ''; // red gradient default
+    $('#hb-bytes').textContent = fmtBytes(sent);
+    $('#hb-files').textContent = fileLabel;
+    $('#headline-banner .lead').textContent = 'about to leave / left your machine';
+    const badges = [];
+    if (p.redactionCount) badges.push(`<span class="b redact">${p.redactionCount} redacted</span>`);
+    if (p.blockedCount)   badges.push(`<span class="b block">${p.blockedCount} blocked</span>`);
+    if ((p.localTools || []).length) badges.push(`<span class="b local">${p.localTools.length} stayed local</span>`);
+    $('#hb-badges').innerHTML = badges.join('');
+    // Stacked-bar decomposition under the headline
+    renderDecomposition(decomposeBytes(p));
+  }
+
+  function extractFilesSent(p) {
+    // Walk the SENT body (post-transform), pair tool_use with tool_result by id,
+    // return list of {name, bytes} for files that actually went to cloud.
+    const idToInfo = new Map();
+    for (const m of p.messages || []) {
+      for (const b of m.blocks || []) {
+        if (b.kind === 'tool_use' && b.toolUseId) {
+          const pth = b.input?.path || b.input?.file_path || b.input?.pattern || b.input?.command;
+          if (pth) idToInfo.set(b.toolUseId, { name: String(pth).split(/[\\/]/).pop(), full: String(pth) });
+        }
+      }
+    }
+    const out = [];
+    for (const m of p.messages || []) {
+      for (const b of m.blocks || []) {
+        if (b.kind === 'tool_result' && b.toolUseId) {
+          const info = idToInfo.get(b.toolUseId);
+          if (info) out.push({ name: info.name, full: info.full, bytes: b.bytes || 0 });
+        }
+      }
+    }
+    return out;
+  }
+
+  // ── Render: main ──
+  function renderMain() {
+    const p = state.current;
+    renderBanner(p);
+    if (!p) {
+      $('#m-title').textContent = '—';
+      $('#m-meta').textContent = '';
+      $('#content').innerHTML = '<div style="color:var(--fg-dim);padding:40px;text-align:center">Select an exchange from the sidebar.</div>';
+      return;
+    }
+    $('#m-title').textContent = `OUTBOUND #${p.seq} → api.anthropic.com`;
+    const usage = p.response?.usage
+      ? ` · ${(p.response.usage.input_tokens||0)+(p.response.usage.cache_read_input_tokens||0)} in · ${p.response.usage.output_tokens||0} out`
+      : '';
+    $('#m-meta').textContent =
+      `${fmtTime(p.ts)}  ·  ${fmtBytes(p.byteCount?.after)} → cloud  ·  ${p.redactionCount||0} redacted  ·  ${p.blockedCount||0} blocked  ·  ${p.model || '?'}${usage}`;
+    // tab counters
+    $('#t-response').textContent = p.response ? '' : '—';
+    $('#t-raw').textContent = p.responseRaw ? '' : '—';
+
+    // Tab counters
+    $('#t-tools').textContent = (p.localTools && p.localTools.length) ? p.localTools.length : '—';
+    const diffCount = countDiffBlocks(p);
+    $('#t-diff').textContent = diffCount > 0 ? diffCount : '—';
+
+    if (state.tab === 'request') $('#content').innerHTML = renderRequest(p);
+    else if (state.tab === 'response') $('#content').innerHTML = renderResponse(p);
+    else if (state.tab === 'tools') $('#content').innerHTML = renderTools(p);
+    else if (state.tab === 'diff') $('#content').innerHTML = renderDiff(p);
+    else if (state.tab === 'headers') $('#content').innerHTML = renderHeaders(p);
+    else if (state.tab === 'raw') $('#content').innerHTML = renderRaw(p);
+    else if (state.tab === 'stats') $('#content').innerHTML = renderStats(p);
+    wireSections();
+    wireContentLoaders();
+  }
+
+  // ── lazy content fetcher with cache + truncation awareness ──
+  const contentCache = new Map(); // ref → {text, truncated, bytes}
+  async function fetchContent(ref) {
+    if (!ref) return null;
+    if (contentCache.has(ref)) return contentCache.get(ref);
+    try {
+      const r = await fetch('/api/content/' + ref);
+      if (!r.ok) return null;
+      const text = await r.text();
+      const truncated = r.headers.get('X-Content-Truncated') === '1';
+      const bytes = parseInt(r.headers.get('X-Content-Bytes') || '0', 10);
+      const out = { text, truncated, bytes };
+      contentCache.set(ref, out);
+      return out;
+    } catch { return null; }
+  }
+
+  // ── Files sidebar section ──
+  async function loadFiles() {
+    try {
+      const r = await fetch('/api/files');
+      if (!r.ok) return;
+      const j = await r.json();
+      const files = j.files || [];
+      const ul = $('#files-list');
+      $('#files-total').textContent = files.length ? fmtBytes(j.totalBytes || 0) : '—';
+      ul.innerHTML = files.slice(0, 50).map(f => {
+        const short = f.path.split(/[\\/]/).pop() || f.path;
+        return `<li data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)} — ${f.count}× in exchanges ${(f.exchanges || []).join(',')}">
+          <span class="path">${escapeHtml(short)}</span>
+          <span class="bytes">${fmtBytes(f.bytes)}</span>
+          <span class="count">${f.count}×</span>
+        </li>`;
+      }).join('');
+      for (const li of ul.querySelectorAll('li')) {
+        li.addEventListener('click', () => {
+          state.filter = li.dataset.path;
+          $('#search').value = li.dataset.path;
+          renderSidebar();
+        });
+      }
+    } catch { /* ignore */ }
+  }
+  $('#files-toggle').addEventListener('click', () => {
+    $('#files-section').classList.toggle('collapsed');
+    const collapsed = $('#files-section').classList.contains('collapsed');
+    $('#files-toggle .tri').textContent = collapsed ? '▶' : '▼';
+    if (!collapsed) loadFiles();
+  });
+
+  // ── Live flash overlay on new exchange arrival ──
+  let flashTimer = null;
+  function flashNewExchange(payload) {
+    if (!payload) return;
+    const sent = payload.byteCount?.after || 0;
+    const files = extractFilesSent(payload);
+    $('#flash-size').textContent = fmtBytes(sent);
+    $('#flash-target').textContent = '→ Anthropic';
+    $('#flash-files').textContent = files.length
+      ? files.slice(0, 3).map(f => f.name).join(', ') + (files.length > 3 ? ` +${files.length - 3}` : '')
+      : `(${(payload.messages || []).length} messages, no file payloads)`;
+    const fo = $('#flash-overlay');
+    fo.classList.add('show');
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => fo.classList.remove('show'), 1800);
+  }
+
+  // Click "view original" → fetch originalBody, find matching tool_result by id, inline-show
+  async function showOriginalFor(tuid, targetId) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    if (target.dataset.loaded === '1') {
+      target.style.display = target.style.display === 'none' ? '' : 'none';
+      return;
+    }
+    target.innerHTML = '<div class="label">loading original…</div>';
+    target.style.display = '';
+    const data = await fetchContent(state.current.originalBodyRef);
+    if (!data) { target.innerHTML = '<div class="label" style="color:var(--red)">load failed</div>'; return; }
+    let orig;
+    try { orig = JSON.parse(data.text); } catch { target.innerHTML = '<div class="label" style="color:var(--red)">parse failed</div>'; return; }
+    // Walk messages, find tool_result matching tuid
+    let found = null;
+    for (const m of orig.messages || []) {
+      if (!Array.isArray(m.content)) continue;
+      for (const blk of m.content) {
+        if (blk && blk.type === 'tool_result' && blk.tool_use_id === tuid) {
+          found = typeof blk.content === 'string'
+            ? blk.content
+            : Array.isArray(blk.content)
+              ? blk.content.map(x => x?.text || '').join('')
+              : '';
+        }
+      }
+    }
+    if (found == null) {
+      target.innerHTML = '<div class="label">no match in original</div>';
+      return;
+    }
+    target.innerHTML = '<div class="label">ORIGINAL (stayed local, before transform):</div>' + escapeHtml(found);
+    target.dataset.loaded = '1';
+  }
+
+  function wireContentLoaders() {
+    for (const el of document.querySelectorAll('[data-original-tuid]')) {
+      el.addEventListener('click', () => showOriginalFor(el.dataset.originalTuid, el.dataset.target));
+    }
+    for (const el of document.querySelectorAll('[data-content-ref]')) {
+      el.addEventListener('click', async () => {
+        const ref = el.dataset.contentRef;
+        const target = document.getElementById(el.dataset.target);
+        if (!target) return;
+        if (target.dataset.loaded === '1') {
+          target.style.display = target.style.display === 'none' ? '' : 'none';
+          el.querySelector('.tri').textContent = target.style.display === 'none' ? '▶' : '▼';
+          return;
+        }
+        target.innerHTML = '<div style="color:var(--fg-dim);padding:10px">Loading…</div>';
+        target.style.display = '';
+        el.querySelector('.tri').textContent = '▼';
+        const data = await fetchContent(ref);
+        if (data == null) {
+          target.innerHTML = '<div style="color:var(--red);padding:10px">Failed to load.</div>';
+          return;
+        }
+        const trunc = data.truncated ? `<div class="trunc-banner">⚠ truncated — only first ${fmtBytes(data.text.length)} of ${fmtBytes(data.bytes)} shown (content cap)</div>` : '';
+        target.innerHTML = trunc + renderCodeBlock(data.text);
+        target.dataset.loaded = '1';
+      });
+    }
+  }
+
+  function countDiffBlocks(p) {
+    if (!p || !p.originalBodyRef) return 0;
+    // We can't synchronously diff (original is on the server), so just return
+    // an approximate hint: number of redactions + LAO drops + shaping events.
+    return (p.redactionCount || 0) + ((p.laoDroppedContent || []).length) + (p.blockedCount || 0);
+  }
+
+  function highlight(code) {
+    // Cheap line-by-line highlighter — strings, numbers, keywords, comments.
+    // Operates on already-escaped HTML so we don't double-encode.
+    return escapeHtml(code)
+      .replace(/(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)/g, '<span class="cmt">$1</span>')
+      .replace(/('[^'\n]*'|"[^"\n]*"|`[^`\n]*`)/g, '<span class="str">$1</span>')
+      .replace(/\b(const|let|var|function|return|if|else|for|while|async|await|await|class|new|throw|try|catch|import|export|from|require|module|true|false|null|undefined|this|def|self|None|True|False|elif|lambda|with|raise)\b/g, '<span class="kw">$1</span>')
+      .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="num">$1</span>')
+      .replace(/(\[REDACTED[^\]]*\])/g, '<span class="redact">$1</span>');
+  }
+
+  function renderCodeBlock(text) {
+    if (!text) return '<pre class="code"><span class="cmt">(empty)</span></pre>';
+    const lines = text.split('\n');
+    const numbered = lines.map((ln, i) => `<span class="ln">${i+1}</span>${highlight(ln)}`).join('\n');
+    return `<pre class="code">${numbered}</pre>`;
+  }
+
+  function renderTextBlock(text) {
+    if (!text) return '<pre class="text"><span class="cmt">(empty)</span></pre>';
+    return `<pre class="text">${escapeHtml(text)}</pre>`;
+  }
+
+  function groupTurns(messages) {
+    const turns = [];
+    for (const m of messages || []) {
+      const isUser = m.role === 'user';
+      const hasUserText = isUser && (m.blocks || []).some(b => b.kind === 'text' && b.text && b.text.trim());
+      if (hasUserText || !turns.length) {
+        const ft = (m.blocks || []).find(b => b.kind === 'text' && b.text && b.text.trim());
+        turns.push({ prompt: ft ? ft.text.trim() : '(no prompt)', messages: [m] });
+      } else {
+        turns[turns.length-1].messages.push(m);
+      }
+    }
+    return turns;
+  }
+
+  function stripReminders(text) {
+    if (!text) return { main: '', reminders: [] };
+    const reminders = [];
+    const main = text.replace(/<system-reminder>([\s\S]*?)<\/system-reminder>/g, (_m, b) => { reminders.push(b.trim()); return ''; }).trim();
+    return { main, reminders };
+  }
+
+  function renderRequest(p) {
+    let html = '';
+    // System
+    if (p.system?.text) {
+      const sc = state.sectionsCollapsed.system ? ' collapsed' : '';
+      html += `<div class="section${sc}" data-section="system">
+        <header><span class="triangle">▼</span> system prompt <small>${fmtBytes(p.system.bytes)}</small></header>
+        <div class="body">${renderTextBlock(p.system.text)}</div>
+      </div>`;
+    }
+    // Messages → grouped into turns
+    const turns = groupTurns(p.messages);
+    html += `<div class="section" data-section="messages">
+      <header><span class="triangle">▼</span> messages <small>${p.messages?.length || 0} blocks in ${turns.length} turn${turns.length===1?'':'s'}</small></header>
+      <div class="body">`;
+    const lastIdx = turns.length - 1;
+    for (let ti = 0; ti < turns.length; ti++) {
+      const isLast = ti === lastIdx;
+      const collapsed = !state.showAllTurns && !isLast && turns.length > 1;
+      html += `<div class="turn${isLast?' current':''}${collapsed?' collapsed':''}" data-turn="${ti}">
+        <h3>Turn ${ti+1}${isLast && turns.length>1?' (current)':''}${collapsed ? '<span class="preview">"' + escapeHtml(turns[ti].prompt.split('\\n')[0].slice(0,120)) + '"</span>' : ''}</h3>
+        <div class="turn-body">${renderTurnBody(turns[ti])}</div>
+      </div>`;
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderTurnBody(turn) {
+    let out = '';
+    for (const m of turn.messages) {
+      for (const b of m.blocks || []) {
+        if (b.kind === 'text') {
+          const split = stripReminders(b.text);
+          if (split.main) {
+            out += `<div class="block"><div class="label"><span class="role ${m.role}">${m.role}</span></div>${renderTextBlock(split.main)}</div>`;
+          }
+          for (const rem of split.reminders) {
+            const sc = state.sectionsCollapsed.reminders ? ' collapsed' : '';
+            out += `<div class="section${sc}" data-section="reminders" style="margin:8px 0">
+              <header><span class="triangle">▼</span> system-reminder <small>${fmtBytes(rem.length)}</small></header>
+              <div class="body">${renderTextBlock(rem)}</div>
+            </div>`;
+          }
+        } else if (b.kind === 'tool_use') {
+          const p = b.input?.path || b.input?.file_path || b.input?.pattern || b.input?.command || '';
+          out += `<div class="block"><div class="label">
+            <span class="role ${m.role}">${m.role}</span>
+            <span class="arrow out">→</span> <span class="role tool">${b.toolName}</span>
+            ${p ? '<span class="path">'+escapeHtml(p)+'</span>' : ''}
+          </div>${b.input ? renderTextBlock(JSON.stringify(b.input, null, 2)) : ''}</div>`;
+        } else if (b.kind === 'tool_result') {
+          const text = b.text || '';
+          const hasRedact = /\[REDACTED[^\]]*\]|\[file relevance/.test(text);
+          const haveOriginal = !!(state.current && state.current.originalBodyRef);
+          const tuid = b.toolUseId || '';
+          const annotateBtn = (hasRedact && haveOriginal && tuid)
+            ? `<button class="redact-inline" data-original-tuid="${tuid}" data-target="orig-${tuid}">view original</button>`
+            : '';
+          out += `<div class="block"><div class="label">
+            <span class="role ${m.role}">${m.role}</span>
+            <span class="arrow in">←</span> tool_result <small style="color:var(--fg-faint)">(${fmtBytes(b.bytes)}${b.isError?', ERROR':''})</small>
+            ${annotateBtn}
+          </div>
+          <div id="orig-${tuid}" class="original-panel" style="display:none"></div>
+          ${renderCodeBlock(text)}</div>`;
+        } else {
+          out += `<div class="block"><div class="label">[${escapeHtml(b.kind)} block]</div></div>`;
+        }
+      }
+    }
+    return out;
+  }
+
+  function renderResponse(p) {
+    if (!p.response) return '<div style="color:var(--fg-dim);padding:20px">No response captured for this exchange yet.</div>';
+    const r = p.response;
+    let html = `<div class="section"><header><span class="triangle">▼</span> assistant response <small>${r.model || ''}${r.stopReason ? ' · ' + r.stopReason : ''}</small></header><div class="body">`;
+    for (const b of r.blocks || []) {
+      if (b.kind === 'text') {
+        html += `<div class="block">${renderTextBlock(b.text)}</div>`;
+      } else if (b.kind === 'tool_use') {
+        const p = b.input?.path || b.input?.file_path || b.input?.pattern || b.input?.command || '';
+        html += `<div class="block"><div class="label">
+          <span class="arrow out">→</span> <span class="role tool">${b.toolName}</span>
+          ${p ? '<span class="path">'+escapeHtml(p)+'</span>' : ''}
+        </div>${b.input ? renderTextBlock(JSON.stringify(b.input, null, 2)) : ''}</div>`;
+      } else {
+        html += `<div class="block"><div class="label">[${escapeHtml(b.kind)}]</div></div>`;
+      }
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderTools(p) {
+    const tools = p.localTools || [];
+    if (!tools.length) {
+      return '<div style="color:var(--fg-dim);padding:20px">No local tool calls captured for this exchange.<br><br><small>Tools are captured when the interceptor handles them locally (Read/Glob/Grep/Bash with --eyes enabled).</small></div>';
+    }
+    let html = '<div style="margin-bottom:12px;color:var(--fg-dim);font-size:11px">Click any tool to load its output bytes from the content store.</div>';
+    for (let i = 0; i < tools.length; i++) {
+      const t = tools[i];
+      const distillBadge = t.distilled ? `<span class="badge t" style="background:transparent;border:1px solid var(--yellow);color:var(--yellow);padding:1px 6px;border-radius:3px;font-size:10px;margin-left:6px">✂ distilled · saved ${t.distillSaved || 0} tok</span>` : '';
+      const preventBadge = t.preventionReason ? `<span class="badge" style="background:transparent;border:1px solid var(--red);color:var(--red);padding:1px 6px;border-radius:3px;font-size:10px;margin-left:6px">${t.preventionReason}</span>` : '';
+      const targetId = 'tool-out-' + i;
+      const hasOutput = !!t.outputRef;
+      const hasRaw = !!t.rawContentRef;
+      html += `<div class="section" style="margin-bottom:10px">
+        <header${hasOutput ? ' data-content-ref="'+t.outputRef+'" data-target="'+targetId+'"' : ''} style="${hasOutput ? '' : 'cursor:default'}">
+          <span class="tri">${hasOutput ? '▶' : '·'}</span>
+          <span class="role tool">${escapeHtml(t.tool)}</span>
+          <span style="color:var(--accent);font-family:var(--mono);font-size:12px">${escapeHtml(t.cmd || '')}</span>
+          <small>${fmtBytes(t.bytes)}${t.exitCode != null ? ' · exit ' + t.exitCode : ''}${distillBadge}${preventBadge}</small>
+        </header>
+        <div class="body">
+          <div id="${targetId}" style="display:none"></div>
+          ${hasRaw ? `<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--fg-dim);font-size:11px">pre-distill original (${escapeHtml(t.distillLabel||'')})</summary>
+            <div data-content-ref="${t.rawContentRef}" data-target="${targetId}-raw" style="display:none"></div>
+            <div id="${targetId}-raw" style="display:none;margin-top:8px"></div>
+          </details>` : ''}
+          ${!hasOutput ? '<div style="color:var(--fg-faint);font-size:11px">No output captured (proxy may have run without --eyes for this exchange).</div>' : ''}
+        </div>
+      </div>`;
+    }
+    return html;
+  }
+
+  function renderHeaders(p) {
+    function renderTable(label, h) {
+      if (!h || Object.keys(h).length === 0) {
+        return `<div class="section"><header><span class="triangle">▼</span> ${label} <small>(none)</small></header><div class="body" style="color:var(--fg-dim);padding:14px">No headers captured.</div></div>`;
+      }
+      const rows = Object.entries(h).sort((a,b) => a[0].localeCompare(b[0])).map(([k, v]) => {
+        const masked = v === '[REDACTED]';
+        const valStyle = masked ? 'color:var(--yellow)' : 'color:var(--fg)';
+        return `<tr><td style="color:var(--fg-dim);padding:4px 14px 4px 0;vertical-align:top;white-space:nowrap;font-family:var(--mono);font-size:11px">${escapeHtml(k)}</td><td style="${valStyle};font-family:var(--mono);font-size:11px;padding:4px 0;word-break:break-all">${escapeHtml(v)}</td></tr>`;
+      }).join('');
+      return `<div class="section"><header><span class="triangle">▼</span> ${label} <small>${Object.keys(h).length} headers</small></header><div class="body"><table style="border-collapse:collapse;width:100%">${rows}</table></div></div>`;
+    }
+    return renderTable('Request headers', p.requestHeaders) +
+           renderTable('Response headers', p.responseHeaders);
+  }
+
+  function renderDiff(p) {
+    if (!p.originalBodyRef) {
+      return '<div style="color:var(--fg-dim);padding:20px">No pre-transform snapshot for this exchange.<br><br><small>Diff view requires --eyes to be active so the proxy can snapshot the body before redactions/strips/LAO drops.</small></div>';
+    }
+    const sentBytes = p.byteCount?.after || 0;
+    const origBytes = p.originalBytes || 0;
+    const delta = origBytes - sentBytes;
+    const deltaStr = delta > 0 ? `−${fmtBytes(delta)}` : (delta < 0 ? `+${fmtBytes(-delta)}` : 'no size change');
+    let html = `<div class="section"><header><span class="triangle">▼</span> Transform summary <small>${fmtBytes(origBytes)} → ${fmtBytes(sentBytes)} · ${deltaStr}</small></header>
+      <div class="body">
+        <div class="stat-grid">
+          <div class="stat"><div class="k">Original size</div><div class="v">${fmtBytes(origBytes)}</div></div>
+          <div class="stat"><div class="k">Sent size</div><div class="v green">${fmtBytes(sentBytes)}</div></div>
+          <div class="stat"><div class="k">Redactions</div><div class="v ${p.redactionCount ? 'yellow':''}">${p.redactionCount || 0}</div></div>
+          <div class="stat"><div class="k">Blocked strips</div><div class="v ${p.blockedCount ? 'red':''}">${p.blockedCount || 0}</div></div>
+          <div class="stat"><div class="k">LAO drops</div><div class="v">${(p.laoDroppedContent || []).length}</div></div>
+        </div>
+      </div></div>`;
+
+    // LAO-dropped content section: actual bytes that were removed before send
+    if (p.laoDroppedContent && p.laoDroppedContent.length) {
+      html += `<div class="section"><header><span class="triangle">▼</span> LAO-dropped content <small>${p.laoDroppedContent.length} file(s) — full bytes preserved locally</small></header><div class="body">`;
+      for (let i = 0; i < p.laoDroppedContent.length; i++) {
+        const d = p.laoDroppedContent[i];
+        const targetId = 'lao-' + i;
+        html += `<div style="margin-bottom:10px">
+          <div data-content-ref="${d.contentRef}" data-target="${targetId}" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span class="tri" style="color:var(--fg-faint);margin-right:8px">▶</span>
+            <span style="color:var(--accent);font-family:var(--mono);font-size:12px">${escapeHtml(d.path || d.toolUseId || '(unknown)')}</span>
+            <small style="color:var(--fg-dim);margin-left:8px">${fmtBytes(d.bytes)} dropped</small>
+          </div>
+          <div id="${targetId}" style="display:none;margin-top:8px"></div>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Full pre-transform body — click to load + show
+    html += `<div class="section"><header data-content-ref="${p.originalBodyRef}" data-target="orig-body"><span class="tri">▶</span> Full pre-transform request body <small>${fmtBytes(origBytes)} · stored as ${p.originalBodyRef.slice(0,20)}…</small></header>
+      <div class="body">
+        <div id="orig-body" style="display:none"></div>
+        <div style="color:var(--fg-faint);font-size:11px;margin-top:6px">This is what Claude Code sent to the proxy <b>before</b> Occasio applied any redactions, strips, or LAO trims. Click the header above to load the full JSON.</div>
+      </div></div>`;
+
+    return html;
+  }
+
+  function renderRaw(p) {
+    if (!p.responseRaw) return '<div style="color:var(--fg-dim);padding:20px">No raw response bytes stored for this exchange.</div>';
+    return `<div class="section"><header><span class="triangle">▼</span> raw response bytes <small>${fmtBytes(p.responseRaw.bytes)}${p.responseRaw.truncated ? ' (truncated)' : ''}</small></header><div class="body">${renderTextBlock(p.responseRaw.text)}</div></div>`;
+  }
+
+  function renderStats(p) {
+    const u = p.response?.usage || {};
+    const items = [
+      ['Outbound bytes',  fmtBytes(p.byteCount?.after), 'green'],
+      ['Inbound bytes',   fmtBytes(p.responseMeta?.bytes), ''],
+      ['Input tokens',    (u.input_tokens||0)+' (+ '+(u.cache_read_input_tokens||0)+' cached)', ''],
+      ['Output tokens',   (u.output_tokens||0), ''],
+      ['Redactions',      p.redactionCount || 0, p.redactionCount ? 'yellow' : ''],
+      ['Blocked',         p.blockedCount || 0, p.blockedCount ? 'red' : ''],
+      ['Tool calls (out)', (p.response?.blocks || []).filter(b => b.kind === 'tool_use').length, ''],
+      ['Tool results (in)', (p.messages || []).flatMap(m => m.blocks || []).filter(b => b.kind === 'tool_result').length, ''],
+      ['LAO dropped',     (p.laoDropped || []).length, ''],
+      ['Stop reason',     p.response?.stopReason || '—', ''],
+      ['Model',           p.model || p.response?.model || '—', ''],
+      ['Run',             (p.runId || '—').slice(0, 13), ''],
+    ];
+    return '<div class="stat-grid">' + items.map(([k, v, cls]) =>
+      `<div class="stat"><div class="k">${k}</div><div class="v ${cls||''}">${escapeHtml(String(v))}</div></div>`
+    ).join('') + '</div>';
+  }
+
+  // ── Section toggle ──
+  function wireSections() {
+    for (const sec of document.querySelectorAll('.section > header')) {
+      // Headers with data-content-ref are handled by wireContentLoaders —
+      // their click loads bytes inline, not collapse the section.
+      if (sec.hasAttribute('data-content-ref')) continue;
+      sec.addEventListener('click', () => {
+        const parent = sec.parentElement;
+        parent.classList.toggle('collapsed');
+        const key = parent.dataset.section;
+        if (key === 'system')    state.sectionsCollapsed.system    = parent.classList.contains('collapsed');
+        if (key === 'reminders') state.sectionsCollapsed.reminders = parent.classList.contains('collapsed');
+      });
+    }
+    for (const h of document.querySelectorAll('.turn.collapsed h3')) {
+      h.addEventListener('click', () => h.parentElement.classList.remove('collapsed'));
+    }
+  }
+
+  // ── Tabs ──
+  for (const t of document.querySelectorAll('#tabs button')) {
+    t.addEventListener('click', () => {
+      for (const b of document.querySelectorAll('#tabs button')) b.classList.remove('active');
+      t.classList.add('active');
+      state.tab = t.dataset.tab;
+      renderMain();
+    });
+  }
+
+  // ── Toolbar ──
+  $('#copy-btn').addEventListener('click', async () => {
+    const p = state.current;
+    if (!p) return;
+    const txt = textForClipboard(p);
+    try {
+      await navigator.clipboard.writeText(txt);
+      showToast('✓ copied ' + fmtBytes(txt.length));
+    } catch {
+      // Fallback: textarea + execCommand
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); showToast('✓ copied'); } catch { showToast('✗ copy failed'); }
+      document.body.removeChild(ta);
+    }
+  });
+
+  function textForClipboard(p) {
+    const lines = [];
+    lines.push(`# OUTBOUND #${p.seq} → api.anthropic.com`);
+    lines.push(`# ${p.ts}  ·  ${fmtBytes(p.byteCount?.after)}  ·  ${p.redactionCount||0} redacted  ·  ${p.blockedCount||0} blocked`);
+    if (p.model) lines.push(`# model: ${p.model}`);
+    lines.push('');
+    if (p.system?.text) { lines.push('## system'); lines.push(p.system.text); lines.push(''); }
+    for (const m of p.messages || []) {
+      lines.push('## ['+m.role+']');
+      for (const b of m.blocks || []) {
+        if (b.kind === 'text') lines.push(b.text || '');
+        else if (b.kind === 'tool_use') lines.push('→ tool_use '+b.toolName+' '+JSON.stringify(b.input||{}));
+        else if (b.kind === 'tool_result') { lines.push('← tool_result ('+fmtBytes(b.bytes)+')'); if (b.text) lines.push(b.text); }
+      }
+      lines.push('');
+    }
+    if (p.response) {
+      lines.push('## ← [assistant'+(p.response.model?' · '+p.response.model:'')+(p.response.stopReason?' · '+p.response.stopReason:'')+']');
+      for (const b of p.response.blocks || []) {
+        if (b.kind === 'text') lines.push(b.text || '');
+        else if (b.kind === 'tool_use') lines.push('→ tool_use '+b.toolName+' '+JSON.stringify(b.input||{}));
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function showToast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.remove('hide');
+    setTimeout(() => t.classList.add('hide'), 1800);
+  }
+
+  function nav(delta) {
+    if (!state.exchanges.length) return;
+    const idx = state.exchanges.findIndex(e => e.seq === state.currentSeq);
+    const next = idx + delta;
+    if (next < 0 || next >= state.exchanges.length) return;
+    selectExchange(state.exchanges[next].seq);
+  }
+  $('#prev-btn').addEventListener('click', () => { state.autoFollow = false; nav(-1); });
+  $('#next-btn').addEventListener('click', () => nav(1));
+
+  // ── Search ──
+  $('#search').addEventListener('input', (e) => {
+    state.filter = e.target.value;
+    renderSidebar();
+  });
+
+  // ── Keyboard ──
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft')  { state.autoFollow = false; nav(-1); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { nav(1); e.preventDefault(); }
+    if (e.key === 'j') $('#content').scrollBy({top: 80});
+    if (e.key === 'k') $('#content').scrollBy({top: -80});
+    if (e.key === 'a') { state.showAllTurns = !state.showAllTurns; renderMain(); }
+    if (e.key === '/') { e.preventDefault(); $('#search').focus(); }
+    if (e.key === 'c' && (e.ctrlKey || e.metaKey)) return; // let browser copy selection
+  });
+
+  // ── SSE live updates ──
+  function connectSSE() {
+    let es;
+    try { es = new EventSource('/events'); } catch { setTimeout(connectSSE, 2000); return; }
+    es.addEventListener('exchanges-changed', () => {
+      const wasAtNewest = state.exchanges.length === 0 ||
+        (state.currentSeq === state.exchanges[state.exchanges.length-1]?.seq);
+      const prevSeqs = new Set(state.exchanges.map(e => e.seq));
+      loadList().then(async () => {
+        // Detect a freshly-arrived exchange; flash its bytes/files
+        const fresh = state.exchanges.find(e => !prevSeqs.has(e.seq));
+        if (fresh) {
+          const detail = await loadExchange(fresh.seq);
+          if (detail) flashNewExchange(detail);
+        }
+        if (state.autoFollow && wasAtNewest && state.exchanges.length) {
+          selectExchange(state.exchanges[state.exchanges.length-1].seq);
+        }
+        // Refresh files section if it's open
+        if (!$('#files-section').classList.contains('collapsed')) loadFiles();
+      });
+    });
+    es.onerror = () => { es.close(); setTimeout(connectSSE, 2000); };
+  }
+
+  // ── Boot ──
+  loadList();
+  connectSSE();
+  setInterval(() => {
+    $('#status').firstChild.textContent = state.autoFollow ? 'auto-follow on' : 'auto-follow off — click Next or wait';
+  }, 250);
+})();
+</script>
+</body>
+</html>

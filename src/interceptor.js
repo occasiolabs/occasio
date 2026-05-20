@@ -973,6 +973,9 @@ async function runOneRound(toolBlocks, ctx) {
         distillLabel: r.distillLabel,
         rawContent:   r.rawContent,
         matchCount:   r.matchCount,
+        // Full raw output for Eyes content-store capture (Phase 1 of full
+        // traffic visibility). Audit/ledger paths ignore this field.
+        output:       r.content || null,
       });
       if (r.secrets?.length) secrets.push(...r.secrets);
       if (verbose) {
@@ -1110,6 +1113,11 @@ async function runOneRound(toolBlocks, ctx) {
         distillSaved: distResult.savedTokens,
         distillLabel: distResult.label,
         rawContent:   distResult.rawContent || null,
+        // Full raw output of the local tool (file content, grep matches, etc.)
+        // Used by Eyes capture to put the actual bytes into the content store
+        // so the browser UI can show "what the agent saw". Capture-side caps
+        // at 2 MB. Audit/ledger paths don't consume this field — purely Eyes.
+        output:       rawOutput || null,
         ...(r.transformed && { transformed: true, transform: r.transform }),
         ...(r.secretsRedacted?.length && { secretsRedacted: r.secretsRedacted.length }),
         ...(matchCount !== undefined && { matchCount }),

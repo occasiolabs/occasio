@@ -451,6 +451,12 @@ if (cmd === 'preflight') {
   process.exit(0);
 }
 
+if (cmd === 'eyes') {
+  const r = require('./eyes').run(args.slice(1));
+  if (typeof r === 'number') process.exit(r);
+  return; // long-running TUI; exits via SIGINT
+}
+
 if (cmd === 'demo' && args[1] === 'attest') {
   const { runAttestDemoCli } = require('./demo/attest-demo');
   runAttestDemoCli(args.slice(2)).then(code => process.exit(code))
@@ -732,6 +738,20 @@ if (bgtIdx >= 0) {
 const vIdx = claudeArgs.indexOf('--verbose');
 const LIVE_VERBOSE = vIdx >= 0;
 if (vIdx >= 0) claudeArgs.splice(vIdx, 1);
+
+// --eyes opts into outbound payload capture for `occasio eyes` content mode.
+// Off by default: capture writes the actual messages/tool_results to
+// ~/.occasio/eyes/ which contains real user content. Opt-in only.
+const eyesIdx = claudeArgs.indexOf('--eyes');
+const EYES_CAPTURE = eyesIdx >= 0;
+if (eyesIdx >= 0) claudeArgs.splice(eyesIdx, 1);
+if (EYES_CAPTURE) {
+  const eyesCapture = require('./eyes/capture');
+  eyesCapture.enable();
+  eyesCapture.resetSession();
+  process.stderr.write(`\n  👁  Eyes capture enabled — payloads writing to ${eyesCapture.EYES_DIR}\n`);
+  process.stderr.write(`     View live in another terminal:  \x1b[36mnode bin/occasio.js eyes\x1b[0m\n\n`);
+}
 let sessionCost       = 0;      // running in-memory total for budget enforcement
 let budgetWarnFired   = false;   // fires warning at most once per session
 
@@ -954,7 +974,18 @@ const server = http.createServer((req, res) => {
     // ── Cache injection + LAO context optimization ────────────────────────────
     let forwardBody = body;
     let laoSaved = 0, laoDropped = [];
+    let laoDroppedContent = []; // [{path, bytes, content}] captured at drop time
     let outboundMessageCount = reqBody?.messages?.length || 0;
+    let eyesExchangeFile = null; // populated when --eyes is active; reused on response-end
+    // Snapshot the request body BEFORE any transforms so Eyes can show a
+    // before/after diff. We snapshot the parsed object (so it survives the
+    // JSON.stringify(JSON.parse(...)) deep copy that happens for transforms).
+    let eyesOriginalBody = null;
+    if (EYES_CAPTURE && isMsg && reqBody) {
+      try { eyesOriginalBody = JSON.stringify(reqBody); } catch { /* ignore */ }
+    }
+    // Collect redaction before/after pairs as transforms run.
+    let eyesRedactionDiffs = [];
     if (isMsg && reqBody) {
       try {
         const b = JSON.parse(JSON.stringify(reqBody));
@@ -1126,14 +1157,76 @@ const server = http.createServer((req, res) => {
         // ──────────────────────────────────────────────────────────────────────
 
         // LAO: trim low-relevance file tool_results when context is large (>20k tokens)
+        // For Eyes capture: snapshot the pre-LAO body so we can recover the
+        // content of any tool_result that LAO is about to replace with a
+        // placeholder. The post-LAO body has only `'[file relevance < threshold — dropped]'`.
+        let preLaoSnapshot = null;
+        if (EYES_CAPTURE) {
+          try { preLaoSnapshot = JSON.parse(JSON.stringify(b.messages)); } catch { /* ignore */ }
+        }
         const lao = await optimizeContext(b, process.cwd());
         if (lao.tokensSaved > 0) {
           b.messages = lao.messages;
           laoSaved   = lao.tokensSaved;
           laoDropped = lao.filesDropped;
+          if (preLaoSnapshot) {
+            // Walk pre+post: find tool_result blocks whose content changed to
+            // the placeholder; capture the original bytes for Eyes diff view.
+            const flatten = (msgs) => {
+              const out = [];
+              for (const m of msgs || []) {
+                if (!Array.isArray(m.content)) continue;
+                for (const blk of m.content) {
+                  if (blk && blk.type === 'tool_result') {
+                    out.push({ id: blk.tool_use_id, content: typeof blk.content === 'string'
+                      ? blk.content
+                      : Array.isArray(blk.content) ? blk.content.map(x => x?.text || '').join('') : '' });
+                  }
+                }
+              }
+              return out;
+            };
+            const before = flatten(preLaoSnapshot);
+            const after  = flatten(lao.messages);
+            const afterById = new Map(after.map(x => [x.id, x.content]));
+            for (const b0 of before) {
+              const a0 = afterById.get(b0.id);
+              if (a0 != null && a0 !== b0.content) {
+                laoDroppedContent.push({ tool_use_id: b0.id, bytes: Buffer.byteLength(b0.content), content: b0.content });
+              }
+            }
+          }
         }
         forwardBody = Buffer.from(JSON.stringify(b));
         outboundMessageCount = b.messages?.length ?? outboundMessageCount;
+
+        // Eyes content capture — opt-in. Writes the post-transform outbound
+        // body to ~/.occasio/eyes/ so `occasio eyes` can show exactly what's
+        // about to leave the machine. Captures:
+        //   - the post-transform body (parsed messages in `b`)
+        //   - the original pre-transform body (eyesOriginalBody) for diffs
+        //   - request headers (sanitized: api-key/auth → '[REDACTED]')
+        //   - the LAO-dropped tool_results' full content (for diff)
+        if (EYES_CAPTURE) {
+          try {
+            eyesExchangeFile = require('./eyes/capture').captureOutbound(b, {
+              ts: new Date().toISOString(),
+              runId: currentRunId,
+              method: req.method,
+              url:    req.url,
+              requestHeaders: req.headers,
+              originalBody:   eyesOriginalBody,
+              byteCountBefore: body.length,
+              byteCountAfter:  forwardBody.length,
+              laoDropped,
+              laoDroppedContent,
+              redactionDiffs:  eyesRedactionDiffs,
+              redactionCount: (typeof secretResult !== 'undefined' ? secretResult.redactions.length : 0)
+                            + (typeof shapingResult !== 'undefined' ? shapingResult.shapings.length : 0),
+              blockedCount: (typeof outboundResult !== 'undefined' ? outboundResult.strips.length : 0),
+            });
+          } catch { /* capture must never break the proxy */ }
+        }
       } catch { /* ignore */ }
     }
     if (laoDropped.length > 0) {
@@ -1414,6 +1507,23 @@ const server = http.createServer((req, res) => {
               rawContent: t.rawContent,
             });
           }
+        }
+
+        // Eyes inbound capture — augment the exchange file with the response
+        // so `occasio eyes` shows BOTH halves of the round-trip plus the
+        // local tools the interceptor ran for this exchange.
+        if (EYES_CAPTURE && eyesExchangeFile) {
+          try {
+            require('./eyes/capture').completeExchange(eyesExchangeFile, {
+              responseBytes: rb,
+              responseHeaders: pres.headers,
+              intercepted,
+              statusCode: intercepted ? 200 : pres.statusCode,
+              localTools: (interceptResult && Array.isArray(interceptResult.toolsRun))
+                ? interceptResult.toolsRun
+                : [],
+            });
+          } catch { /* capture must never break the proxy */ }
         }
 
         const rh = intercepted

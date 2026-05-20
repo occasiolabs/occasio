@@ -43,6 +43,8 @@ ${col.b('Run')} ${col.d('— start a session, observe live state')}
   clear --history            ${col.d('(stable)')} Wipe all historical logs
   ledger                     ${col.d('(stable)')} Inspect token ledger (--last N, --summary, --scope)
   dashboard                  ${col.d('(beta)')}   Open live dashboard at http://localhost:3001
+  eyes                       ${col.d('(beta)')}   Browser UI: what the agent is sending/receiving (--demo, --tui, --tools)
+                             ${col.d('       ')}   Capture requires:  occasio claude --eyes
 
 ${col.b('Inspect')} ${col.d('— forensics over what the agent did')}
   replay                     ${col.d('(stable)')} Replay run audit (--last N, --detail, --run <id>)
@@ -92,6 +94,7 @@ ${col.b('Flags:')}
   --dashboard                   Open live dashboard at http://localhost:3001
   --port <N>                    Proxy port (default: auto-assigned by OS)
   --recap                       Print a previous-session banner at startup
+  --eyes                        Capture outbound payloads for 'occasio eyes' content view
   --verbose                     Print live per-request chatter (off by default)
 
 ${col.b('Multi-agent routing:')}
