@@ -1,10 +1,14 @@
 # Occasio
 
-> Cryptographically verifiable behavioral attestation for AI coding agents.
+> See what your AI coding agent actually does — locally, and prove it later if you need to.
 
-When an AI agent writes code in your CI, the question a reviewer or auditor will ask is not *"what did it produce"* — it is *"what did it actually do"*. Which files did it read. Which it was blocked from reading. Which secrets it tried to leak. Which policy was in effect. Whether that record can be trusted six months later.
+Occasio is a local proxy that sits between your AI coding agent (Claude Code, Cline, or anything that talks to the Anthropic API) and the cloud. Every tool call the agent makes — every file it tries to read, every shell command it tries to run — passes through one human-readable policy file you control. You see what's leaving your machine in real time, block what shouldn't happen, and end up with a tamper-evident log that a third party can verify offline months later if you ever need to prove what your agent did.
 
-Occasio sits between the agent and the cloud on your own machine, decides every tool call against one human-readable policy, writes a tamper-evident audit chain of every decision, and produces signed attestations that a third party can verify offline using only `cosign` or a 200-line Python script.
+Nothing leaves your machine that you didn't approve. Nothing about the run can be quietly rewritten afterwards. Same tool, two faces: a dev companion during the day, a signed audit trail when an auditor or reviewer asks *"what did it actually do?"*.
+
+![occasio eyes — live browser view of an outbound exchange, with redacted secrets highlighted in the tool result](docs/img/eyes-demo.png)
+
+*Screenshot: `occasio eyes --demo` against synthetic data — no real paths, no real traffic. The "(demo)" badge top-left is always shown in demo mode.*
 
 ```bash
 npm install -g @occasiolabs/occasio
@@ -19,27 +23,18 @@ The first three demos run against synthetic data so you can see the full pipelin
 
 ---
 
-## What it does, in four layers
+## Two ways to use it
 
-**Layer 1 — Tool-call interception.** A local proxy sits between the agent and the Anthropic API. `Read`, `Glob`, `Grep`, `TodoRead`/`TodoWrite`, and a curated set of read-only shell commands (`cat`, `head`, `git status`, `git log --oneline -N`, `ls`, `find`) run in-process on your machine. The file bytes never enter the outbound request.
+Most people land here for one of these — pick the column that fits and skim accordingly.
 
-**Layer 2 — Policy enforcement.** Every tool call hits one decision: `LOCAL` / `PASS` / `BLOCK` / `TRANSFORM`, driven by [`policy.yml`](policy-templates/dev-default.yml). `deny_paths` is enforced on the realpath-resolved absolute path so symlinks and traversal variants resolve to the same denial. `block_secrets_in_tool_results` redacts API keys and JWTs out of any tool output before it re-enters the prompt. Hot-reload: edits to `policy.yml` take effect on the next call, with a `policy_loaded` row written to the audit chain.
+| | Daily dev work | CI / compliance |
+|---|---|---|
+| Question you're asking | "What is the agent actually sending to Anthropic, and what's it costing me?" | "Prove what the agent did during this run." |
+| Main commands | `occasio eyes`, `occasio dashboard`, `--budget N`, `--eyes` | `occasio attest`, `occasio anomalies`, `occasio audit verify`, `occasio report` |
+| What you get | Live browser UI on `127.0.0.1` — every outbound payload, byte breakdown, redactions in the clear | Signed in-toto attestation + tamper-evident chain, verifiable offline by Node, Python, or `cosign` |
+| Jump to | [Live visibility — for developers](#live-visibility--for-developers) | [Verification](#verification) |
 
-**Layer 3 — Behavioral attestation.** `occasio attest --run-id <uuid>` produces a self-contained JSON predicate that commits to the full audit-chain slice for one agent session: every tool call, every block, every transform, every redacted secret, plus the active policy's SHA-256 hash and rules digest. `--sign` wraps it in an [in-toto Statement v1](https://github.com/in-toto/attestation) and Sigstore-signs it using GitHub Actions OIDC (no key management). The predicate type URI is [`agent-attestation/v1`](spec/agent-attestation/v1/README.md). Two independent reference verifiers ship — Node (`occasio attest verify`) and Python ([`docs/attest_verify.py`](docs/attest_verify.py)) — and the test suite asserts they agree byte-for-byte on the same payload.
-
-**Layer 4 — Anomaly detection (EDR).** `occasio anomalies` runs four detectors over a time window of the audit chain: deny-rate spike, file-read-volume burst, previously-unseen tool-input shape, secret-redaction-rate spike. Severity escalates against your historical baseline — a ×500 deviation from normal triggers HIGH; see [`docs/edr-demo.md`](docs/edr-demo.md) for the reproducible defense-in-depth walkthrough.
-
----
-
-## Why now
-
-Three regulatory drivers, all converging on the same requirement: **runtime evidence of AI-agent behavior must be cryptographically verifiable.**
-
-- **EU AI Act Art. 12** mandates comprehensive automated logging of high-risk AI systems. In effect from 2026 for regulated sectors.
-- **NIST AI RMF (GOVERN, MEASURE, MANAGE families)** is becoming required in US Federal procurement and is influencing FedRAMP AI controls.
-- **SOC 2 Common Criteria** are extending to AI-agent controls — auditors at major firms started asking "show me the agent's tool-call log" in 2026 audits.
-
-There is currently no off-the-shelf product producing a signed, third-party-verifiable artifact for what an AI coding agent did inside your CI. Occasio fills that gap with an open schema (Apache-2.0) and ships the reference implementations for it.
+Both views read the same underlying log. You don't have to pick one — running the proxy gives you both for free.
 
 ---
 
@@ -66,6 +61,42 @@ occasio audit verify            # Re-walk the hash chain end-to-end
 occasio anomalies               # Run EDR detectors over the last 15 minutes
 occasio attest --run-id <uuid>  # Build a behavioral attestation for one session
 ```
+
+---
+
+## Live visibility — for developers
+
+The audit chain and signed attestations answer *"what did the agent do, prove it"* — the auditor's question. Sometimes you also want the simpler one: *"what is the agent doing **right now**?"* What is leaving your machine in this HTTP request. Which files have already gone to Anthropic in this session. What the system prompt looks like. What got redacted before it shipped.
+
+`occasio eyes` is a local browser UI on `http://127.0.0.1:3002` that shows exactly that. Capture is opt-in via `--eyes` on the proxy; nothing leaves the machine, all storage stays under `~/.occasio/eyes/`.
+
+```bash
+occasio eyes --demo            # synthetic data, no proxy needed (10-second tour)
+occasio claude --eyes          # then in another terminal:
+occasio eyes                   # browser tab opens automatically
+```
+
+What you see:
+
+- **Sidebar grouped by user prompt** — one "read the readme" expands into the 3–6 HTTP round-trips it actually took (Claude Code's agentic loop made visible).
+- **Session sparkline + per-file aggregate** — outbound size over time, which files have been sent to the cloud and how often.
+- **Per-exchange byte-decomposition** — stacked bar showing system / history (replay) / new-this-turn / tools-framing. The "small" request that's 124 KB is suddenly explainable: 108 KB of it is the same system prompt every time.
+- **Tabs**: Request · Response · **Tools** (full local tool outputs — Read/Glob/Grep/Bash bytes that the interceptor handled locally and never sent up) · **Diff** (pre-transform vs sent — see the literal secrets that were redacted, in the clear, locally) · **Headers** · **Raw** SSE bytes · **Stats**.
+- **Live flash overlay** when a new outbound lands — useful both for understanding and for demos.
+
+### Dashboard vs. Eyes
+
+Both run as local browser UIs but answer different questions:
+
+| | `occasio dashboard` (3001) | `occasio eyes` (3002) |
+|---|---|---|
+| Focus | Session-level metrics: cost, savings, tokens | Per-exchange traffic: what went out, what came back |
+| Granularity | Aggregate counters + per-request summary table | Full HTTP bodies, decoded SSE, local tool outputs |
+| Capture needed | No — reads `session.json` + daily logs | Yes — pass `--eyes` to the proxy (opt-in) |
+| Data scope | Metadata only | Full payload bytes (kept locally under `~/.occasio/eyes/`) |
+| Best for | "How much have I spent today?" | "What did the agent actually send to Anthropic?" |
+
+Both live on `127.0.0.1` only. No CORS, no auth, no external network.
 
 ---
 
@@ -113,60 +144,17 @@ Session-level overrides on top of `policy.yml`:
 
 ---
 
-## Live visibility — for developers
+## What it does, in four layers
 
-The four layers above answer *"what did the agent do, prove it"* — the auditor's question. Sometimes you also want the simpler one: *"what is the agent doing **right now**?"* What is leaving your machine in this HTTP request. Which files have already gone to Anthropic in this session. What the system prompt looks like. What got redacted before it shipped.
+Under the hood, four layers do the work — Layers 1–2 every run, Layers 3–4 when you ask for an attestation or run the detectors.
 
-`occasio eyes` is a local browser UI on `http://127.0.0.1:3002` that shows exactly that. Capture is opt-in via `--eyes` on the proxy; nothing leaves the machine, all storage stays under `~/.occasio/eyes/`.
+**Layer 1 — Tool-call interception.** A local proxy sits between the agent and the Anthropic API. `Read`, `Glob`, `Grep`, `TodoRead`/`TodoWrite`, and a curated set of read-only shell commands (`cat`, `head`, `git status`, `git log --oneline -N`, `ls`, `find`) run in-process on your machine. The file bytes never enter the outbound request.
 
-```bash
-occasio eyes --demo            # synthetic data, no proxy needed (10-second tour)
-occasio claude --eyes          # then in another terminal:
-occasio eyes                   # browser tab opens automatically
-```
+**Layer 2 — Policy enforcement.** Every tool call hits one decision: `LOCAL` / `PASS` / `BLOCK` / `TRANSFORM`, driven by [`policy.yml`](policy-templates/dev-default.yml). `deny_paths` is enforced on the realpath-resolved absolute path so symlinks and traversal variants resolve to the same denial. `block_secrets_in_tool_results` redacts API keys and JWTs out of any tool output before it re-enters the prompt. Hot-reload: edits to `policy.yml` take effect on the next call, with a `policy_loaded` row written to the audit chain.
 
-What you see:
+**Layer 3 — Behavioral attestation.** `occasio attest --run-id <uuid>` produces a self-contained JSON predicate that commits to the full audit-chain slice for one agent session: every tool call, every block, every transform, every redacted secret, plus the active policy's SHA-256 hash and rules digest. `--sign` wraps it in an [in-toto Statement v1](https://github.com/in-toto/attestation) and Sigstore-signs it using GitHub Actions OIDC (no key management). The predicate type URI is [`agent-attestation/v1`](spec/agent-attestation/v1/README.md). Two independent reference verifiers ship — Node (`occasio attest verify`) and Python ([`docs/attest_verify.py`](docs/attest_verify.py)) — and the test suite asserts they agree byte-for-byte on the same payload.
 
-- **Sidebar grouped by user prompt** — one "read the readme" expands into the 3–6 HTTP round-trips it actually took (Claude Code's agentic loop made visible).
-- **Session sparkline + per-file aggregate** — outbound size over time, which files have been sent to the cloud and how often.
-- **Per-exchange byte-decomposition** — stacked bar showing system / history (replay) / new-this-turn / tools-framing. The "small" request that's 124 KB is suddenly explainable: 108 KB of it is the same system prompt every time.
-- **Tabs**: Request · Response · **Tools** (full local tool outputs — Read/Glob/Grep/Bash bytes that the interceptor handled locally and never sent up) · **Diff** (pre-transform vs sent — see the literal secrets that were redacted, in the clear, locally) · **Headers** · **Raw** SSE bytes · **Stats**.
-- **Live flash overlay** when a new outbound lands — useful both for understanding and for demos.
-
-### Dashboard vs. Eyes
-
-Both run as local browser UIs but answer different questions:
-
-| | `occasio dashboard` (3001) | `occasio eyes` (3002) |
-|---|---|---|
-| Focus | Session-level metrics: cost, savings, tokens | Per-exchange traffic: what went out, what came back |
-| Granularity | Aggregate counters + per-request summary table | Full HTTP bodies, decoded SSE, local tool outputs |
-| Capture needed | No — reads `session.json` + daily logs | Yes — pass `--eyes` to the proxy (opt-in) |
-| Data scope | Metadata only | Full payload bytes (kept locally under `~/.occasio/eyes/`) |
-| Best for | "How much have I spent today?" | "What did the agent actually send to Anthropic?" |
-
-Both live on `127.0.0.1` only. No CORS, no auth, no external network.
-
----
-
-## Verification
-
-Three independent checks, all required for a verified attestation:
-
-1. **Sigstore signature** — Fulcio certificate chain + Rekor inclusion proof. Verifiable by any sigstore-conformant tool (`cosign verify-blob`, `sigstore-js`, `sigstore-python`).
-2. **DSSE payload ↔ attestation predicate equivalence** — re-decode the in-toto Statement inside the bundle, canonicalise the predicate via [RFC 8785 subset](src/attest/canonicalize.js), compare byte-for-byte with the attestation predicate (minus the `signature` metadata field).
-3. **Audit chain integrity** — SHA-256-walk every `prev_hash → hash` link from the GENESIS sentinel, then assert the attestation's `first_hash` and `last_hash` appear in the chain in the right relative order.
-
-Two reference verifiers ship side by side:
-
-- **Node**: `occasio attest verify <file>`
-- **Python**: `python docs/attest_verify.py <file>` — stdlib + optional `sigstore-python`, reuses [`docs/audit_walker.py`](docs/audit_walker.py) for the chain step. See [`docs/python-verifier.md`](docs/python-verifier.md).
-
-**Cross-language invariant** (asserted in the test suite as `xlang:` and `xlang-float:` cases): both verifiers agree byte-for-byte on the predicate-equivalence and audit-chain steps for the same payload, including tamper-detection cases. Non-integer numbers are rejected by both canonicalize implementations so a future schema cannot silently introduce divergence.
-
-The **Sigstore signature step** uses the standard DSSE-wrapped in-toto Statement format; any sigstore-conformant tool verifies it (`cosign verify-blob`, `sigstore-js`, `sigstore-python`). The test suite mocks the signing path; a real-OIDC end-to-end signed-and-verified round-trip requires a GitHub Actions environment and is exercised by the [`integrations/attest-action/`](integrations/attest-action/) workflow in CI.
-
-A third partial verifier runs in-browser at [`integrations/attest-view/`](integrations/attest-view/) for drag-and-drop inspection. The browser performs the predicate-equivalence and audit-chain steps but defers Sigstore certificate-chain verification to one of the two CLIs (bundling Fulcio/Rekor trust roots in-browser is intentionally not done; the page is explicit about it).
+**Layer 4 — Anomaly detection (EDR).** `occasio anomalies` runs four detectors over a time window of the audit chain: deny-rate spike, file-read-volume burst, previously-unseen tool-input shape, secret-redaction-rate spike. Severity escalates against your historical baseline — a ×500 deviation from normal triggers HIGH; see [`docs/edr-demo.md`](docs/edr-demo.md) for the reproducible defense-in-depth walkthrough.
 
 ---
 
@@ -198,6 +186,39 @@ Layer 3: signed in-toto Statement → Sigstore bundle → GitHub Check Run
   ▼  independent verifier
 Node / Python / cosign — all must agree
 ```
+
+---
+
+## Verification
+
+Three independent checks, all required for a verified attestation:
+
+1. **Sigstore signature** — Fulcio certificate chain + Rekor inclusion proof. Verifiable by any sigstore-conformant tool (`cosign verify-blob`, `sigstore-js`, `sigstore-python`).
+2. **DSSE payload ↔ attestation predicate equivalence** — re-decode the in-toto Statement inside the bundle, canonicalise the predicate via [RFC 8785 subset](src/attest/canonicalize.js), compare byte-for-byte with the attestation predicate (minus the `signature` metadata field).
+3. **Audit chain integrity** — SHA-256-walk every `prev_hash → hash` link from the GENESIS sentinel, then assert the attestation's `first_hash` and `last_hash` appear in the chain in the right relative order.
+
+Two reference verifiers ship side by side:
+
+- **Node**: `occasio attest verify <file>`
+- **Python**: `python docs/attest_verify.py <file>` — stdlib + optional `sigstore-python`, reuses [`docs/audit_walker.py`](docs/audit_walker.py) for the chain step. See [`docs/python-verifier.md`](docs/python-verifier.md).
+
+**Cross-language invariant** (asserted in the test suite as `xlang:` and `xlang-float:` cases): both verifiers agree byte-for-byte on the predicate-equivalence and audit-chain steps for the same payload, including tamper-detection cases. Non-integer numbers are rejected by both canonicalize implementations so a future schema cannot silently introduce divergence.
+
+The **Sigstore signature step** uses the standard DSSE-wrapped in-toto Statement format; any sigstore-conformant tool verifies it (`cosign verify-blob`, `sigstore-js`, `sigstore-python`). The test suite mocks the signing path; a real-OIDC end-to-end signed-and-verified round-trip requires a GitHub Actions environment and is exercised by the [`integrations/attest-action/`](integrations/attest-action/) workflow in CI.
+
+A third partial verifier runs in-browser at [`integrations/attest-view/`](integrations/attest-view/) for drag-and-drop inspection. The browser performs the predicate-equivalence and audit-chain steps but defers Sigstore certificate-chain verification to one of the two CLIs (bundling Fulcio/Rekor trust roots in-browser is intentionally not done; the page is explicit about it).
+
+---
+
+## Why now
+
+Three regulatory drivers, all converging on the same requirement: **runtime evidence of AI-agent behavior must be cryptographically verifiable.**
+
+- **EU AI Act Art. 12** mandates comprehensive automated logging of high-risk AI systems. In effect from 2026 for regulated sectors.
+- **NIST AI RMF (GOVERN, MEASURE, MANAGE families)** is becoming required in US Federal procurement and is influencing FedRAMP AI controls.
+- **SOC 2 Common Criteria** are extending to AI-agent controls — auditors at major firms started asking "show me the agent's tool-call log" in 2026 audits.
+
+There is currently no off-the-shelf product producing a signed, third-party-verifiable artifact for what an AI coding agent did inside your CI. Occasio fills that gap with an open schema (Apache-2.0) and ships the reference implementations for it.
 
 ---
 
