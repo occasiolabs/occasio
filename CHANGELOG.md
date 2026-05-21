@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.9.1] — 2026-05-21
+
+### Changed
+- README restructure for a dev-first reading flow. New tagline and lead
+  paragraph that open with what the local proxy does, instead of opening
+  with the "cryptographically verifiable behavioral attestation" framing.
+  Section order now goes Two-ways → Quickstart → Live visibility (eyes)
+  → Commands → Four layers → Architecture → Verification → Why now, so
+  the dev path (install → see → reference) runs before the depth and
+  compliance sections.
+- "Live visibility — for developers" gains an `occasio eyes --demo`
+  screenshot at the top of the README (`docs/img/eyes-demo.png`) with a
+  caption that calls out the synthetic demo data and the "(demo)" badge
+  in the UI.
+
+### Notes
+- No source code, CLI behaviour, schema, or wire format changed in this
+  release. README + CHANGELOG + one new image only.
+
 ## [0.9.0] — 2026-05-21
 
 ### Added
