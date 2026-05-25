@@ -18,7 +18,7 @@ const path = require('path');
 const os   = require('os');
 
 // Claude Code encodes the cwd by replacing every path separator (':', '\', '/')
-// with a single '-'. So `C:\Users\leona\foo` → `C--Users-leona-foo` because
+// with a single '-'. So `C:\Users\alice\foo` → `C--Users-alice-foo` because
 // `C` + `:` (-) + `\` (-) + `Users`… yields two dashes between C and Users.
 function encodeCwd(cwd) {
   return cwd.replace(/[:\\/]/g, '-');

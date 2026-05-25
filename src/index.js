@@ -759,7 +759,7 @@ if (EYES_CAPTURE) {
   if (SANITIZE_HINT) {
     process.stderr.write(`     View sanitized (identity scrubbed) in another terminal:  \x1b[36moccasio eyes --sanitize\x1b[0m\n\n`);
   } else {
-    process.stderr.write(`     View live in another terminal:  \x1b[36mnode bin/occasio.js eyes\x1b[0m\n\n`);
+    process.stderr.write(`     View live in another terminal:  \x1b[36moccasio eyes\x1b[0m\n\n`);
   }
 }
 let sessionCost       = 0;      // running in-memory total for budget enforcement

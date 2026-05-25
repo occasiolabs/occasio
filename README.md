@@ -98,7 +98,7 @@ occasio eyes --sanitize             # view with identity scrubbed
 ```
 
 In the browser UI a cyan dot and `(sanitized)` badge confirm it's active.
-Paths like `C:\Users\leona\Desktop\proj` become `/home/user-7c/Desktop/proj`,
+Paths like `C:\Users\<you>\Desktop\proj` become `/home/user-7c/Desktop/proj`,
 stable within a session.
 
 **What `--sanitize` covers:** `$HOME` paths, OS username, git `user.email` /
