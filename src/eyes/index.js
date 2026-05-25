@@ -41,6 +41,7 @@ function parseArgs(argv) {
     scroll: 0,
     port: 0,                   // 0 = let server pick its default
     noOpen: false,             // --no-open: don't auto-launch browser
+    sanitize: false,           // --sanitize: scrub identity from display output
     help: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -60,6 +61,7 @@ function parseArgs(argv) {
     else if (a === '--eyes-dir')    out.eyesDir = argv[++i];
     else if (a === '--port')        out.port = parseInt(argv[++i], 10) || 0;
     else if (a === '--no-open')     out.noOpen = true;
+    else if (a === '--sanitize')    out.sanitize = true;
     else if (a === '--help' || a === '-h') out.help = true;
   }
   return out;
@@ -88,6 +90,30 @@ Flags (web mode):
 
 Flags (tui mode):
   --no-color   --no-alt   --frames N
+
+Privacy:
+  --sanitize        replace your home path, OS username, git identity, email
+                    and hostname with deterministic pseudonyms in the display.
+                    Disk contents under ~/.occasio/eyes/ are unchanged — this
+                    is a display filter, safe for screencasts and demos.
+
+  What --sanitize covers:
+    - Home directory (any path starting with $HOME / %USERPROFILE%)
+    - OS username (from os.userInfo() and $USER/$USERNAME/$LOGNAME)
+    - git config user.email and user.name
+    - hostname
+
+  What it does NOT cover — review before sharing:
+    - Project paths outside your home dir (e.g. D:\\Work\\Acme on Windows)
+    - Git remote URLs in tool outputs (github.com:org/repo leaks the org)
+    - File contents themselves — your name in a comment, commit message,
+      or README is not auto-detected
+    - The Claude Code TUI banner ("Welcome back X", organization line) —
+      that prints before any HTTP traffic and bypasses Eyes entirely
+    - Timezone hints embedded in timestamps
+
+  For full coverage on a public screencast: crop the banner manually and
+  scan the captured payloads with your eyes before publishing.
 `);
 }
 
@@ -235,6 +261,7 @@ function runContentMode(opts) {
   let showAllTurns = false;   // default: collapse older turns, only latest expanded
   let toast = '';     // brief status line, e.g. "copied 4.2 KB to clipboard"
   let toastUntil = 0;
+  const sanitizer = opts.sanitize ? require('./sanitize').createSession() : null;
 
   if (opts.demo) {
     payloads = DEMO_PAYLOADS.slice();
@@ -251,7 +278,9 @@ function runContentMode(opts) {
   let stopped = false, frameCount = 0, paused = false;
 
   function currentPayload() {
-    return payloads.length ? payloads[index] : null;
+    if (!payloads.length) return null;
+    const p = payloads[index];
+    return sanitizer ? sanitizer.payload(p) : p;
   }
 
   function paint() {
@@ -356,13 +385,14 @@ function runContentMode(opts) {
 
 function runWebMode(opts) {
   const { createServer, openBrowser, DEFAULT_PORT } = require('./server');
-  const srv = createServer({ demo: opts.demo, eyesDir: opts.eyesDir });
+  const srv = createServer({ demo: opts.demo, eyesDir: opts.eyesDir, sanitize: opts.sanitize });
   const port = opts.port || DEFAULT_PORT;
   srv.listen(port, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${port}`;
     process.stderr.write(`\n  ⚡ Agent Eyes — ${url}\n`);
-    if (opts.demo) process.stderr.write(`     mode: demo (synthetic data, no proxy needed)\n`);
-    else           process.stderr.write(`     watching: ${opts.eyesDir}\n`);
+    if (opts.demo)     process.stderr.write(`     mode: demo (synthetic data, no proxy needed)\n`);
+    else               process.stderr.write(`     watching: ${opts.eyesDir}\n`);
+    if (opts.sanitize) process.stderr.write(`     \x1b[36msanitized: identity scrubbed in display\x1b[0m\n`);
     process.stderr.write(`     Ctrl-C to stop\n\n`);
     if (!opts.noOpen) openBrowser(url);
   });

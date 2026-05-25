@@ -84,6 +84,40 @@ What you see:
 - **Tabs**: Request · Response · **Tools** (full local tool outputs — Read/Glob/Grep/Bash bytes that the interceptor handled locally and never sent up) · **Diff** (pre-transform vs sent — see the literal secrets that were redacted, in the clear, locally) · **Headers** · **Raw** SSE bytes · **Stats**.
 - **Live flash overlay** when a new outbound lands — useful both for understanding and for demos.
 
+### Screencast-safe view — `--sanitize`
+
+Recording a demo or screenshot of `occasio eyes` against a real session normally
+leaks your identity: home path (`C:\Users\<you>\...`), OS username, git email,
+real name, hostname. The `--sanitize` flag replaces those with deterministic
+pseudonyms in the display only — disk contents under `~/.occasio/eyes/` are
+unchanged so your audit trail stays real.
+
+```bash
+occasio claude --eyes --sanitize    # capture as normal
+occasio eyes --sanitize             # view with identity scrubbed
+```
+
+In the browser UI a cyan dot and `(sanitized)` badge confirm it's active.
+Paths like `C:\Users\leona\Desktop\proj` become `/home/user-7c/Desktop/proj`,
+stable within a session.
+
+**What `--sanitize` covers:** `$HOME` paths, OS username, git `user.email` /
+`user.name`, hostname, and identity-carrying env vars (`USER`, `USERNAME`,
+`LOGNAME`, `HOME`, `USERPROFILE`).
+
+**What it does *not* cover — review before sharing:**
+- Project paths outside `$HOME` (e.g. `D:\Work\Acme\…`)
+- Git remote URLs in tool outputs (`github.com:org/repo` leaks the org name)
+- File contents — your name in a comment, commit message, or README is not
+  auto-detected. Sanitize keys off identity values it can discover from the
+  OS and git, not arbitrary substrings.
+- The Claude Code TUI banner ("Welcome back X", organization line) — that
+  prints before any HTTP traffic and bypasses Eyes entirely. Crop it from
+  the screencast manually.
+
+The flag is a *display filter*, not a recording mode. The same Eyes capture
+can be replayed unsanitized later (just run `occasio eyes` without the flag).
+
 ### Dashboard vs. Eyes
 
 Both run as local browser UIs but answer different questions:

@@ -68,8 +68,9 @@
     box-shadow: 0 0 6px var(--green);
     animation: pulse 2s ease-in-out infinite;
   }
-  #sidebar h1 .dot.demo  { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
-  #sidebar h1 .dot.idle  { background: var(--fg-faint); box-shadow: none; animation: none; }
+  #sidebar h1 .dot.demo      { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  #sidebar h1 .dot.sanitize  { background: var(--cyan);   box-shadow: 0 0 6px var(--cyan); }
+  #sidebar h1 .dot.idle      { background: var(--fg-faint); box-shadow: none; animation: none; }
   @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.55 } }
   #sidebar h1 small { color: var(--fg-dim); font-weight: 400; margin-left: auto; }
   #search {
@@ -549,6 +550,7 @@
     showAllTurns: false,
     sectionsCollapsed: { system: true, reminders: true },
     demo: false,
+    sanitized: false,
     autoFollow: true,
     expandedGroups: new Set(),
   };
@@ -575,10 +577,18 @@
       const j = await r.json();
       state.exchanges = j.exchanges || [];
       state.demo = !!j.demo;
+      state.sanitized = !!j.sanitized;
       renderSidebar();
-      $('#live-dot').className = 'dot' + (state.demo ? ' demo' : (state.exchanges.length ? '' : ' idle'));
+      // Precedence for the status dot: demo > sanitize > idle > live.
+      // Demo dot stays yellow because the data itself is fake; sanitize dot
+      // (cyan) signals real data with redacted identity.
+      const dotState = state.demo ? ' demo'
+                     : state.sanitized ? ' sanitize'
+                     : (state.exchanges.length ? '' : ' idle');
+      $('#live-dot').className = 'dot' + dotState;
       $('#count').textContent = state.exchanges.length + ' exchange' + (state.exchanges.length === 1 ? '' : 's');
-      if (state.demo) $('#count').textContent += ' (demo)';
+      if (state.demo)      $('#count').textContent += ' (demo)';
+      else if (state.sanitized) $('#count').textContent += ' (sanitized)';
       // Auto-select latest if nothing selected
       if (state.exchanges.length && state.currentSeq == null) {
         selectExchange(state.exchanges[state.exchanges.length-1].seq);

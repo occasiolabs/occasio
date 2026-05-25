@@ -745,12 +745,22 @@ if (vIdx >= 0) claudeArgs.splice(vIdx, 1);
 const eyesIdx = claudeArgs.indexOf('--eyes');
 const EYES_CAPTURE = eyesIdx >= 0;
 if (eyesIdx >= 0) claudeArgs.splice(eyesIdx, 1);
+// --sanitize is a viewer-side hint — disk capture is always real so the user
+// retains the unredacted audit trail. We accept it here so the flag is not
+// passed through to Claude as unknown, and so we can print the matching tip.
+const sanitizeIdx = claudeArgs.indexOf('--sanitize');
+const SANITIZE_HINT = sanitizeIdx >= 0;
+if (sanitizeIdx >= 0) claudeArgs.splice(sanitizeIdx, 1);
 if (EYES_CAPTURE) {
   const eyesCapture = require('./eyes/capture');
   eyesCapture.enable();
   eyesCapture.resetSession();
   process.stderr.write(`\n  👁  Eyes capture enabled — payloads writing to ${eyesCapture.EYES_DIR}\n`);
-  process.stderr.write(`     View live in another terminal:  \x1b[36mnode bin/occasio.js eyes\x1b[0m\n\n`);
+  if (SANITIZE_HINT) {
+    process.stderr.write(`     View sanitized (identity scrubbed) in another terminal:  \x1b[36moccasio eyes --sanitize\x1b[0m\n\n`);
+  } else {
+    process.stderr.write(`     View live in another terminal:  \x1b[36mnode bin/occasio.js eyes\x1b[0m\n\n`);
+  }
 }
 let sessionCost       = 0;      // running in-memory total for budget enforcement
 let budgetWarnFired   = false;   // fires warning at most once per session

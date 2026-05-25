@@ -1,5 +1,41 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `occasio eyes --sanitize` and `occasio claude --eyes --sanitize` — display-time
+  identity scrubber for the Eyes browser/TUI view, so screencasts and
+  screenshots of real sessions can be shared without leaking the user's home
+  path, OS username, git `user.email` / `user.name`, hostname, or
+  identity-carrying env vars (`USER`, `USERNAME`, `LOGNAME`, `HOME`,
+  `USERPROFILE`). All identifiers are discovered at runtime — no hardcoded
+  personal strings live in the source, guaranteed by a self-leak meta-test in
+  `test-eyes.js` that refuses to ship if any real-identity value appears in
+  `src/eyes/sanitize.js`.
+- Substitution is deterministic via HMAC-SHA256 with a per-session
+  `crypto.randomBytes(16)` salt held in memory only; pseudonyms have shape
+  `/home/user-XX`, `user-XX`, `user-XX@example.invalid`, `User XX`, `host-XX`.
+  Home-path tails are normalized to forward slashes so Windows screenshots
+  render cleanly (`/home/user-7c/Desktop/proj`).
+- Server-side scrubbing on every `/api/*` endpoint plus an
+  `X-Eyes-Sanitized: 1` response header and a `sanitized: true` flag in
+  `/api/exchanges` so DevTools never sees raw identity. The browser UI shows
+  a cyan dot and `(sanitized)` badge in the sidebar.
+- Disk capture under `~/.occasio/eyes/` is *unchanged* — `--sanitize` is a
+  display filter, not a recording mode. The same Eyes log can be replayed
+  unsanitized.
+- 23 new tests covering discovery, determinism, length-sorted substitution,
+  Windows-path-tail normalization, payload deep-walk, and an HTTP-roundtrip
+  test that asserts the `X-Eyes-Sanitized` header.
+
+### Documented limits (`occasio eyes --help` and README)
+- `--sanitize` does **not** cover: project paths outside `$HOME` (e.g.
+  `D:\Work\Acme\…`), git remote URLs in tool outputs (`org/repo` in
+  `github.com:org/repo`), file contents (a name in a comment or commit
+  message), the Claude Code TUI welcome banner (which prints before any
+  HTTP traffic and bypasses Eyes entirely — crop manually), or timezone
+  hints in timestamps.
+
 ## [0.9.1] — 2026-05-21
 
 ### Changed

@@ -103,6 +103,17 @@ function createServer(opts) {
   opts = opts || {};
   const isDemo = !!opts.demo;
   const eyesDir = opts.eyesDir || EYES_DIR;
+  const sanitize = !!opts.sanitize;
+  // Pre-instantiated session sanitizer. One per server lifetime so pseudonyms
+  // are stable across requests for the same Eyes process. Discovered identity
+  // is cached inside the closure — discoverIdentity() never runs again.
+  const sanitizer = sanitize
+    ? (opts.sanitizer || require('./sanitize').createSession())
+    : null;
+  // Apply sanitize.text() to strings inside response objects before
+  // JSON.stringify. No-op when sanitizer is off.
+  const scrub        = sanitizer ? (s) => sanitizer.text(s)    : (s) => s;
+  const scrubPayload = sanitizer ? (p) => sanitizer.payload(p) : (p) => p;
   const clients = new Set();
   let lastFileCount = -1;
 
@@ -166,8 +177,13 @@ function createServer(opts) {
     if (url === '/api/session-cost') {
       const payloads = loadPayloads();
       const cost = require('./cost').aggregate(payloads);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(cost));
+      const headers = { 'Content-Type': 'application/json' };
+      if (sanitize) headers['X-Eyes-Sanitized'] = '1';
+      res.writeHead(200, headers);
+      // session-cost is numeric/aggregate; no path strings expected, but
+      // run through scrubPayload defensively in case future shape changes
+      // add e.g. per-path breakdowns.
+      res.end(JSON.stringify(scrubPayload(cost)));
       return;
     }
 
@@ -205,10 +221,12 @@ function createServer(opts) {
         }
       }
       const list = [...byPath.values()].map(x => ({
-        path: x.path, tool: x.tool, count: x.count, bytes: x.bytes,
+        path: scrub(x.path), tool: x.tool, count: x.count, bytes: x.bytes,
         exchanges: [...x.exchanges].sort((a, b) => a - b),
       })).sort((a, b) => b.bytes - a.bytes);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      const headers = { 'Content-Type': 'application/json' };
+      if (sanitize) headers['X-Eyes-Sanitized'] = '1';
+      res.writeHead(200, headers);
       res.end(JSON.stringify({ files: list, totalBytes: list.reduce((s, x) => s + x.bytes, 0) }));
       return;
     }
@@ -216,9 +234,12 @@ function createServer(opts) {
     // List
     if (url === '/api/exchanges') {
       const payloads = loadPayloads();
-      const out = payloads.map(summarize).filter(Boolean);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ exchanges: out, demo: isDemo }));
+      const summaries = payloads.map(summarize).filter(Boolean);
+      const out = sanitize ? summaries.map(scrubPayload) : summaries;
+      const headers = { 'Content-Type': 'application/json' };
+      if (sanitize) headers['X-Eyes-Sanitized'] = '1';
+      res.writeHead(200, headers);
+      res.end(JSON.stringify({ exchanges: out, demo: isDemo, sanitized: sanitize }));
       return;
     }
 
@@ -235,13 +256,24 @@ function createServer(opts) {
       }
       // Cap response size at 5 MB even though store accepts up to 2 MB per
       // blob — defensive against future content-store changes.
-      const out = buf.length > 5_000_000 ? buf.slice(0, 5_000_000) : buf;
-      res.writeHead(200, {
+      const capped = buf.length > 5_000_000 ? buf.slice(0, 5_000_000) : buf;
+      let bodyOut = capped;
+      if (sanitize) {
+        // Content blobs are text/plain UTF-8 (tool outputs, file contents,
+        // redaction before/after). Run through text scrubber. We treat the
+        // buffer as utf-8 — if it's binary the substitution is a no-op
+        // since the needles won't appear.
+        const scrubbed = scrub(capped.toString('utf8'));
+        bodyOut = Buffer.from(scrubbed, 'utf8');
+      }
+      const headers = {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-Content-Bytes': String(buf.length),
-        'X-Content-Truncated': buf.length > out.length ? '1' : '0',
-      });
-      res.end(out);
+        'X-Content-Truncated': buf.length > capped.length ? '1' : '0',
+      };
+      if (sanitize) headers['X-Eyes-Sanitized'] = '1';
+      res.writeHead(200, headers);
+      res.end(bodyOut);
       return;
     }
 
@@ -256,8 +288,10 @@ function createServer(opts) {
         res.end(JSON.stringify({ error: 'not found' }));
         return;
       }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(found));
+      const headers = { 'Content-Type': 'application/json' };
+      if (sanitize) headers['X-Eyes-Sanitized'] = '1';
+      res.writeHead(200, headers);
+      res.end(JSON.stringify(sanitize ? scrubPayload(found) : found));
       return;
     }
 

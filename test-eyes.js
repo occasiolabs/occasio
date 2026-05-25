@@ -845,7 +845,198 @@ assert('payload without response counts in exchanges', partial.exchanges === 1);
 assert('payload without response → 0 usage', partial.exchanges_with_usage === 0);
 assert('payload without response → 0 cost', partial.cost.actual_usd === 0);
 
-// ── done ────────────────────────────────────────────────────────────────────
-console.log(`\n${failed === 0 ? '✓' : '✗'} eyes: ${passed} passed, ${failed} failed\n`);
-process.exit(failed === 0 ? 0 : 1);
+// ── 15. sanitize — display-time identity scrubber ───────────────────────────
+console.log('\n15. sanitize — discoverIdentity, pseudonym, payload deep-walk');
+
+const sanitize = require('./src/eyes/sanitize');
+
+// 15.1 discoverIdentity with fully fake dependencies
+const fakeIdent = sanitize.discoverIdentity({
+  env:      { USER: 'bob', USERNAME: 'bob', HOME: '/home/bob', USERPROFILE: 'C:\\Users\\bob' },
+  homedir:  '/home/bob',
+  userInfo: { username: 'bob' },
+  hostname: 'workstation-9',
+  gitConfig: (k) => k === 'user.email' ? 'bob@example.com'
+                  : k === 'user.name'  ? 'Bob Q. Example'
+                  : null,
+});
+assert('discoverIdentity homedir',  fakeIdent.homedir === '/home/bob');
+assert('discoverIdentity username', fakeIdent.username === 'bob');
+assert('discoverIdentity email',    fakeIdent.email === 'bob@example.com');
+assert('discoverIdentity realName', fakeIdent.realName === 'Bob Q. Example');
+assert('discoverIdentity hostname', fakeIdent.hostname === 'workstation-9');
+assert('discoverIdentity env USER',        fakeIdent.envLeaks.USER === 'bob');
+assert('discoverIdentity env USERPROFILE', fakeIdent.envLeaks.USERPROFILE === 'C:\\Users\\bob');
+
+// 15.2 pseudonym determinism — same salt + same input → same output
+const salt = Buffer.from('0123456789abcdef0123456789abcdef', 'hex');
+const sA = sanitize.buildSanitizer({ identity: fakeIdent, salt });
+const sB = sanitize.buildSanitizer({ identity: fakeIdent, salt });
+assert('determinism: same salt → same text output',
+  sA.text('hello bob') === sB.text('hello bob'));
+const sC = sanitize.buildSanitizer({ identity: fakeIdent, salt: Buffer.from('ffffffffffffffffffffffffffffffff', 'hex') });
+assert('different salt → different output (high probability)',
+  sA.text('hello bob') !== sC.text('hello bob'));
+
+// 15.3 length-sort: homedir prefix must win over bare username
+const homePathWin = 'C:\\Users\\bob\\Desktop\\proj';
+const winIdent = sanitize.discoverIdentity({
+  env: {}, homedir: 'C:\\Users\\bob', userInfo: { username: 'bob' },
+  hostname: 'w', gitConfig: () => null,
+});
+const sWin = sanitize.buildSanitizer({ identity: winIdent, salt });
+const winOut = sWin.text(homePathWin);
+assert('homedir prefix wins over bare username inside path',
+  winOut.startsWith('/home/user-') && !winOut.includes('bob'),
+  `got: ${winOut}`);
+assert('home prefix produces POSIX path even on Windows input',
+  winOut.startsWith('/home/'));
+
+// 15.4 forward-slash variant of homedir is also matched
+const homeForward = 'C:/Users/bob/Desktop/proj';
+const forwardOut = sWin.text(homeForward);
+assert('homedir matched in forward-slash form too', !forwardOut.includes('bob'),
+  `got: ${forwardOut}`);
+
+// 15.4b path-tail backslashes normalized to forward slashes (cosmetic)
+const winOut2 = sWin.text(homePathWin);
+assert('path tail uses forward slashes after pseudonym',
+  !/\/home\/user-[0-9a-f]+\\/.test(winOut2),
+  `got: ${winOut2}`);
+assert('full clean POSIX path produced from Windows input',
+  /^\/home\/user-[0-9a-f]+\/Desktop\/proj$/.test(winOut2),
+  `got: ${winOut2}`);
+// Prose around a sanitized path is NOT mangled — the bounded regex stops
+// at quote/whitespace boundaries.
+const prose = sWin.text('see "C:\\Users\\bob\\foo" for the file, ok?');
+assert('prose with sanitized path: stops at closing quote',
+  prose.includes('" for the file, ok?'),
+  `got: ${prose}`);
+
+// 15.5 payload deep-walk: every string field is scrubbed
+const samplePayload = {
+  schema: 1,
+  seq: 42,
+  ts: '2026-05-25T10:00:00Z',
+  system: { text: 'cwd is /home/bob/work and email bob@example.com', bytes: 50 },
+  messages: [{
+    role: 'user',
+    blocks: [
+      { kind: 'text', text: 'hi bob, please read /home/bob/notes.txt' },
+      { kind: 'tool_use', toolUseId: 't1', toolName: 'read_file',
+        input: { path: '/home/bob/foo.md' } },
+    ],
+  }],
+  localTools: [{ tool: 'Bash', cmd: 'ls /home/bob && whoami', output: null }],
+  redactionDiffs: [{ toolUseId: 't1', path: '/home/bob/foo.md', labels: ['api_key'] }],
+};
+const linuxIdent = sanitize.discoverIdentity({
+  env: { USER: 'bob' }, homedir: '/home/bob', userInfo: { username: 'bob' },
+  hostname: 'h', gitConfig: (k) => k === 'user.email' ? 'bob@example.com' : null,
+});
+const sLin = sanitize.buildSanitizer({ identity: linuxIdent, salt });
+const scrubbed = sLin.payload(samplePayload);
+const scrubbedJson = JSON.stringify(scrubbed);
+assert('payload: original "bob" not present anywhere',
+  !scrubbedJson.includes('"bob"') && !/[\/\\]bob[\/\\]/.test(scrubbedJson) && !scrubbedJson.includes('hi bob'),
+  `leaked: ${scrubbedJson}`);
+assert('payload: original email not present',
+  !scrubbedJson.includes('bob@example.com'));
+assert('payload: schema/seq preserved',
+  scrubbed.seq === 42 && scrubbed.schema === 1);
+assert('payload: redactionDiffs path scrubbed',
+  !scrubbed.redactionDiffs[0].path.includes('bob'));
+assert('payload: tool_use input.path scrubbed',
+  !scrubbed.messages[0].blocks[1].input.path.includes('bob'));
+
+// 15.6 createSession default path runs without throwing on the real machine
+//      (no asserts about the actual values — those are personal)
+const realSession = sanitize.createSession();
+assert('createSession returns text() and payload()',
+  typeof realSession.text === 'function' && typeof realSession.payload === 'function');
+const realScrub = realSession.text(os.homedir() + '/foo');
+assert('createSession: real homedir scrubbed in real session',
+  !realScrub.includes(os.homedir()),
+  `got: ${realScrub}`);
+
+// 15.7 SELF-LEAK META-TEST — refuse to ship if any real-identity value
+//      ended up baked into the sanitize.js source. This is the structural
+//      guarantee against "I accidentally hardcoded my own name in a regex".
+{
+  const srcPath = path.join(__dirname, 'src', 'eyes', 'sanitize.js');
+  const src = fs.readFileSync(srcPath, 'utf8');
+  const realIdent = sanitize.discoverIdentity();
+  // The source contains generic prefix constants like 'user', 'home', 'host'
+  // as part of TYPE_PREFIX. If the test runner's own identity coincidentally
+  // matches one of those tokens, the literal check would false-positive.
+  // Whitelist those exact short tokens — they are not personal data.
+  const TYPE_PREFIX_TOKENS = new Set(['user', 'home', 'host', 'envval', 'User']);
+  const needlesToCheck = [];
+  for (const key of ['username', 'email', 'realName', 'hostname', 'homedir']) {
+    const v = realIdent[key];
+    if (v && typeof v === 'string' && v.length >= 3 && !TYPE_PREFIX_TOKENS.has(v)) {
+      needlesToCheck.push([key, v]);
+    }
+  }
+  for (const [k, v] of Object.entries(realIdent.envLeaks || {})) {
+    if (v && typeof v === 'string' && v.length >= 3 && !TYPE_PREFIX_TOKENS.has(v)) {
+      needlesToCheck.push([`env.${k}`, v]);
+    }
+  }
+  let leakFound = null;
+  for (const [label, v] of needlesToCheck) {
+    if (src.includes(v)) { leakFound = `${label}=${v}`; break; }
+  }
+  assert('sanitize.js source contains no real-identity values',
+    leakFound === null,
+    leakFound ? `leaked: ${leakFound}` : '');
+}
+
+// 15.8 HTTP roundtrip — server with sanitize:true scrubs payload responses
+//      and sets X-Eyes-Sanitized: 1.
+const httpSanitize = new Promise((resolve) => {
+  const http2 = require('http');
+  const { createServer: createEyesServer } = require('./src/eyes/server');
+  // Build a deterministic sanitizer with a known fake identity so the
+  // resulting JSON contains predictable pseudonyms we can assert on.
+  const fakeSanitizer = sanitize.buildSanitizer({
+    identity: sanitize.discoverIdentity({
+      env: { USER: 'bob' }, homedir: '/home/bob',
+      userInfo: { username: 'bob' }, hostname: 'h',
+      gitConfig: (k) => k === 'user.email' ? 'bob@example.com' : null,
+    }),
+    salt: Buffer.from('aabbccddeeff00112233445566778899', 'hex'),
+  });
+  const srv2 = createEyesServer({ demo: true, sanitize: true, sanitizer: fakeSanitizer });
+  srv2.listen(0, '127.0.0.1', () => {
+    const port = srv2.server.address().port;
+    function get(p) {
+      return new Promise((res) => {
+        http2.get({ host: '127.0.0.1', port, path: p }, (r) => {
+          let body = '';
+          r.on('data', (c) => body += c);
+          r.on('end', () => res({ status: r.statusCode, headers: r.headers, body }));
+        }).on('error', () => res({ status: 0, body: '', headers: {} }));
+      });
+    }
+    (async () => {
+      const list = await get('/api/exchanges');
+      assert('sanitize HTTP: /api/exchanges → 200', list.status === 200);
+      assert('sanitize HTTP: X-Eyes-Sanitized header set',
+        list.headers['x-eyes-sanitized'] === '1');
+      const listJ = JSON.parse(list.body);
+      assert('sanitize HTTP: sanitized:true in body', listJ.sanitized === true);
+      // Demo payloads don't contain "bob" — we're not asserting on content
+      // here, only on the structural plumbing. Identity scrubbing on real
+      // content is covered by tests 15.5/15.6 above.
+      srv2.close(() => resolve());
+    })();
+  });
+});
+
+httpSanitize.then(() => {
+  // ── done ──────────────────────────────────────────────────────────────────
+  console.log(`\n${failed === 0 ? '✓' : '✗'} eyes: ${passed} passed, ${failed} failed\n`);
+  process.exit(failed === 0 ? 0 : 1);
+});
 }
