@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.9.2] — 2026-05-25
 
 ### Added
 - `occasio eyes --sanitize` and `occasio claude --eyes --sanitize` — display-time
@@ -27,6 +27,16 @@
 - 23 new tests covering discovery, determinism, length-sorted substitution,
   Windows-path-tail normalization, payload deep-walk, and an HTTP-roundtrip
   test that asserts the `X-Eyes-Sanitized` header.
+
+### Fixed
+- `--eyes` startup hint now prints `occasio eyes` instead of the
+  dev-only `node bin/occasio.js eyes`, so npm-installed users see a
+  command that actually works for them.
+- Two source files used a maintainer username as an illustrative
+  path/comment (`README.md` sanitize section, `src/cli/conversation.js`
+  cwd-encoding comment). Replaced with generic placeholders so the
+  source does not itself leak identity. The maintainer's real name in
+  the `NOTICE` file is legitimate copyright attribution and is unchanged.
 
 ### Documented limits (`occasio eyes --help` and README)
 - `--sanitize` does **not** cover: project paths outside `$HOME` (e.g.
