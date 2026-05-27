@@ -2,8 +2,15 @@
 
 // Worker process for the multi-writer lock test in test-audit-chain.js.
 // Spawned by `node test-audit-lock-worker.js <file> <count> <tag>`.
-// Each invocation appends `count` rows to `file` with file-locking enabled,
-// tagging each event_id with `tag-i` so the parent can disambiguate writers.
+// Each invocation appends `count` rows to `file` and tags each event_id
+// with `tag-i` so the parent can disambiguate writers.
+//
+// IMPORTANT: this worker uses the createAuditor PRODUCTION DEFAULT — no
+// explicit { lock: true } argument. It validates that two concurrent
+// writers, both constructed the way real users construct them (via
+// the same code path as src/index.js and src/mcp-server.js), survive
+// contention with the chain intact. If someone later flips the default
+// back to lock:false, this test will break, by design.
 
 const { createAuditor } = require('./src/audit/jsonl-auditor');
 
@@ -14,7 +21,7 @@ if (!file || !countStr || !tag) {
 }
 const count = parseInt(countStr, 10);
 
-const a = createAuditor(file, { lock: true });
+const a = createAuditor(file);
 const decision = { action: 'PASS', reason: 'lock-test', policySource: 'default' };
 const result   = { passThrough: true };
 

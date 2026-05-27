@@ -805,6 +805,23 @@ const sessionAuditor = _createAuditor(process.env.OCCASIO_AUDIT_FILE || undefine
   policyLoader.load();
 }
 
+// Phase 2: per-request accounting row to the audit chain. Soft-fail (warn
+// but keep serving) during the transition while legacy logs/*.jsonl writes
+// still run in parallel — after Phase 5 (logs/* writes removed) this should
+// be promoted to fail-fatal like the policy_loaded handler above.
+function auditRequest(entry) {
+  const status = sessionAuditor.recordRequest(entry);
+  if (status && status.ok === false) {
+    // Sanitize error message: strip ANSI escapes + control chars so a
+    // hostile/malformed Error.message can't inject terminal sequences or
+    // fake log lines into the user's stderr.
+    const raw = (status.error && status.error.message) || 'unknown';
+    // eslint-disable-next-line no-control-regex -- matching control chars is the whole point
+    const safe = String(raw).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/[\x00-\x1f\x7f]/g, '?');
+    process.stderr.write(`${col.y('[occasio][audit-warn]')} request row not written: ${safe}\n`);
+  }
+}
+
 ensureDirs();
 fs.writeFileSync(SESSION_FILE, JSON.stringify({
   run_id: currentRunId,
@@ -900,6 +917,7 @@ const server = http.createServer((req, res) => {
           writeBlocked({ ts, model, secrets, blocked, files });
           const blockedEntry = {
             v: LOG_SCHEMA_VERSION, iso, ts, run_id: currentRunId,
+            cwd: SESSION_CWD,
             event_type: 'blocked',
             model, input_tokens: 0, output_tokens: 0,
             cache_write_tokens: 0, cache_read_tokens: 0,
@@ -910,6 +928,7 @@ const server = http.createServer((req, res) => {
             intercepted: false, tools: [],
           };
           writeLog(blockedEntry);
+          auditRequest(blockedEntry);
           updateSession(blockedEntry);
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { type: 'blocked', reason: secrets.length ? secrets[0].label : 'rule', by: 'Occasio' } }));
@@ -933,6 +952,7 @@ const server = http.createServer((req, res) => {
         process.stderr.write(col.d(`  Reset: occasio clear  |  Increase: restart with --budget ${(budget * 2).toFixed(4)}\n`));
         const bEntry = {
           v: LOG_SCHEMA_VERSION, iso, ts, run_id: currentRunId,
+          cwd: SESSION_CWD,
           event_type: BUDGET_EXCEEDED_EVENT,
           budget_limit: parseFloat(budget.toFixed(6)),
           budget_spent: parseFloat(sessionCost.toFixed(6)),
@@ -945,6 +965,7 @@ const server = http.createServer((req, res) => {
           intercepted: false, tools: [],
         };
         writeLog(bEntry);
+        auditRequest(bEntry);
         try {
           const s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
           s.budget_exceeded_count = (s.budget_exceeded_count || 0) + 1;
@@ -1489,7 +1510,7 @@ const server = http.createServer((req, res) => {
             intercepted,
             tools,
           };
-          writeLog(entry); updateSession(entry);
+          writeLog(entry); auditRequest(entry); updateSession(entry);
           sessionCost += cost;
 
           // Budget warning: fires once when spend crosses 80 % of budget

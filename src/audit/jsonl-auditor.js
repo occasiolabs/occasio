@@ -160,18 +160,21 @@ function loadPrevHash(filePath, opts = {}) {
  */
 function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
   // lock=true wraps each append in a proper-lockfile lockSync/unlockSync pair
-  // and re-reads prev_hash from disk inside the lock. This is the only safe
-  // way to share an audit log between two concurrent writers (e.g. proxy +
-  // MCP server on the same machine). Default off because single-writer
-  // workloads do not pay the I/O cost.
-  const { lock = false } = opts;
+  // and re-reads prev_hash from disk inside the lock. Default ON: Occasio's
+  // own architecture spawns concurrent writers against the default chain file
+  // (HTTP proxy in bin/occasio.js + MCP server in bin/occasio-mcp.js), so a
+  // no-lock default produces silent race-condition chain breaks on real user
+  // workloads. The single-digit-ms I/O cost is mandatory for the tamper-
+  // evidence guarantee to hold. Opt out only for tight-loop unit tests that
+  // genuinely have no concurrent writer.
+  const { lock = true } = opts;
   let lockfile = null;
   if (lock) {
-    // Lazy-require so a missing proper-lockfile install does not break
-    // single-writer setups that never opt in.
+    // proper-lockfile is a regular dependency (see package.json); the
+    // try/catch here is belt-and-braces for unusual install states.
     try { lockfile = require('proper-lockfile'); }
     catch (e) {
-      throw new Error(`createAuditor({ lock: true }) requires proper-lockfile: ${e.message}`);
+      throw new Error(`createAuditor requires proper-lockfile: ${e.message}`);
     }
     // The lockfile target must exist before lockSync can create its companion
     // directory marker. Touch it.
@@ -288,6 +291,69 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
     return withLock(() => recordPolicyLoadedInner(args));
   }
 
+  /**
+   * Record a per-request accounting row (kind:"request").
+   *
+   * Phase-2 of the truth-source unification: every cloud-bound or
+   * intercepted request writes ONE slim row into the hash chain alongside
+   * the existing logs/*.jsonl write, so the chain becomes the authoritative
+   * source for cost/tokens — not just behavior. The row deliberately omits
+   * the request body, files-touched list, and per-tool detail: tool-level
+   * facts are already attested as separate kind:"tool_call" rows and can
+   * be re-joined by run_id.
+   *
+   * Field order below is the canonical serialization contract and MUST
+   * remain stable. Adding new fields is only allowed at the END (before
+   * prev_hash), and only with a new audit_schema bump.
+   *
+   * Accepts the same `entry` shape used by writeLog/updateSession.
+   * Returns { ok: true } on success; { ok: false, error, droppedRow } on
+   * append failure, mirroring record()'s contract.
+   */
+  function recordRequest(entry) {
+    if (!entry) return { ok: true };
+    return withLock(() => recordRequestInner(entry));
+  }
+
+  function recordRequestInner(entry) {
+    const row = {
+      audit_schema:         1,
+      ts:                   entry.iso || new Date().toISOString(),
+      event_id:             crypto.randomUUID(),
+      session_id:           entry.run_id,
+      run_id:               entry.run_id,
+      agent:                'occasio',
+      protocol:             'anthropic-http',
+      direction:            'outbound',
+      kind:                 'request',
+      event_type:           entry.event_type || (entry.intercepted ? 'local_only' : 'cloud_sent'),
+      model:                entry.model,
+      cwd:                  entry.cwd,
+      input_tokens:         entry.input_tokens         || 0,
+      output_tokens:        entry.output_tokens        || 0,
+      cache_read_tokens:    entry.cache_read_tokens    || 0,
+      cache_write_tokens:   entry.cache_write_tokens   || 0,
+      cost:                 entry.cost                 || 0,
+      cache_savings:        entry.cache_savings        || 0,
+      lao_tokens_saved:     entry.lao_tokens_saved     || 0,
+      lao_cost_saved:       entry.lao_cost_saved       || 0,
+      distill_tokens_saved: entry.distill_tokens_saved || 0,
+      distill_cost_saved:   entry.distill_cost_saved   || 0,
+      tools_attempted:      entry.tools_attempted      || 0,
+      tools_local_count:    entry.tools_local_count    || 0,
+      tools_mcp_count:      entry.tools_mcp_count      || 0,
+      prev_hash:            prevHash,
+    };
+    row.hash = computeHash(row);
+    try {
+      fs.appendFileSync(filePath, JSON.stringify(row) + '\n');
+    } catch (e) {
+      return { ok: false, error: e, droppedRow: row };
+    }
+    prevHash = row.hash;
+    return { ok: true };
+  }
+
   function recordPolicyLoadedInner({ hash, path: policyPath, version, source }) {
     const row = {
       audit_schema: 1,
@@ -330,7 +396,7 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
     return { ok: true };
   }
 
-  return { record, recordPolicyLoaded, file: filePath };
+  return { record, recordPolicyLoaded, recordRequest, file: filePath };
 }
 
 module.exports = {
