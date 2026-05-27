@@ -13,11 +13,6 @@ const col = {
   d: s => `\x1b[2m${s}\x1b[0m`,  b: s => `\x1b[1m${s}\x1b[0m`,
 };
 
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
 function readDayLog(dateStr) {
   const logFile = path.join(LOG_DIR, 'logs', `${dateStr}.jsonl`);
   if (!fs.existsSync(logFile)) return [];
@@ -152,6 +147,11 @@ function printSummary(totals, scope, runId) {
   console.log('');
 }
 
+// Phase-4 migration: ledger CLI now reads from the hash-chained audit log
+// via src/models/events.js. The legacy readDayLog/readSessionEntries
+// helpers above stay exported for inspect.js (migrated in Phase 4.5).
+const events = require('./models/events');
+
 function runLedgerCli(args) {
   let scope       = 'session';
   let limit       = 10;
@@ -165,26 +165,35 @@ function runLedgerCli(args) {
 
   if (args.includes('--summary')) showSummary = true;
 
-  let session = null;
-  try { session = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch { /* ignore */ }
+  const runId = events.currentRunId();
 
-  const todayEntries = readDayLog(todayStr());
-  const entries = scope === 'session'
-    ? readSessionEntries(todayEntries, session?.start)
-    : todayEntries;
+  // Scope → filter on the chain:
+  //   session  → only events for the current run_id (most robust definition)
+  //   today    → all kind:"request" rows whose ts is today (local tz)
+  //   all      → every kind:"request" row in the chain (audit-wide history)
+  let entries;
+  if (scope === 'today')      entries = events.loadEvents({ kind: 'request', today: true });
+  else if (scope === 'all')   entries = events.loadEvents({ kind: 'request' });
+  else                        entries = runId ? events.loadEvents({ kind: 'request', runId }) : [];
 
-  const runId = session?.run_id || null;
+  // session.json is still consulted ONLY for the "started" header timestamp
+  // (config-y, moves out in Phase 5). Counters never come from session.json.
+  let sessionStart = null;
+  try { sessionStart = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'))?.start || null; } catch { /* none */ }
 
   if (showSummary) {
-    printSummary(summarize(entries), scope, runId);
+    // summarize() consumes chain rows directly — ts handling doesn't matter
+    // because the summary doesn't render per-row timestamps.
+    printSummary(events.summarize(entries), scope, runId);
     return;
   }
 
-  // List view
+  // List view — printEntry expects e.ts as HH:MM:SS (legacy logs/* format).
+  // Chain rows carry ts as ISO; project at the boundary.
   console.log(col.b(`\n⚡ Occasio Ledger`));
   let headerLine = '';
   if (runId) headerLine += col.d(`run: ${runId}`);
-  if (session?.start) headerLine += col.d(`${runId ? '  ·  ' : ''}started ${new Date(session.start).toTimeString().slice(0, 8)}`);
+  if (sessionStart) headerLine += col.d(`${runId ? '  ·  ' : ''}started ${new Date(sessionStart).toTimeString().slice(0, 8)}`);
   if (headerLine) console.log(`   ${headerLine}`);
   console.log(col.d(`   scope: ${scope}  ·  ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} total\n`));
 
@@ -193,7 +202,7 @@ function runLedgerCli(args) {
     return;
   }
 
-  const slice  = entries.slice(-limit);
+  const slice  = entries.slice(-limit).map(chainToRenderEntry);
   const offset = entries.length - slice.length;
   slice.forEach((e, i) => printEntry(e, offset + i));
   console.log('');
@@ -203,6 +212,15 @@ function runLedgerCli(args) {
   } else {
     console.log(col.d(`   ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}  ·  --summary for totals  ·  --scope today for full day\n`));
   }
+}
+
+// Chain rows use `ts` as ISO; the printEntry renderer expects HH:MM:SS
+// (legacy logs/* format). Project at the boundary so the renderer stays
+// untouched.
+function chainToRenderEntry(e) {
+  return Object.assign({}, e, {
+    ts: e.ts ? new Date(e.ts).toTimeString().slice(0, 8) : null,
+  });
 }
 
 module.exports = { readDayLog, readSessionEntries, summarize, runLedgerCli };

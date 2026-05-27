@@ -364,6 +364,17 @@ function fmtAttribution(attr, runId) {
   return lines.join('\n');
 }
 
+// Phase-4 migration: replay CLI now sources kind:"request" rows from the
+// hash-chained audit log via src/models/events.js. Per-row "sub-line"
+// detail that depends on legacy-only fields (tools[], lao_dropped[],
+// file_tokens[], secrets[]) renders less verbosely than before — those
+// fields are not in the chain. The headline counts and totals are intact
+// and now agree with status/ledger.
+//
+// --attribute still reads today's logs/*.jsonl directly: that view relies
+// on per-tool kept_bytes which the chain doesn't carry. Marked as legacy.
+const eventsModel = require('./models/events');
+
 function runReplayCli(args) {
   let limit     = 3;
   let detail    = false;
@@ -378,18 +389,46 @@ function runReplayCli(args) {
   const runIdx = args.indexOf('--run');
   if (runIdx >= 0) { runFilter = args[runIdx + 1] || null; detail = true; }
 
-  const today   = todayStr();
-  const logFile = path.join(LOG_DIR, 'logs', `${today}.jsonl`);
-  const entries = [];
-  if (fs.existsSync(logFile)) {
-    const lines = fs.readFileSync(logFile, 'utf8').split('\n');
-    for (const raw of lines) {
-      const line = raw.trim();
-      if (!line) continue;
-      try { entries.push(JSON.parse(line)); } catch { /* ignore */ }
+  const today = todayStr();
+
+  // Legacy path for --attribute (needs per-tool kept_bytes from logs/*).
+  // Removed once tool kept_bytes are also attested in the chain.
+  if (attribute) {
+    const logFile = path.join(LOG_DIR, 'logs', `${today}.jsonl`);
+    const legacyEntries = [];
+    if (fs.existsSync(logFile)) {
+      for (const raw of fs.readFileSync(logFile, 'utf8').split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        try { legacyEntries.push(JSON.parse(line)); } catch { /* ignore */ }
+      }
     }
+    const legacyMap = groupByRun(legacyEntries);
+    if (runFilter) {
+      let matched = null;
+      for (const key of legacyMap.keys()) {
+        if (key.startsWith(runFilter) || key === runFilter) { matched = key; break; }
+      }
+      if (!matched) {
+        console.log(col.d(`\n   No run found matching '${runFilter}' in today's log.\n`));
+        return;
+      }
+      console.log(col.b(`\n⚡ Occasio Replay — Token Attribution`));
+      console.log(fmtAttribution(attributeRun(legacyMap.get(matched)), matched));
+      return;
+    }
+    console.log(col.b(`\n⚡ Occasio Replay`));
+    console.log(col.d(`   ${today}  \xb7  ${legacyMap.size} run${legacyMap.size === 1 ? '' : 's'} today  \xb7  ${col.y('--attribute (legacy)')}\n`));
+    for (const [runId, runEntries] of [...legacyMap.entries()].slice(-limit)) {
+      console.log(fmtAttribution(attributeRun(runEntries), runId));
+    }
+    return;
   }
 
+  // Default path: chain-sourced kind:"request" rows for today.
+  // groupByRun (this file) accepts either logs/* or chain rows because it
+  // sorts on `iso || ts`; chain rows have `ts` as ISO, which works.
+  const entries = eventsModel.loadEvents({ kind: 'request', today: true });
   const runsMap = groupByRun(entries);
 
   if (runFilter) {

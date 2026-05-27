@@ -6,76 +6,43 @@
  * Usage:
  *   occasio report [--format json|csv] [--days N]
  *
- * Reads:
- *   ~/.occasio/pipeline-events.jsonl  — per-tool audit events (tool access, blocks)
- *   ~/.occasio/logs/YYYY-MM-DD.jsonl  — per-request cost/token summary
+ * After the Phase-4 truth-source unification, this command reads exclusively
+ * from the hash-chained audit log: tool-call events for behavioral facts,
+ * and kind:"request" events for cost/token summaries. Logs/*.jsonl is no
+ * longer consulted — the governance export is now fully attested.
  *
  * Outputs a structured document answering:
  *   "What data did the AI agent access, what was blocked, and did any secrets appear?"
  */
 
-const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const { verifyFile } = require('../audit/verifier');
+const eventsModel    = require('../models/events');
 
 const LOG_DIR     = path.join(os.homedir(), '.occasio');
 const EVENTS_FILE = path.join(LOG_DIR, 'pipeline-events.jsonl');
-const LOGS_DIR    = path.join(LOG_DIR, 'logs');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function cutoffMs(days) {
+function cutoffIso(days) {
   const d = new Date();
   d.setDate(d.getDate() - days);
   d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function readJsonlFile(filePath) {
-  try {
-    return fs.readFileSync(filePath, 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map(line => { try { return JSON.parse(line); } catch { return null; } })
-      .filter(Boolean);
-  } catch { return []; }
-}
-
-/** Read all daily JSONL logs within the period. */
-function readDailyLogs(days) {
-  const cutoff = cutoffMs(days);
-  const entries = [];
-  try {
-    const files = fs.readdirSync(LOGS_DIR)
-      .filter(f => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f))
-      .filter(f => {
-        const [y, m, d2] = f.replace('.jsonl', '').split('-').map(Number);
-        return new Date(y, m - 1, d2).getTime() >= cutoff - 86400000;
-      });
-    for (const f of files) {
-      entries.push(...readJsonlFile(path.join(LOGS_DIR, f)));
-    }
-  } catch { /* logs dir absent */ }
-  return entries;
-}
-
-/** Filter pipeline events to those within the period. */
-function filterEvents(events, days) {
-  const cutoff = cutoffMs(days);
-  return events.filter(e => e.ts && new Date(e.ts).getTime() >= cutoff);
+  return d.toISOString();
 }
 
 // ── Report builder ────────────────────────────────────────────────────────────
 
 function buildReport(days) {
-  const allEvents   = readJsonlFile(EVENTS_FILE);
-  const periodEvents = filterEvents(allEvents, days);
-  const dailyLogs   = readDailyLogs(days);
+  const cutoff = cutoffIso(days);
+  const periodEvents  = eventsModel.loadEvents({ since: cutoff });
+  const requestEvents = periodEvents.filter(e => e.kind === 'request');
 
-  // Unique sessions from daily logs
-  const sessionIds = new Set(dailyLogs.map(e => e.session_id || e.run_id).filter(Boolean));
-  const totalCost  = dailyLogs.reduce((s, e) => s + (typeof e.cost === 'number' ? e.cost : 0), 0);
+  // Unique sessions from chain request rows. Replaces the old per-day log scan;
+  // the run_id field is canonical across the chain.
+  const sessionIds = new Set(requestEvents.map(e => e.session_id || e.run_id).filter(Boolean));
+  const totalCost  = requestEvents.reduce((s, e) => s + (typeof e.cost === 'number' ? e.cost : 0), 0);
 
   // Tool-call events with path metadata
   const toolCallEvents = periodEvents.filter(e => e.kind === 'tool_call');
@@ -122,8 +89,8 @@ function buildReport(days) {
     generated_at: new Date().toISOString(),
     period_days:  days,
     summary: {
-      sessions:          sessionIds.size || dailyLogs.length,
-      requests:          dailyLogs.length,
+      sessions:          sessionIds.size,
+      requests:          requestEvents.length,
       cost_usd:          Math.round(totalCost * 100000) / 100000,
       files_accessed:    accessLog.length,
       paths_blocked:     blockedAccesses.length,

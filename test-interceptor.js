@@ -2594,12 +2594,14 @@ console.log('\n3. runLocally');
     assert('session initialization stores log_file',
       indexSrc.includes('log_file: getLogFile()'));
 
-    // status (src/cli/status.js) and exit (index.js) both use s.log_file with getLogFile() fallback
+    // status (src/cli/status.js) and exit (index.js) both consult session.json
+    // for log_file with a today's-log fallback. After Phase 4 status reads
+    // session.json into `cfg`, index.js still uses `s`. Both use getLogFile().
     {
       const statusSrc = fs.readFileSync('./src/cli/status.js', 'utf8');
       assert('display uses s.log_file with fallback',
         /s\.log_file \|\| getLogFile\(\)/.test(indexSrc) &&
-        /s\.log_file \|\| getLogFile\(\)/.test(statusSrc));
+        /cfg\?\.log_file \|\| getLogFile\(\)/.test(statusSrc));
     }
 
     // model tracking still in place
@@ -2616,8 +2618,10 @@ console.log('\n3. runLocally');
     }
 
     // broaderCf / broaderCfX
+    // status now sources cost from chain-derived `acct.cost`; exit summary
+    // still reads s.cost (it runs at proxy-exit, reading session.json).
     assert('status broaderCf = cost + totalSav',
-      fs.readFileSync('./src/cli/status.js', 'utf8').includes('broaderCf = (s.cost || 0) + totalSav'));
+      fs.readFileSync('./src/cli/status.js', 'utf8').includes('broaderCf = acct.cost + totalSav'));
     assert('exit summary broaderCfX = cost + totalSavX',
       indexSrc.includes('broaderCfX = (s.cost || 0) + totalSavX'));
   }
@@ -5286,10 +5290,13 @@ console.log('\n3. runLocally');
     {
       const indexSrc  = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
       const statusSrc = fsMod.readFileSync(require('path').join(__dirname, 'src', 'cli', 'status.js'), 'utf8');
-      // Guarded once each: in exit (index.js) and in status (cli/status.js).
-      const guard = /if \(s\.tools_transformed\)/;
+      // Guarded once in exit (index.js, still reads s.tools_transformed) and
+      // once in status (cli/status.js, post-Phase-4 reads tools.transformed
+      // derived from chain tool_call rows via buildToolStats).
+      const exitGuard   = /if \(s\.tools_transformed\)/;
+      const statusGuard = /if \(tools\.transformed\)/;
       assert('status: Transforms guarded in both status+exit',
-        guard.test(indexSrc) && guard.test(statusSrc));
+        exitGuard.test(indexSrc) && statusGuard.test(statusSrc));
     }
 
     // ── 6. toolsTransformed computation counts only transformed tools ─────
