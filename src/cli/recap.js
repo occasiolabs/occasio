@@ -22,8 +22,10 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const { readLastConversation } = require('./conversation');
-
+// Recap reads exclusively from the hash-chained audit log. Conversation text
+// from Claude Code's own session files (~/.claude/projects/*) is intentionally
+// not pulled in: it has no run_id mapping and was previously leaking a current
+// user prompt into recaps of older sessions.
 const CHAIN_FILE = path.join(os.homedir(), '.occasio', 'pipeline-events.jsonl');
 
 const col = {
@@ -170,7 +172,7 @@ function lastActionsLines(toolCalls, root, n = 5) {
   });
 }
 
-function renderMarkdown(run, root, conv) {
+function renderMarkdown(run, root) {
   const a = aggregate(run.rows);
   const dur = durationStr(a.start, a.end);
   const date = a.start ? new Date(a.start).toISOString().replace('T', ' ').slice(0, 16) : 'unknown';
@@ -178,17 +180,6 @@ function renderMarkdown(run, root, conv) {
   const lines = [];
   lines.push(`# Previous session — ${date}, ${dur}`);
   lines.push('');
-
-  if (conv && (conv.lastUser || conv.lastAssistant)) {
-    lines.push('## Last conversation');
-    if (conv.lastUser) {
-      lines.push(`- **You said:** ${conv.lastUser}`);
-    }
-    if (conv.lastAssistant) {
-      lines.push(`- **Agent replied:** ${conv.lastAssistant}`);
-    }
-    lines.push('');
-  }
 
   if (a.readPaths.length || a.modifyPaths.length) {
     lines.push('## Files touched');
@@ -257,22 +248,18 @@ function renderMarkdown(run, root, conv) {
   return lines.join('\n');
 }
 
-function renderText(run, root, conv) {
+function renderText(run, root) {
   // Plain text variant, no markdown noise — convenient for CLI piping.
-  return renderMarkdown(run, root, conv).replace(/^#+\s*/gm, '').replace(/\n{3,}/g, '\n\n');
+  return renderMarkdown(run, root).replace(/^#+\s*/gm, '').replace(/\n{3,}/g, '\n\n');
 }
 
-function renderJson(run, root, conv) {
+function renderJson(run, root) {
   const a = aggregate(run.rows);
   return JSON.stringify({
     run_id: run.id,
     started_at: a.start,
     ended_at:   a.end,
     duration:   durationStr(a.start, a.end),
-    conversation: conv ? {
-      last_user:      conv.lastUser || null,
-      last_assistant: conv.lastAssistant || null,
-    } : null,
     files: {
       read:     a.readPaths.map(p => shortPath(p, root)),
       modified: a.modifyPaths.map(p => shortPath(p, root)),
@@ -312,6 +299,11 @@ ${col.b('Usage')}
   occasio recap --run <id>            specific session
   occasio recap --format text|json    alternative output
 
+${col.b('Note')}
+  Conversation text is not included — recap shows only what the audit
+  chain records (tools, decisions, costs). For raw transcripts, see
+  ${col.d('~/.claude/projects/')}.
+
 ${col.b('Tip')}
   occasio recap | clip               ${col.d('(Windows)')}
   occasio recap | pbcopy             ${col.d('(macOS)')}
@@ -343,20 +335,14 @@ function run(argv) {
   }
 
   const root = process.cwd();
-  // Conversation snippet from Claude Code's own session files for the cwd.
-  // Only attach to the most-recent run; older runs in --last N get none
-  // (we have no way to map run_id to a specific Claude session reliably).
-  const conv = readLastConversation(root);
   const parts = [];
-  for (let i = 0; i < runs.length; i++) {
-    const r = runs[i];
-    const useConv = i === 0 ? conv : null;
+  for (const r of runs) {
     if (opts.format === 'json') {
-      parts.push(renderJson(r, root, useConv));
+      parts.push(renderJson(r, root));
     } else if (opts.format === 'text') {
-      parts.push(renderText(r, root, useConv));
+      parts.push(renderText(r, root));
     } else {
-      parts.push(renderMarkdown(r, root, useConv));
+      parts.push(renderMarkdown(r, root));
     }
   }
 
