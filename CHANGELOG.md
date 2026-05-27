@@ -1,5 +1,81 @@
 # Changelog
 
+## [Unreleased]
+
+### Audit chain — single source of truth for user-visible counters
+
+Before this release, surfaces that show session counters (`status`, `ledger`,
+`replay`, `report`) read from `~/.occasio/session.json` and
+`~/.occasio/logs/YYYY-MM-DD.jsonl` — plain JSON files with no integrity
+protection. The hash-chained audit log at `~/.occasio/pipeline-events.jsonl`
+ran beside them but was not consulted by these commands. Result: the
+"tamper-evident" claim held only for `audit verify`, not for any number a
+user actually saw in the CLI. This release routes all counter-bearing
+surfaces through the chain.
+
+### Added
+- New audit-chain event kind `request` (one row per cloud-bound or
+  intercepted request) carrying cost, tokens, cache savings, and
+  per-request tool counts. Lockfile-protected append, stable canonical
+  field order, additively safe for existing chains (older verifiers
+  accept the new kind via the standard unknown-kind passthrough).
+  Independent Python walker (`docs/audit_walker.py`) is schema-agnostic
+  and verifies the new kind without changes.
+- `src/models/events.js` — single read-only façade over the chain. All
+  inspect commands route through it: `loadEvents({kind, runId, today,
+  since, until, cwd})`, plus `groupByRun`, `summarize`, `buildRunStats`,
+  `buildToolStats`. 60 unit tests in `test-events.js`.
+- `occasio ledger --scope all` — new option spanning every chain
+  `request` row (previously only `session` and `today` were supported).
+- `test-drift-guard.js` — fixture-based cross-surface invariant test
+  that asserts `status` / `ledger --summary` / `replay` show identical
+  counters for the same chain. Anti-test verified: artificially
+  inflating `status`'s counts makes the guard fail with a clear pointer
+  at the bypassed read path. Registered in `npm test`.
+
+### Changed
+- `status`, `ledger`, `replay`, `report` now derive every counter, cost,
+  and token total from the hash-chained audit log. `session.json` is
+  still read transitionally for config-only fields (mode, start, budget,
+  log_file) — those move out in a follow-up cleanup.
+- `replay --attribute` still reads `logs/*.jsonl` directly: this view
+  depends on per-tool `kept_bytes` data that is not yet attested in the
+  chain. The header line now carries a `(legacy)` marker. A future
+  refactor that attests tool-detail in the chain will eliminate this
+  legacy path.
+- `boundary` and `inspect` intentionally **not** migrated. They surface
+  per-request detail (`tools[]`, `lao_dropped[]`, `file_tokens[]`,
+  `secrets[]`) that lives only in `logs/*.jsonl` and is not part of the
+  drift problem these commands compete on. They remain legacy
+  detail-views over `logs/*` until tool-level data is also attested.
+
+### Fixed
+- **Security: chain race on default-configured auditor.** `createAuditor`
+  default changed from `{ lock: false }` to `{ lock: true }`. Production
+  spawns two concurrent writers against the default chain file (HTTP
+  proxy in `bin/occasio.js` + MCP server in `bin/occasio-mcp.js`), and
+  the prior `lock: false` default produced silent `prev_hash` divergence
+  under contention — silently breaking the integrity claim on real
+  workloads. `test-audit-lock-worker.js` now uses the production default
+  (no explicit `{ lock: true }`) so the test fails if anyone flips the
+  default back.
+- **Privacy: cross-session prompt leak in `occasio recap`.** Previously
+  rendered the most-recent Claude-Code session-file user/assistant
+  exchange into the recap of any historical run, regardless of how old
+  that run was. The conversation block is now removed entirely — recap
+  shows only what the audit chain attests (tools, decisions, costs).
+  Help text documents the change.
+- Stderr warning from a failed chain write now strips ANSI escapes and
+  control characters from `error.message` before printing, so a hostile
+  or malformed `Error` cannot inject terminal sequences into the user's
+  console.
+
+### Added — defensive tests
+- `test-audit-chain.js #20` pins the canonical key order and recomputed
+  hash for a deterministic `kind:"request"` row. Any reorder of the row
+  literal in `src/audit/jsonl-auditor.js` is now caught — old chains
+  would otherwise stop verifying against new code without notice.
+
 ## [0.9.2] — 2026-05-25
 
 ### Added
