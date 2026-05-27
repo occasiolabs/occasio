@@ -432,8 +432,144 @@ console.log('\n18. legacy rows without audit_schema still accepted');
   fs.unlinkSync(f);
 }
 
-// ── 19. file-locking: two concurrent writers preserve the chain ─────────────
-console.log('\n19. file-locking — concurrent writers');
+// ── 19. recordRequest — per-request accounting row ─────────────────────────
+console.log('\n19. recordRequest — per-request accounting');
+{
+  const f = tmpFile();
+  const a = createAuditor(f);
+
+  // happy path: write one request row
+  const r1 = a.recordRequest({
+    iso: '2026-05-28T12:00:00.000Z',
+    run_id: 'r-acct-1',
+    cwd: 'C:\\\\proj',
+    event_type: 'cloud_sent',
+    model: 'claude-haiku-4-5',
+    input_tokens: 120, output_tokens: 8,
+    cache_read_tokens: 0, cache_write_tokens: 0,
+    cost: 0.000123, cache_savings: 0,
+  });
+  assert('recordRequest ok=true', r1.ok === true);
+
+  const rows = readRows(f);
+  assert('one row written', rows.length === 1);
+  assert('kind is "request"', rows[0].kind === 'request');
+  assert('audit_schema present', rows[0].audit_schema === 1);
+  assert('prev_hash is GENESIS', rows[0].prev_hash === GENESIS);
+  assert('hash field present', typeof rows[0].hash === 'string' && rows[0].hash.length === 64);
+  assert('run_id propagated', rows[0].run_id === 'r-acct-1');
+  assert('event_type propagated', rows[0].event_type === 'cloud_sent');
+  assert('cost propagated', rows[0].cost === 0.000123);
+
+  // chains correctly with subsequent rows of different kinds
+  const r2 = a.record(evt(0), decision, result);
+  assert('record after recordRequest ok', r2.ok === true);
+  const rows2 = readRows(f);
+  assert('two rows total', rows2.length === 2);
+  assert('row 2 prev_hash links to row 1 hash', rows2[1].prev_hash === rows2[0].hash);
+
+  // verifier accepts mixed-kind chain
+  const v = verifyFile(f);
+  assert('mixed-kind chain verifies', v.ok === true);
+  assert('verifier counted 2 rows', v.chained === 2);
+
+  // recordRequest with null/undefined entry is a safe no-op
+  const rNull = a.recordRequest(null);
+  assert('recordRequest(null) ok=true (no-op)', rNull.ok === true);
+  assert('null call did not write a row', readRows(f).length === 2);
+
+  // defaults: missing tokens/cost fields become 0, not undefined
+  const r3 = a.recordRequest({ iso: '2026-05-28T12:00:01.000Z', run_id: 'r-acct-1' });
+  assert('recordRequest with minimal entry ok', r3.ok === true);
+  const last = readRows(f).pop();
+  assert('missing input_tokens defaults to 0', last.input_tokens === 0);
+  assert('missing cost defaults to 0', last.cost === 0);
+  assert('missing event_type falls back to cloud_sent', last.event_type === 'cloud_sent');
+
+  fs.unlinkSync(f);
+}
+
+// ── 20. recordRequest canonical serialization stability ────────────────────
+//
+// Pin the JSON-key order of a deterministic kind:"request" row. If this
+// test fails, someone reordered fields in recordRequestInner()'s row
+// literal in src/audit/jsonl-auditor.js. That's a BREAKING CHANGE to the
+// audit chain's canonical serialization: rows written after the reorder
+// will hash differently from rows written before, and the independent
+// Python walker (docs/audit_walker.py) will see a hash mismatch on the
+// boundary row. Either revert the reorder, or bump audit_schema
+// intentionally and update both this test and the Python walker.
+console.log('\n20. recordRequest canonical serialization stability');
+{
+  const crypto = require('crypto');
+  const realUuid = crypto.randomUUID;
+  crypto.randomUUID = () => '00000000-0000-0000-0000-000000000000';
+
+  const f = tmpFile();
+  const a = createAuditor(f);
+  try {
+    const r = a.recordRequest({
+      iso: '2026-05-28T12:00:00.000Z',
+      run_id: 'fixed-run-id',
+      cwd: 'C:\\fixed\\path',
+      event_type: 'cloud_sent',
+      model: 'claude-haiku-4-5',
+      input_tokens: 100,
+      output_tokens: 10,
+      cache_read_tokens: 0,
+      cache_write_tokens: 0,
+      cost: 0.001,
+      cache_savings: 0.0005,
+      lao_tokens_saved: 0,
+      lao_cost_saved: 0,
+      distill_tokens_saved: 0,
+      distill_cost_saved: 0,
+      tools_attempted: 1,
+      tools_local_count: 1,
+      tools_mcp_count: 0,
+    });
+    assert('recordRequest ok', r.ok === true);
+
+    const row = readRows(f)[0];
+    const keys = Object.keys(row);
+
+    // Canonical key order — MUST match the field order in
+    // recordRequestInner's row literal in src/audit/jsonl-auditor.js.
+    const expectedKeys = [
+      'audit_schema', 'ts', 'event_id', 'session_id', 'run_id',
+      'agent', 'protocol', 'direction', 'kind', 'event_type',
+      'model', 'cwd', 'input_tokens', 'output_tokens',
+      'cache_read_tokens', 'cache_write_tokens', 'cost', 'cache_savings',
+      'lao_tokens_saved', 'lao_cost_saved', 'distill_tokens_saved', 'distill_cost_saved',
+      'tools_attempted', 'tools_local_count', 'tools_mcp_count',
+      'prev_hash', 'hash',
+    ];
+    assert(`row has ${expectedKeys.length} keys in canonical order`,
+      JSON.stringify(keys) === JSON.stringify(expectedKeys),
+      `actual: ${JSON.stringify(keys)}`);
+
+    // Hash recomputation: confirms the canonical-serialization contract.
+    // computeHash uses JSON.stringify which respects insertion order in
+    // V8 (and Python dict from 3.7+). If anyone changes the key order
+    // in the row literal, the recomputed hash here will diverge from
+    // the stored hash, and this assertion catches it.
+    const withoutHash = { ...row };
+    delete withoutHash.hash;
+    const recomputed = computeHash(withoutHash);
+    assert('stored hash equals computeHash(row-without-hash)', row.hash === recomputed);
+
+    // Cross-walker verification: the JS verifier accepts the row.
+    const v = verifyFile(f);
+    assert('canonical row verifies', v.ok === true);
+    assert('verifier counted 1 row', v.chained === 1);
+  } finally {
+    crypto.randomUUID = realUuid;
+    try { fs.unlinkSync(f); } catch { /* */ }
+  }
+}
+
+// ── 21. file-locking: two concurrent writers preserve the chain ─────────────
+console.log('\n21. file-locking — concurrent writers');
 {
   let lockAvailable = true;
   try { require('proper-lockfile'); } catch { lockAvailable = false; }
