@@ -368,6 +368,11 @@ if (cmd === 'explain') {
   process.exit(require('./cli/explain').run(args.slice(1)));
 }
 
+if (cmd === 'receipt') {
+  (async () => process.exit(await require('./cli/receipt').run(args.slice(1))))();
+  return;
+}
+
 if (cmd === 'selftest') {
   const { runSelfTestCli } = require('./selftest');
   runSelfTestCli();   // async, calls process.exit itself
