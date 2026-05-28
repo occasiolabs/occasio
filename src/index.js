@@ -373,6 +373,19 @@ if (cmd === 'receipt') {
   return;
 }
 
+if (cmd === 'bom') {
+  const sub = args[1];
+  if (sub === 'export') {
+    process.exit(require('./bom/cyclonedx').run(args.slice(2)));
+  }
+  process.stderr.write('usage: occasio bom export --run <id> [--out file]\n');
+  process.exit(2);
+}
+
+if (cmd === 'compliance') {
+  process.exit(require('./cli/compliance').run(args.slice(1)));
+}
+
 if (cmd === 'selftest') {
   const { runSelfTestCli } = require('./selftest');
   runSelfTestCli();   // async, calls process.exit itself
