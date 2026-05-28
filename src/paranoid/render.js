@@ -96,6 +96,23 @@ function renderHuman(report) {
   push(`    ${col.d('Breaks              ')} ${ch.chain.breakCount === 0 ? col.g(0) : col.y(ch.chain.breakCount + ' (pre-v0.9 concurrent-writer events)')}`);
   push('');
 
+  // ── Runtime network watch (optional, present when --watch is used) ──────
+  if (report.scanners['network-watch']) {
+    const nw = report.scanners['network-watch'];
+    push(col.b('  Runtime network watch'));
+    push(`    ${col.d('Window              ')} ${nw.windowSeconds}s (${nw.windowStartedAt} to ${nw.windowEndedAt})`);
+    push(`    ${col.d('Connections observed')} ${nw.observations.length}`);
+    push(`    ${col.d('Unique destinations ')} ${nw.destinations.length}`);
+    if (nw.destinations.length === 0) {
+      push(`    ${col.g('No outbound connection attempts during the window.')}`);
+    } else {
+      for (const d of nw.destinations) {
+        push(`      ${col.d('•')} ${d.host || '?'}:${d.port || '?'} ${col.d('(' + d.transport + ', ' + d.count + 'x)')}`);
+      }
+    }
+    push('');
+  }
+
   // ── Closing block: the thing that travels ───────────────────────────────
   const srcZeroHard  = srcByClass['hardcoded-host'] === 0;
   const teleZero     = sa.hits.length === 0;

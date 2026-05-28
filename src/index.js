@@ -364,6 +364,10 @@ if (cmd === 'audit') {
   process.exit(0);
 }
 
+if (cmd === 'explain') {
+  process.exit(require('./cli/explain').run(args.slice(1)));
+}
+
 if (cmd === 'selftest') {
   const { runSelfTestCli } = require('./selftest');
   runSelfTestCli();   // async, calls process.exit itself
@@ -565,11 +569,14 @@ if (cmd === 'doctor' || cmd === 'check') {
     const { runParanoid } = require('./paranoid');
     const tokenIdx = subArgs.indexOf('--oidc-token');
     const oidcToken = tokenIdx >= 0 ? subArgs[tokenIdx + 1] : undefined;
+    const watchIdx = subArgs.indexOf('--watch');
+    const watchSeconds = watchIdx >= 0 ? Number(subArgs[watchIdx + 1]) || 30 : null;
     (async () => {
       const code = await runParanoid({
         json: subArgs.includes('--json'),
         sign: subArgs.includes('--sign'),
         oidcToken,
+        watchSeconds,
       });
       process.exit(code);
     })();

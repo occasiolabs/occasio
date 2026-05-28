@@ -20,9 +20,10 @@ const sourceScan       = require('./source-scan');
 const selfAudit        = require('./self-audit');
 const packageIntegrity = require('./package-integrity');
 const chainSummary     = require('./chain-summary');
+const networkWatch     = require('./network-watch');
 const { renderHuman, renderJson } = require('./render');
 
-function runScanners(opts = {}) {
+async function runScanners(opts = {}) {
   const t0 = Date.now();
   const scanners = {
     'source-scan':       sourceScan.scan(opts),
@@ -30,6 +31,9 @@ function runScanners(opts = {}) {
     'package-integrity': packageIntegrity.scan(opts),
     'chain-summary':     chainSummary.scan(opts),
   };
+  if (opts.watchSeconds) {
+    scanners['network-watch'] = await networkWatch.scan(opts);
+  }
 
   const totals = { critical: 0, warn: 0, info: 0, ok: 0 };
   for (const k of Object.keys(scanners)) {
@@ -74,7 +78,7 @@ async function signReportToDisk(report, opts) {
 }
 
 async function runParanoid(opts = {}) {
-  const report = runScanners(opts);
+  const report = await runScanners(opts);
 
   if (opts.sign) {
     try {

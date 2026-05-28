@@ -109,8 +109,8 @@ console.log('\nBlock 4: telemetry SDK detection + real dependency check');
 }
 
 console.log('\nBlock 5: integration over real src/ tree (the regression net)');
-{
-  const report = paranoid.runScanners();
+(async () => {
+  const report = await paranoid.runScanners();
   const src    = report.scanners['source-scan'];
   const tele   = report.scanners['self-audit'];
 
@@ -130,8 +130,20 @@ console.log('\nBlock 5: integration over real src/ tree (the regression net)');
   assert('overall critical count is zero',
          report.totals.critical === 0,
          `totals: ${JSON.stringify(report.totals)}`);
-}
 
-console.log(`\n  ${passed} passed, ${failed} failed`);
-if (failed > 0) process.exit(1);
-process.exit(0);
+  console.log('\nBlock 6: runtime network-watch records observations');
+  const watchReport = await paranoid.runScanners({ watchSeconds: 1 });
+  const nw = watchReport.scanners['network-watch'];
+  assert('network-watch returns a result when watchSeconds is set',
+         nw && nw.name === 'network-watch');
+  assert('network-watch carries observations array (may be empty)',
+         nw && Array.isArray(nw.observations));
+  assert('network-watch carries destinations array',
+         nw && Array.isArray(nw.destinations));
+  assert('network-watch window honours requested seconds',
+         nw && nw.windowSeconds === 1);
+
+  console.log(`\n  ${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
+  process.exit(0);
+})();
