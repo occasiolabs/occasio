@@ -1,0 +1,62 @@
+name: publish
+
+# Publishes @occasiolabs/occasio to npm with provenance attestation.
+#
+# Trigger: GitHub Release published (manual release flow).
+# Permissions:
+#   - contents: read   - check out the source
+#   - id-token: write  - OIDC token for npm provenance signing
+#
+# What npm provenance does: the publish step records a signed Sigstore
+# attestation linking the published tarball to the exact GitHub Actions
+# run that built it (workflow file, commit SHA, runner identity). Consumers
+# verify via `npm audit signatures` or by inspecting the registry's
+# `dist.attestations` field. This makes the npm tarball cryptographically
+# linked to this repository's source at the published commit, which is
+# what `occasio doctor --paranoid` "reproducible verify" recipe assumes.
+
+on:
+  release:
+    types: [published]
+  # Allow manual triggering for testing the publish flow without cutting a release.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Set to "true" to validate the workflow without publishing'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+  id-token: write   # required for npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Publish to npm with provenance
+        if: ${{ github.event_name == 'release' || github.event.inputs.dry_run != 'true' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+      - name: Dry-run report
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run: would publish $(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")"
+          echo "Provenance attestation would be generated and uploaded to the npm registry."

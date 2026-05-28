@@ -386,6 +386,11 @@ if (cmd === 'compliance') {
   process.exit(require('./cli/compliance').run(args.slice(1)));
 }
 
+if (cmd === 'live') {
+  require('./cli/live').run();
+  return;
+}
+
 if (cmd === 'selftest') {
   const { runSelfTestCli } = require('./selftest');
   runSelfTestCli();   // async, calls process.exit itself
