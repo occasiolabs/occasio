@@ -144,6 +144,103 @@ through it unchanged.
   suggestion's colour bled into the next. `test-doctor-ansi.js` is a
   regression guard.
 
+### Supply-chain triangle positioning
+
+- `docs/SUPPLY-CHAIN-TRIANGLE.md`: one-pager naming the three
+  complementary specs (SLSA Provenance, CycloneDX AI-BOM, Occasio
+  agent-attestation/v1) and pointing at each one's canonical verifier.
+  README now links to it after the "Verify the local-first claim"
+  section. Occasio is the runtime behavioural leg.
+- `docs/VERIFY.md`: third-party verifier guide for an Occasio
+  attestation bundle. Three paths (CLI, Python walker, separate
+  cosign + canonical verification), what each step proves, common
+  failure modes.
+
+### New surfaces
+
+- **`occasio doctor --paranoid --sign`**: Sigstore-sign the paranoid
+  report. Reuses the OIDC token acquisition pattern from
+  `src/attest/sign.js` but signs the report directly (no in-toto
+  wrapper). Writes `paranoid-report-<ts>.json` and
+  `paranoid-report-<ts>.sigstore.json` to cwd, prints the Rekor URL.
+  Requires GitHub Actions OIDC env or `--oidc-token <jwt>`. Custom
+  DSSE payload type `application/vnd.occasio.paranoid-report+json`.
+- **`occasio doctor --paranoid --watch <s>`**: install a same-process
+  monkey-patch on `http.request`, `https.request`, `net.connect`,
+  `net.createConnection`, and `dgram.createSocket` for `s` seconds.
+  Every outbound attempt is observed with timestamp, host, port,
+  transport, and aggregated by destination. Observation buffer capped
+  at 10000 with a `dropped` surplus counter to bound memory.
+- **`occasio explain <event_id|prefix>`**: locate a single chain row
+  (full id or unique hex prefix) and render its action, reason,
+  policy_source, the active policy_loaded snapshot at decision time
+  (path, hash, version), normalised inputs, and chain pointers.
+- **`occasio receipt`**: emit a small shareable summary (target
+  1 to 2 KB) of one run. Carries run_id, accounting totals, tool
+  stats, and chain commitment (first_hash + last_hash). Deliberately
+  excludes tool inputs, cwd, prompts, response bodies, and any
+  identifier beyond the run_id. With `--sign`, the receipt is
+  Sigstore-signed. Documented caveat: signed receipts embed the
+  OIDC identity claim (workflow URL for GitHub Actions); strip
+  `signature.identity` before public redistribution if the audience
+  is untrusted.
+- **`occasio bom export`**: CycloneDX 1.6 ML-BOM emitter. Components
+  include one machine-learning-model entry per observed model, one
+  library entry per invoked tool, one data entry per accessed file
+  path, and a service entry per LLM endpoint. The dependencies
+  graph links the run to its parts. Pairs with `agent-attestation/v1`
+  for the runtime composition + behaviour pair.
+- **`occasio compliance export`**: bundle one run for auditor review.
+  Writes five artefacts (chain.jsonl, receipt.json, bom.cyclonedx.json,
+  framework-mapping.json, summary.md) into a single directory.
+  Frameworks supported: `nist-ai-rmf`, `eu-ai-act`, `soc2`, `generic`.
+  Framework mapping is intentionally a skeleton (clearly documented
+  as such); full coverage ships as paid policy bundles per
+  `docs/SUSTAINABILITY.md`.
+- **`occasio live`**: terminal-second-window watcher on the active
+  session. Re-renders on every chain append plus every 5 seconds for
+  the timestamp tick. Shows active run, chain-sourced counters
+  (cost, requests, tool stats), and the last 12 chain events with
+  action colouring. Exits cleanly on Ctrl-C.
+
+### Consistency layer
+
+- All new commands accept `--help` / `-h` and print a uniform usage
+  block (one-line description, usage line, flags list, example).
+- Flag names normalised across commands: `--run <id>`, `--out <path>`,
+  `--json`, `--sign`, `--oidc-token <jwt>`.
+- New entries added to the README Commands table for `occasio`
+  (no args), `doctor --paranoid`, `live`, `explain`, `receipt`,
+  `bom export`, `compliance export`.
+
+### Sharing / privacy notes documented in source
+
+- `bom.cyclonedx.json` and `chain.jsonl` carry absolute file paths
+  from the run. Intended for internal audit. The summary.md cover
+  sheet in compliance bundles carries a prominent "Sharing note"
+  block directing users to `receipt.json` as the path-free public
+  sharing surface. Module-level note added to `src/bom/cyclonedx.js`.
+- `signature.identity` in signed receipts can reveal the producer's
+  GitHub workflow URL (and, for some OIDC providers, user email).
+  Documented in `src/cli/receipt.js` module header with a
+  redaction recipe.
+
+### npm publish workflow
+
+- `.github/workflows/publish.yml`: GitHub Release trigger publishes
+  `@occasiolabs/occasio` to npm with `--provenance`. Requires
+  `permissions: id-token: write`. The published tarball carries a
+  Sigstore-signed attestation linking it to this exact workflow run
+  and commit SHA. Closes the "reproducible verify" recipe printed
+  by `occasio doctor --paranoid`.
+
+### Tests
+
+- `test-paranoid.js` block 6 covers `network-watch` shape.
+- `test-new-commands.js` (50 assertions across five blocks): smoke
+  coverage for explain, receipt, bom export, compliance export, and
+  live render. Wired into `npm test`.
+
 ## [0.9.2] — 2026-05-25
 
 ### Added

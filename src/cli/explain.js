@@ -116,10 +116,26 @@ function explainToolCall(e, all) {
   return lines.join('\n');
 }
 
+function usage() {
+  return [
+    'occasio explain — show what a single chain event records and why',
+    '',
+    'usage: occasio explain <event_id|prefix>',
+    '',
+    'arguments:',
+    '  <event_id|prefix>  the event_id from a pipeline-events.jsonl row,',
+    '                     or a unique hex prefix',
+    '',
+    'example:',
+    '  occasio explain 040a934c',
+    '',
+  ].join('\n');
+}
+
 function run(args) {
-  if (!args || !args[0]) {
-    process.stderr.write('usage: occasio explain <event_id|prefix>\n');
-    return 2;
+  if (!args || !args[0] || args[0] === '--help' || args[0] === '-h') {
+    process.stdout.write(usage());
+    return args && (args[0] === '--help' || args[0] === '-h') ? 0 : 2;
   }
   const query = args[0];
   const r = findEvent(query);
@@ -136,4 +152,4 @@ function run(args) {
   return 0;
 }
 
-module.exports = { run, findEvent, explainToolCall };
+module.exports = { run, findEvent, explainToolCall, usage };

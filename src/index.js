@@ -387,7 +387,7 @@ if (cmd === 'compliance') {
 }
 
 if (cmd === 'live') {
-  require('./cli/live').run();
+  require('./cli/live').run(args.slice(1));
   return;
 }
 
@@ -589,6 +589,23 @@ if (cmd === 'dashboard') {
 if (cmd === 'doctor' || cmd === 'check') {
   const subArgs = args.slice(1);
   if (subArgs.includes('--paranoid')) {
+    if (subArgs.includes('--help') || subArgs.includes('-h')) {
+      process.stdout.write([
+        'occasio doctor --paranoid — Anti-SaaS proof scan of this install',
+        '',
+        'usage: occasio doctor --paranoid [--watch <s>] [--sign] [--oidc-token <jwt>] [--json]',
+        '',
+        'flags:',
+        '  --watch <s>          observe outbound connections for s seconds (default off)',
+        '  --sign               Sigstore-sign the report (needs OIDC env or --oidc-token)',
+        '  --oidc-token <jwt>   explicit OIDC token instead of GitHub Actions env',
+        '  --json               structured JSON output instead of the human view',
+        '',
+        'exit: 0 if no critical findings, 1 otherwise.',
+        '',
+      ].join('\n'));
+      process.exit(0);
+    }
     const { runParanoid } = require('./paranoid');
     const tokenIdx = subArgs.indexOf('--oidc-token');
     const oidcToken = tokenIdx >= 0 ? subArgs[tokenIdx + 1] : undefined;

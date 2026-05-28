@@ -158,8 +158,32 @@ function renderReceiptHuman(receipt) {
   return lines.join('\n');
 }
 
+function usage() {
+  return [
+    'occasio receipt — emit a small shareable summary of one agent run',
+    '',
+    'usage: occasio receipt [--run <id>] [--sign] [--oidc-token <jwt>]',
+    '                       [--out <path>] [--json]',
+    '',
+    'flags:',
+    '  --run <id>           explicit run_id (default: currentRunId from session.json)',
+    '  --sign               Sigstore-sign the receipt (needs OIDC env or --oidc-token)',
+    '  --oidc-token <jwt>   explicit OIDC token instead of GitHub Actions env',
+    '  --out <path>         write JSON receipt to file (sigstore bundle as .sigstore.json sidecar)',
+    '  --json               print machine-readable JSON to stdout',
+    '',
+    'example:',
+    '  occasio receipt --run <id> --sign --out receipt.json',
+    '',
+  ].join('\n');
+}
+
 async function run(args) {
   const a = args || [];
+  if (a.includes('--help') || a.includes('-h')) {
+    process.stdout.write(usage());
+    return 0;
+  }
   const runIdx  = a.indexOf('--run');
   const outIdx  = a.indexOf('--out');
   const tokenIdx = a.indexOf('--oidc-token');
@@ -210,4 +234,4 @@ async function run(args) {
   return 0;
 }
 
-module.exports = { run, buildReceipt, renderReceiptHuman };
+module.exports = { run, buildReceipt, renderReceiptHuman, usage };

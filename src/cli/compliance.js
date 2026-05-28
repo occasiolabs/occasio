@@ -195,12 +195,32 @@ function buildSummary(runId, receipt, mapping, framework) {
   ].join('\n');
 }
 
+function usage() {
+  return [
+    'occasio compliance export — bundle one run for auditor review',
+    '',
+    'usage: occasio compliance export [--run <id>] [--framework <name>] [--out <dir>]',
+    '',
+    'flags:',
+    '  --run <id>           explicit run_id (default: currentRunId from session.json)',
+    '  --framework <name>   one of: ' + FRAMEWORKS.join(', ') + ', generic',
+    '  --out <dir>          output directory (default: ./occasio-compliance-<run_id>)',
+    '',
+    'emits (in --out dir): chain.jsonl, receipt.json, bom.cyclonedx.json,',
+    '                      framework-mapping.json, summary.md',
+    '',
+    'note: chain.jsonl and bom.cyclonedx.json contain absolute file paths.',
+    'Intended for internal audit; review before public distribution. receipt.json',
+    'is the path-free surface safe for public sharing.',
+    '',
+  ].join('\n');
+}
+
 function run(args) {
   const a = args || [];
-  if (a[0] !== 'export') {
-    process.stderr.write('usage: occasio compliance export --run <id> [--framework <name>] [--out dir]\n');
-    process.stderr.write(`frameworks: ${FRAMEWORKS.join(', ')}\n`);
-    return 2;
+  if (a.includes('--help') || a.includes('-h') || a[0] !== 'export') {
+    process.stdout.write(usage());
+    return (a.includes('--help') || a.includes('-h')) ? 0 : 2;
   }
   const rest    = a.slice(1);
   const runIdx  = rest.indexOf('--run');
@@ -227,4 +247,4 @@ function run(args) {
   return 0;
 }
 
-module.exports = { run, exportRun, buildFrameworkMapping };
+module.exports = { run, exportRun, buildFrameworkMapping, usage };

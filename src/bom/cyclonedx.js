@@ -183,15 +183,38 @@ function buildBom(runId, opts = {}) {
   return bom;
 }
 
+function usage() {
+  return [
+    'occasio bom export — emit a CycloneDX 1.6 ML-BOM from a run slice',
+    '',
+    'usage: occasio bom export [--run <id>] [--out <path>]',
+    '',
+    'flags:',
+    '  --run <id>     explicit run_id (default: currentRunId from session.json)',
+    '  --out <path>   write JSON BOM to file (default: stdout)',
+    '',
+    'example:',
+    '  occasio bom export --run <id> --out bom.cyclonedx.json',
+    '',
+    'note: emitted BOM contains absolute file paths from the run. Intended for',
+    'internal audit; scrub before public distribution.',
+    '',
+  ].join('\n');
+}
+
 function run(args) {
   const a = args || [];
+  if (a.includes('--help') || a.includes('-h')) {
+    process.stdout.write(usage());
+    return 0;
+  }
   const runIdx = a.indexOf('--run');
   const outIdx = a.indexOf('--out');
   const runId  = runIdx >= 0 ? a[runIdx + 1] : currentRunId();
   const out    = outIdx >= 0 ? a[outIdx + 1] : null;
 
   if (!runId) {
-    process.stderr.write('usage: occasio bom export --run <id> [--out file]\n');
+    process.stderr.write(usage());
     return 2;
   }
 
@@ -211,4 +234,4 @@ function run(args) {
   return 0;
 }
 
-module.exports = { run, buildBom };
+module.exports = { run, buildBom, usage };

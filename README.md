@@ -150,10 +150,14 @@ Both live on `127.0.0.1` only. No CORS, no auth, no external network.
 
 | Command | What it does |
 |---|---|
+| `occasio` (no args) | Unified live snapshot of the active run |
 | `occasio claude [args]` | Start Claude Code with Occasio proxy active |
 | `occasio register` | Register `claude` shell alias |
 | `occasio doctor` | Setup health-check |
+| `occasio doctor --paranoid` | Anti-SaaS proof scan (`--watch <s>`, `--sign`, `--json`) |
+| `occasio live` | Terminal watcher on the active session (Ctrl-C to exit) |
 | `occasio status` | Session totals + savings breakdown |
+| `occasio explain <event_id>` | Show what a single chain event records and why |
 | `occasio replay` | Run-level audit (`--detail`, `--run <id>`, `--attribute`) |
 | `occasio inspect` | Per-request cloud-boundary manifest |
 | `occasio boundary` | Three-column view: produced / re-entered / prevented |
@@ -168,6 +172,9 @@ Both live on `127.0.0.1` only. No CORS, no auth, no external network.
 | `occasio attest --run-id <uuid>` | Build a behavioral attestation predicate v1 |
 | `occasio attest --sign` | Sigstore-sign via GitHub Actions OIDC |
 | `occasio attest verify <file>` | Re-verify a signed attestation end-to-end |
+| `occasio receipt [--run <id>] [--sign]` | Small shareable run summary (`--out file`, `--json`) |
+| `occasio bom export [--run <id>]` | CycloneDX 1.6 ML-BOM from a run slice (`--out file`) |
+| `occasio compliance export [--run <id>]` | Auditor bundle: chain + receipt + BOM + framework mapping |
 | `occasio policy [show \| validate \| init \| doctor]` | Policy authoring + diagnosis |
 | `occasio harness` | Run scripted adversarial scenarios against your policy |
 | `occasio redteam` | Autonomous tester-LLM probes a subject Claude Code session |

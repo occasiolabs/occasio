@@ -89,7 +89,26 @@ function render() {
   return out.join('\n');
 }
 
-function run() {
+function usage() {
+  return [
+    'occasio live — terminal-second-window watcher on the active session',
+    '',
+    'usage: occasio live',
+    '',
+    'no flags. Opens a redraw-on-chain-append view of the active run\'s',
+    'counters and the last 12 chain events. Exit with Ctrl-C.',
+    '',
+    'tip: run `occasio claude` in one terminal, `occasio live` in another.',
+    '',
+  ].join('\n');
+}
+
+function run(args) {
+  const a = args || [];
+  if (a.includes('--help') || a.includes('-h')) {
+    process.stdout.write(usage());
+    process.exit(0);
+  }
   process.stdout.write(CLEAR_SCREEN + render());
 
   let pending = false;
@@ -130,4 +149,4 @@ function run() {
   // Keep event loop alive
 }
 
-module.exports = { run, render };
+module.exports = { run, render, usage };
