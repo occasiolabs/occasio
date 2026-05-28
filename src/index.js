@@ -676,6 +676,15 @@ if (cmd === 'doctor' || cmd === 'check') {
   return;
 }
 
+// `occasio` with no args prints a unified live snapshot and exits. The proxy
+// only launches via the explicit `occasio claude` form (or via the `claude`
+// shell alias registered by `occasio register`, which forwards `claude args...`
+// to `occasio claude args...` and therefore goes through the proxy branch).
+if (!cmd) {
+  require('./cli/snapshot').run();
+  process.exit(0);
+}
+
 const claudeArgs = cmd === 'claude' ? args.slice(1) : args;
 let mode = 'intercept';
 const mi = claudeArgs.indexOf('--mode');
