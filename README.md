@@ -64,6 +64,16 @@ occasio attest --run-id <uuid>  # Build a behavioral attestation for one session
 
 ---
 
+## Verify the local-first claim
+
+```bash
+occasio doctor --paranoid
+```
+
+Scans the installed source for every outbound network primitive, classifies each callsite, checks for telemetry SDK signatures, and surfaces the audit chain status. Exits non-zero if any critical finding appears. JSON output via `--paranoid --json`. See [`docs/WHY-LOCAL.md`](docs/WHY-LOCAL.md) for the architecture this verifies.
+
+---
+
 ## Live visibility — for developers
 
 The audit chain and signed attestations answer *"what did the agent do, prove it"* — the auditor's question. Sometimes you also want the simpler one: *"what is the agent doing **right now**?"* What is leaving your machine in this HTTP request. Which files have already gone to Anthropic in this session. What the system prompt looks like. What got redacted before it shipped.

@@ -45,11 +45,19 @@ The only network path Occasio creates is the outbound call from your machine to 
 
 ## How to verify
 
-You do not need to take this on trust. The architecture is verifiable:
+You do not need to take this on trust. The architecture is verifiable, and the most direct verification ships in the package:
 
-- **Source**: the project is Apache 2.0. Every line that touches your data is in `src/`. Grep for `fetch`, `http.request`, or any other outbound primitive.
-- **Tests**: `test-interceptor.js` and the suites it chains together exercise the proxy, the auditor, and the policy engine end to end. `npm test` runs the lot.
-- **npm provenance**: published releases carry npm-provenance attestations linking the published artefact to a specific GitHub source commit.
+```
+occasio doctor --paranoid
+```
+
+This scans the installed source for every outbound network primitive and classifies each callsite (proxy-bound, LLM endpoint, signing infrastructure, local-loopback, hardcoded, unclassified). It checks for the signatures of known telemetry SDKs in both source and dependencies. It surfaces the audit chain's integrity status. The output is screenshot-grade and exits non-zero if any critical finding appears. A JSON form is available via `--paranoid --json` for tooling.
+
+Additional cross-checks:
+
+- **Source**: the project is Apache 2.0. Every line that touches your data is in `src/`. The paranoid doctor's source-scan covers every `.js` file under `src/` and `bin/`.
+- **Tests**: `test-interceptor.js` and the suites it chains together exercise the proxy, the auditor, and the policy engine end to end. `test-paranoid.js` block 5 asserts the paranoid-doctor scan against the real source tree produces zero critical findings, so a future contribution that introduces a hardcoded outbound URL or a telemetry SDK fails CI. `npm test` runs the lot.
+- **npm provenance**: published releases will carry npm-provenance attestations linking the published artefact to a specific GitHub source commit (lands with v0.10.0+).
 - **Audit chain**: every governed action writes one row to a hash-chained JSONL on your disk. `occasio audit verify` re-walks the chain end-to-end. An independent Python walker at `docs/audit_walker.py` reproduces the verification using only the stdlib.
 
 ## Related

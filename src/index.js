@@ -560,6 +560,12 @@ if (cmd === 'dashboard') {
 }
 
 if (cmd === 'doctor' || cmd === 'check') {
+  const subArgs = args.slice(1);
+  if (subArgs.includes('--paranoid')) {
+    const { runParanoid } = require('./paranoid');
+    const code = runParanoid({ json: subArgs.includes('--json') });
+    process.exit(code);
+  }
   (async () => {
     const { execSync } = require('child_process');
     const net = require('net');
