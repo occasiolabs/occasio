@@ -563,8 +563,17 @@ if (cmd === 'doctor' || cmd === 'check') {
   const subArgs = args.slice(1);
   if (subArgs.includes('--paranoid')) {
     const { runParanoid } = require('./paranoid');
-    const code = runParanoid({ json: subArgs.includes('--json') });
-    process.exit(code);
+    const tokenIdx = subArgs.indexOf('--oidc-token');
+    const oidcToken = tokenIdx >= 0 ? subArgs[tokenIdx + 1] : undefined;
+    (async () => {
+      const code = await runParanoid({
+        json: subArgs.includes('--json'),
+        sign: subArgs.includes('--sign'),
+        oidcToken,
+      });
+      process.exit(code);
+    })();
+    return;
   }
   (async () => {
     const { execSync } = require('child_process');

@@ -119,10 +119,19 @@ function renderHuman(report) {
     push('');
   }
 
-  // ── Signed report (stub, lands in v0.10.1) ──────────────────────────────
+  // ── Signed report ────────────────────────────────────────────────────────
   push(col.b('  Signed report'));
-  push(col.d('    This build prints unsigned. Sigstore signing of the paranoid'));
-  push(col.d('    report ships in v0.10.1 alongside signed releases.'));
+  if (report.signature) {
+    push(`    ${col.d('Status     ')} ${col.g('signed (Sigstore keyless)')}`);
+    if (report.signature.identity?.subject)
+      push(`    ${col.d('Identity   ')} ${report.signature.identity.subject}`);
+    if (report.signature.rekor_entry)
+      push(`    ${col.d('Rekor      ')} ${col.c(report.signature.rekor_entry)}`);
+    push(`    ${col.d('SHA-256    ')} ${report.signature.payload_sha256}`);
+  } else {
+    push(col.d('    Unsigned. Pass --sign to produce a Sigstore-signed bundle'));
+    push(col.d('    (requires GitHub Actions OIDC env, or --oidc-token <jwt>).'));
+  }
   push('');
 
   return out.join('\n');

@@ -72,6 +72,8 @@ occasio doctor --paranoid
 
 Scans the installed source for every outbound network primitive, classifies each callsite, checks for telemetry SDK signatures, and surfaces the audit chain status. Exits non-zero if any critical finding appears. JSON output via `--paranoid --json`. See [`docs/WHY-LOCAL.md`](docs/WHY-LOCAL.md) for the architecture this verifies.
 
+Where Occasio sits alongside SLSA Provenance and CycloneDX AI-BOM: [`docs/SUPPLY-CHAIN-TRIANGLE.md`](docs/SUPPLY-CHAIN-TRIANGLE.md). Occasio is the runtime behavioral leg.
+
 ---
 
 ## Live visibility — for developers
