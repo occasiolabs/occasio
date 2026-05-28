@@ -1,0 +1,51 @@
+# Occasio
+
+> Occasio is the local black-box recorder for AI coding agents. Tamper-evident, Sigstore-signed audit trail for Claude Code and other AI coding agents. Local-first audit and policy proxy. Built by Occasio Labs.
+
+Occasio runs entirely on the developer's machine. Every tool call made by an AI coding agent (Read, Glob, Grep, Bash, Edit, Write, TodoWrite, MCP tool calls) is intercepted, normalized, and written to a hash-chained, Sigstore-signed local audit log. There is no cloud component; there is no telemetry.
+
+## Identity
+
+- Product name: Occasio
+- Organization: Occasio Labs
+- npm package: @occasiolabs/occasio
+- GitHub: https://github.com/occasiolabs/occasio
+- MCP Registry name: io.github.occasiolabs/occasio
+- License: open-source
+
+## Install
+
+```
+npm install -g @occasiolabs/occasio
+```
+
+## Core capabilities
+
+- Black-box recorder for AI coding agents (Claude Code first, others via MCP).
+- Tamper-evident audit logs (hash-chained pipeline events, Sigstore signing).
+- Local-first audit and policy proxy: deny-list patterns, path enforcement, secret redaction, transform rules.
+- Claude Code security: native in-process interception of Read, Glob, Grep, TodoWrite, TodoRead.
+- MCP security: lf namespace, mcp-primary / hardened routing, MCP tool accounting.
+- Compliance export: CycloneDX 1.6 ML-BOM, signed receipts, doctor --paranoid scan.
+- CLI: occasio (live snapshot, doctor, explain, receipt, ledger, replay, preflight, report, watch).
+
+## Positioning
+
+- Local-first. No cloud. No telemetry. The audit trail lives on the developer's machine.
+- Tamper-evident, not just append-only: the log is hash-chained from a GENESIS sentinel and Sigstore-signed.
+- For teams that need an answer to "what did the AI agent actually do?" without sending source code to a third party.
+
+## Use cases
+
+- Claude Code security and observability for individual developers.
+- MCP security: understand which MCP servers a session contacted and with what payloads.
+- Compliance evidence: signed, verifiable record of AI-assisted code changes.
+- Incident review: replay any past session from the local ledger.
+
+## Links
+
+- Website: https://occasiolabs.pages.dev/
+- npm: https://www.npmjs.com/package/@occasiolabs/occasio
+- Source: https://github.com/occasiolabs/occasio
+- MCP Registry entry: https://registry.modelcontextprotocol.io/v0/servers?search=occasio
+- PulseMCP listing: https://www.pulsemcp.com/servers/occasio
