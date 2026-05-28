@@ -1,10 +1,10 @@
 # Occasio
 
-> See what your AI coding agent actually does — locally, and prove it later if you need to.
+> Local-first audit chain for AI coding agents. Your prompts, your tool calls, your audit log; all on your machine, cryptographically verifiable later.
 
-Occasio is a local proxy that sits between your AI coding agent (Claude Code, Cline, or anything that talks to the Anthropic API) and the cloud. Every tool call the agent makes — every file it tries to read, every shell command it tries to run — passes through one human-readable policy file you control. You see what's leaving your machine in real time, block what shouldn't happen, and end up with a tamper-evident log that a third party can verify offline months later if you ever need to prove what your agent did.
+Occasio is a local proxy that sits between your AI coding agent (Claude Code, Cline, or anything that talks to the Anthropic API) and whichever LLM endpoint you configured. Every tool call passes through one human-readable policy file you control. You can see what is leaving your machine in real time, block what should not happen, and end up with a tamper-evident hash-chained log that a third party can verify offline months later if you ever need to prove what your agent did.
 
-Nothing leaves your machine that you didn't approve. Nothing about the run can be quietly rewritten afterwards. Same tool, two faces: a dev companion during the day, a signed audit trail when an auditor or reviewer asks *"what did it actually do?"*.
+Nothing about Occasio sends data to a third party. There is no Occasio cloud, no Occasio account, no telemetry. Read [`docs/WHY-LOCAL.md`](docs/WHY-LOCAL.md) for the architecture, [`docs/COMPARE.md`](docs/COMPARE.md) for how this differs from cloud-hosted AI observability tools, and [`docs/SUSTAINABILITY.md`](docs/SUSTAINABILITY.md) for how a local-first product is funded under Apache 2.0.
 
 ![occasio eyes — live browser view of an outbound exchange, with redacted secrets highlighted in the tool result](docs/img/eyes-demo.png)
 
