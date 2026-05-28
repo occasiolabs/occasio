@@ -45,7 +45,10 @@ const {
 const CDX_SPEC_VERSION = '1.6';
 const TOOL_VENDOR      = 'Occasio Labs';
 const TOOL_NAME        = 'occasio';
-const TOOL_VERSION     = '0.9.2';
+const TOOL_VERSION     = (() => {
+  try { return require('../../package.json').version; }
+  catch { return 'unknown'; }
+})();
 
 function makeSerial() {
   return 'urn:uuid:' + crypto.randomUUID();

@@ -17,11 +17,6 @@ const col = {
 };
 const safe = (s) => `${s}${ANSI_RESET}`;
 
-function pad(s, n) {
-  s = String(s);
-  return s.length >= n ? s : s + ' '.repeat(n - s.length);
-}
-
 function colourForCount(count, goodIsZero) {
   if (goodIsZero) return count === 0 ? col.g : col.r;
   return count > 0 ? col.g : col.r;

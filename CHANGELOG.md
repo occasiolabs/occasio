@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.10.0] — 2026-05-28
 
 ### Audit chain — single source of truth for user-visible counters
 
