@@ -13,14 +13,22 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
+const ANSI_RESET = '\x1b[0m';
 const col = {
-  r: s => `\x1b[31m${s}\x1b[0m`,
-  g: s => `\x1b[32m${s}\x1b[0m`,
-  y: s => `\x1b[33m${s}\x1b[0m`,
-  c: s => `\x1b[36m${s}\x1b[0m`,
-  d: s => `\x1b[2m${s}\x1b[0m`,
-  b: s => `\x1b[1m${s}\x1b[0m`,
+  r: s => `\x1b[31m${s}${ANSI_RESET}`,
+  g: s => `\x1b[32m${s}${ANSI_RESET}`,
+  y: s => `\x1b[33m${s}${ANSI_RESET}`,
+  c: s => `\x1b[36m${s}${ANSI_RESET}`,
+  d: s => `\x1b[2m${s}${ANSI_RESET}`,
+  b: s => `\x1b[1m${s}${ANSI_RESET}`,
 };
+
+// Every doctor line ends with an explicit ANSI reset so Windows Terminal (and
+// other emulators that carry color state across line breaks) cannot bleed an
+// in-template attribute into the next console.log call. The per-segment reset
+// inside `col.X()` lands mid-line, which is fine for VT100 but insufficient
+// for terminals that buffer state at line boundaries.
+function safe(line) { return `${line}${ANSI_RESET}`; }
 
 const LOG_DIR = path.join(os.homedir(), '.occasio');
 
@@ -173,12 +181,12 @@ function runDoctorCli(args, opts = {}) {
   const daysArg  = (args || []).indexOf('--days');
   const days     = daysArg >= 0 && args[daysArg + 1] ? (parseInt(args[daysArg + 1], 10) || 7) : 7;
 
-  console.log(col.b('\n⚡ Occasio — Policy Doctor\n'));
+  console.log(safe(col.b('\n⚡ Occasio — Policy Doctor\n')));
 
   const entries = readRecentLogs(days, logsDir);
   if (!entries.length) {
-    console.log(col.d(`  No session logs found (last ${days} day${days > 1 ? 's' : ''}).`));
-    console.log(col.d('  Run a session first, then re-run occasio policy doctor.\n'));
+    console.log(safe(col.d(`  No session logs found (last ${days} day${days > 1 ? 's' : ''}).`)));
+    console.log(safe(col.d('  Run a session first, then re-run occasio policy doctor.\n')));
     return { ok: true, suggestions: [] };
   }
 
@@ -191,25 +199,25 @@ function runDoctorCli(args, opts = {}) {
   const denom    = Math.max(totalAttempted, totalLocal);
   const localPct = denom > 0 ? Math.round((totalLocal / denom) * 100) : 0;
 
-  console.log(
+  console.log(safe(
     `  Analysed ${col.b(entries.length)} log entr${entries.length > 1 ? 'ies' : 'y'}` +
     `  ·  ${col.b(totalAttempted)} tool call${totalAttempted !== 1 ? 's' : ''}` +
     `  ·  ${col.b(localPct + '%')} handled locally\n`,
-  );
+  ));
 
   // ── Suggestions ────────────────────────────────────────────────────────────
   for (const s of suggestions) {
     if (s.severity === 'ok') {
-      console.log(`  ${col.g('✓')}  ${s.title}\n`);
+      console.log(safe(`  ${col.g('✓')}  ${s.title}\n`));
       continue;
     }
     const icon = s.severity === 'warn' ? col.y('⚠') : col.c('ℹ');
-    console.log(`  ${icon}  ${col.b(s.title)}`);
-    if (s.detail) console.log(`     ${col.d(s.detail)}`);
+    console.log(safe(`  ${icon}  ${col.b(s.title)}`));
+    if (s.detail) console.log(safe(`     ${col.d(s.detail)}`));
     if (s.fix) {
-      console.log(`\n     ${col.c('Suggested fix (policy.yml):')}`);
+      console.log(safe(`\n     ${col.c('Suggested fix (policy.yml):')}`));
       for (const line of s.fix.split('\n')) {
-        console.log(`       ${col.c(line)}`);
+        console.log(safe(`       ${col.c(line)}`));
       }
     }
     console.log('');
@@ -217,7 +225,7 @@ function runDoctorCli(args, opts = {}) {
 
   const hasActionable = suggestions.some(s => s.fix);
   if (hasActionable) {
-    console.log(col.d('  Edit ~/.occasio/policy.yml, then run occasio policy validate\n'));
+    console.log(safe(col.d('  Edit ~/.occasio/policy.yml, then run occasio policy validate\n')));
   }
 
   return { ok: true, suggestions };
