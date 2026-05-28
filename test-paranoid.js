@@ -65,18 +65,21 @@ console.log('\nBlock 2: proxy-bound and local-loopback');
 
 console.log('\nBlock 3: LLM endpoints and signing infra');
 {
-  const llmCases = [
-    [`https.request({ hostname: 'api.anthropic.com', port: 443 })`,      'api.anthropic.com'],
-    [`https.request({ hostname: 'api.openai.com' })`,                    'api.openai.com'],
-    [`fetch('https://api.mistral.ai/v1/chat')`,                          'api.mistral.ai'],
-  ];
-  for (const [src, host] of llmCases) {
-    const hits = sourceScan.scanText('fixture.js', src);
-    const hit  = hits[0];
-    assert(`llm-endpoint ${host}`,
-      hit && hit.classification === 'llm-endpoint' && hit.host === host,
-      hit ? `${hit.classification}/${hit.host}` : 'no hit');
-  }
+  // The allowlist contains ONLY hosts actually referenced in the codebase.
+  // Today that is api.anthropic.com. Speculative providers are NOT in the
+  // allowlist and would correctly classify as hardcoded-host until an
+  // adapter for them lands.
+  const llmHit = sourceScan.scanText('fixture.js',
+    `https.request({ hostname: 'api.anthropic.com', port: 443 })`)[0];
+  assert('llm-endpoint api.anthropic.com (in allowlist)',
+    llmHit && llmHit.classification === 'llm-endpoint' && llmHit.host === 'api.anthropic.com');
+
+  // A host not yet integrated stays suspicious until its adapter ships.
+  const futureHit = sourceScan.scanText('fixture.js',
+    `fetch('https://api.openai.com/v1/chat')`)[0];
+  assert('non-integrated provider api.openai.com classified as hardcoded-host',
+    futureHit && futureHit.classification === 'hardcoded-host' && futureHit.host === 'api.openai.com');
+
   const signing = sourceScan.scanText('fixture.js',
     `fetch('https://rekor.sigstore.dev/api/v1/log/entries')`);
   assert('signing-infra rekor.sigstore.dev',

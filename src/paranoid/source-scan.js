@@ -23,19 +23,15 @@ const { NETWORK_PRIMITIVES } = require('./patterns/network-primitives');
 const CONTEXT_BEFORE = 60;
 const CONTEXT_AFTER  = 200;
 
-// A small, explicit allowlist of canonical LLM provider endpoints. A literal
-// reference to one of these is the documented architecture: Occasio is a
-// proxy that forwards agent traffic to the configured LLM. Adding to this
-// list is a deliberate, reviewable change. Keep it short and obvious.
+// A small, explicit allowlist of LLM provider endpoints that Occasio's
+// adapter code references as string literals. The list contains ONLY hosts
+// that are actually present in src/, not speculative future providers.
+// Adding to this list is a deliberate change accompanying the adapter that
+// references the new host; reviewers see both at once. This keeps the list
+// honest: every entry is a real architectural commitment, not an endorsement
+// of a provider we have not integrated.
 const LLM_ENDPOINTS = new Set([
   'api.anthropic.com',
-  'api.openai.com',
-  'api.cohere.ai',
-  'generativelanguage.googleapis.com',
-  'api.mistral.ai',
-  'api.together.xyz',
-  'api.groq.com',
-  'api.deepseek.com',
 ]);
 
 // Sigstore / Rekor / Fulcio transparency-log endpoints used by the
