@@ -22,7 +22,9 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const { normalizeReadInput, normalizeFindInput, normalizeGrepInput } = require('./mcp-normalize');
-const { incrementSessionMcpCount } = require('./session');
+// Phase 5: tools_mcp_count is derived from chain rows via events.js, no
+// per-call session.json increment is needed. The chain entry written by the
+// auditor (jsonl-auditor.record) is the source of truth.
 const pipeline       = require('./core/pipeline');
 const { makeBoundaryEvent } = require('./core/boundary-event');
 const { createAuditor }     = require('./audit/jsonl-auditor');
@@ -251,7 +253,6 @@ async function handleRequest(req) {
       if (r.distilled)                    logExtra.distillSaved = r.savedTokens || 0;
       if (r.secretsRedacted?.length)      logExtra.secretsFound = r.secretsRedacted.length;
 
-      incrementSessionMcpCount();
       logCall({ ts, tool: toolName, exitCode: r.exitCode, source: 'mcp_lf', ...logExtra });
       respond(id, {
         content: [{ type: 'text', text: content }],

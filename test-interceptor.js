@@ -2274,97 +2274,66 @@ console.log('\n3. runLocally');
     }
   }
 
-  // ── Section 27: MCP session accounting ────────────────────────────────────
+  // ── Section 27: MCP session accounting (Phase 5: chain-sourced) ───────────
+  // After Phase 5 of the truth-source unification, tools_mcp_count is derived
+  // from kind:"tool_call" rows on the hash-chained audit log via the events.js
+  // facade. session.json is a config-only pointer; incrementSessionMcpCount
+  // has been removed.
   {
-    const { incrementSessionMcpCount, SESSION_FILE } = require('./src/session');
-    const os   = require('os');
-    const path = require('path');
+    const sessionMod = require('./src/session');
 
-    // incrementSessionMcpCount: no-ops when session.json does not exist
+    // session.js still exports the file path constant
     {
-      const fakeSession = path.join(os.tmpdir(), 'lf-session-test-' + Date.now() + '.json');
-      // Don't create the file — function should silently no-op
-      const orig = process.env.HOME;
-      // We can't easily override SESSION_FILE constant, so test via a temp file approach:
-      // Write a fake session.json with run_id, call directly, verify increment
-      fs.writeFileSync(fakeSession, JSON.stringify({ run_id: 'test-run', tools_mcp_count: 3 }));
-
-      // Test the internal logic manually (increment on a real session file)
-      let s = JSON.parse(fs.readFileSync(fakeSession, 'utf8'));
-      s.tools_mcp_count = (s.tools_mcp_count || 0) + 1;
-      fs.writeFileSync(fakeSession, JSON.stringify(s));
-      const after = JSON.parse(fs.readFileSync(fakeSession, 'utf8'));
-      assert('session mcp count: increments from 3 to 4', after.tools_mcp_count === 4);
-      assert('session mcp count: other fields preserved', after.run_id === 'test-run');
-      fs.unlinkSync(fakeSession);
+      assert('session.js SESSION_FILE includes .occasio', sessionMod.SESSION_FILE.includes('.occasio'));
+      assert('session.js SESSION_FILE ends with session.json', sessionMod.SESSION_FILE.endsWith('session.json'));
     }
 
-    // incrementSessionMcpCount: no-ops when session.json has no run_id
+    // session.js no longer exports the legacy incrementer
     {
-      const fakeSession = path.join(os.tmpdir(), 'lf-session-norunid-' + Date.now() + '.json');
-      fs.writeFileSync(fakeSession, JSON.stringify({ tools_mcp_count: 0 }));
-      const s = JSON.parse(fs.readFileSync(fakeSession, 'utf8'));
-      // Guard: only increment if run_id is present
-      const shouldIncrement = !!s.run_id;
-      assert('session mcp count: guard fires when no run_id', !shouldIncrement);
-      fs.unlinkSync(fakeSession);
+      assert('session.js does NOT export incrementSessionMcpCount',
+        typeof sessionMod.incrementSessionMcpCount === 'undefined');
     }
 
-    // incrementSessionMcpCount: initializes missing tools_mcp_count from 0
-    {
-      const fakeSession = path.join(os.tmpdir(), 'lf-session-init-' + Date.now() + '.json');
-      fs.writeFileSync(fakeSession, JSON.stringify({ run_id: 'abc', tools_local_count: 5 }));
-      let s = JSON.parse(fs.readFileSync(fakeSession, 'utf8'));
-      s.tools_mcp_count = (s.tools_mcp_count || 0) + 1;
-      fs.writeFileSync(fakeSession, JSON.stringify(s));
-      const after = JSON.parse(fs.readFileSync(fakeSession, 'utf8'));
-      assert('session mcp count: initializes from undefined to 1', after.tools_mcp_count === 1);
-      assert('session mcp count: local count preserved', after.tools_local_count === 5);
-      fs.unlinkSync(fakeSession);
-    }
-
-    // SESSION_FILE export: correct path under ~/.occasio/
-    {
-      assert('session.js SESSION_FILE includes .occasio', SESSION_FILE.includes('.occasio'));
-      assert('session.js SESSION_FILE ends with session.json', SESSION_FILE.endsWith('session.json'));
-    }
-
-    // incrementSessionMcpCount: exported as a function
-    {
-      assert('incrementSessionMcpCount is a function', typeof incrementSessionMcpCount === 'function');
-    }
-
-    // index.js session init includes tools_mcp_count: 0
-    {
-      const indexSrc = fs.readFileSync('./src/index.js', 'utf8');
-      assert('index.js session init has tools_mcp_count field',
-        indexSrc.includes('tools_mcp_count:0') || indexSrc.includes('tools_mcp_count: 0'));
-    }
-
-    // index.js updateSession default has tools_mcp_count: 0
-    {
-      const indexSrc = fs.readFileSync('./src/index.js', 'utf8');
-      // updateSession default object should include tools_mcp_count
-      assert('index.js updateSession default has tools_mcp_count',
-        /tools_mcp_count\s*:\s*0/.test(indexSrc));
-    }
-
-    // mcp-server.js calls incrementSessionMcpCount
+    // mcp-server.js no longer imports the legacy incrementer
     {
       const serverSrc = fs.readFileSync('./src/mcp-server.js', 'utf8');
-      assert('mcp-server.js imports incrementSessionMcpCount',
-        serverSrc.includes('incrementSessionMcpCount'));
-      assert('mcp-server.js calls incrementSessionMcpCount()',
-        serverSrc.includes('incrementSessionMcpCount()'));
+      assert('mcp-server.js does not import incrementSessionMcpCount',
+        !/\brequire\(['"]\.\/session['"]\)\s*[.;\n]/.test(serverSrc) ||
+        !serverSrc.includes('incrementSessionMcpCount'));
     }
 
-    // status display code handles both counts
+    // index.js no longer initialises tools_mcp_count in the session pointer
+    // write. (A short-lived fallback object in the exit handler may still
+    // mention the field with a zero value, so we scope the check to the
+    // initial fs.writeFileSync(SESSION_FILE, ...) block.)
     {
       const indexSrc = fs.readFileSync('./src/index.js', 'utf8');
-      assert('index.js status reads tools_mcp_count',
-        indexSrc.includes('tools_mcp_count'));
-      assert('index.js status sums mcp into Ran locally count',
-        indexSrc.includes('totalLocal = localCnt + mcpCnt'));
+      const m = indexSrc.match(/fs\.writeFileSync\(SESSION_FILE,\s*JSON\.stringify\(\{[\s\S]*?\}\)\)/);
+      assert('session pointer init no longer carries tools_mcp_count',
+        m && !/tools_mcp_count/.test(m[0]));
+      assert('session pointer init no longer carries cost/requests',
+        m && !/\b(?:requests|cost|input_tokens|output_tokens|cache_savings|tools_local_count|tools_attempted|secrets_redacted|tools_transformed|blocked|intercepted_count|budget_exceeded_count)\b/.test(m[0]));
+    }
+
+    // updateSession is pointer-only after Phase 5
+    {
+      const indexSrc = fs.readFileSync('./src/index.js', 'utf8');
+      const updateBlock = indexSrc.match(/function updateSession[\s\S]*?^\}/m);
+      if (updateBlock) {
+        assert('updateSession does not write counter fields',
+          !/s\.requests\+\+/.test(updateBlock[0]) &&
+          !/s\.cost\s*\+=/.test(updateBlock[0]));
+      } else {
+        assert('updateSession function present', false);
+      }
+    }
+
+    // events.js summarize is the canonical source for tools_mcp_count
+    {
+      const { summarize, zeroAccountingStats } = require('./src/models/events');
+      assert('events.js exports summarize', typeof summarize === 'function');
+      assert('events.js zeroAccountingStats has tools_mcp_count field',
+        Object.prototype.hasOwnProperty.call(zeroAccountingStats(), 'tools_mcp_count'));
     }
   }
 
@@ -2398,8 +2367,10 @@ console.log('\n3. runLocally');
         indexSrc.includes('toolsMcpPrimary'));
       assert("index.js includes tools_mcp_count in log entry",
         indexSrc.includes('tools_mcp_count:') && indexSrc.includes('toolsMcpPrimary'));
-      assert("updateSession accumulates tools_mcp_count",
-        indexSrc.includes('s.tools_mcp_count') && indexSrc.includes('e.tools_mcp_count'));
+      // After Phase 5 the per-request counter lives on the chain only.
+      // updateSession is a pointer refresh and must NOT accumulate counters.
+      assert("updateSession no longer accumulates tools_mcp_count",
+        !(indexSrc.includes('s.tools_mcp_count') && indexSrc.includes('e.tools_mcp_count')));
     }
 
     // Behavior: executeLocalTool with hardened tool name mappings
@@ -2595,16 +2566,16 @@ console.log('\n3. runLocally');
       indexSrc.includes('log_file: getLogFile()'));
 
     // status (src/cli/status.js) and exit (index.js) both consult session.json
-    // for log_file with a today's-log fallback. After Phase 4 status reads
-    // session.json into `cfg`, index.js still uses `s`. Both use getLogFile().
+    // for log_file with a today's-log fallback. After Phase 5 both surfaces
+    // read the pointer into `cfg` and resolve `cfg.log_file || getLogFile()`.
     {
       const statusSrc = fs.readFileSync('./src/cli/status.js', 'utf8');
-      assert('display uses s.log_file with fallback',
-        /s\.log_file \|\| getLogFile\(\)/.test(indexSrc) &&
+      assert('display uses cfg.log_file with fallback',
+        /cfg\.log_file \|\| getLogFile\(\)/.test(indexSrc) &&
         /cfg\?\.log_file \|\| getLogFile\(\)/.test(statusSrc));
     }
 
-    // model tracking still in place
+    // model tracking still in place on the pointer
     assert('updateSession captures model from first event',
       indexSrc.includes("if (e.model && !s.model) s.model = e.model"));
 
@@ -2618,12 +2589,12 @@ console.log('\n3. runLocally');
     }
 
     // broaderCf / broaderCfX
-    // status now sources cost from chain-derived `acct.cost`; exit summary
-    // still reads s.cost (it runs at proxy-exit, reading session.json).
+    // After Phase 5 both status and the exit summary source cost from
+    // chain-derived `acct.cost` via src/models/events.js.
     assert('status broaderCf = cost + totalSav',
       fs.readFileSync('./src/cli/status.js', 'utf8').includes('broaderCf = acct.cost + totalSav'));
     assert('exit summary broaderCfX = cost + totalSavX',
-      indexSrc.includes('broaderCfX = (s.cost || 0) + totalSavX'));
+      indexSrc.includes('broaderCfX = acct.cost + totalSavX'));
   }
 
   // Arithmetic: pure function logic, no file I/O
@@ -4558,26 +4529,27 @@ console.log('\n3. runLocally');
       assert('ARCH-17 aggregate: secretsRedacted sums correctly', total === 3);
     }
 
-    // ── 6. index.js updateSession accumulates secrets_redacted ───────────────
+    // ── 6. updateSession no longer accumulates per-request counters ─────────
+    // After Phase 5, secrets_redacted is read from chain-derived
+    // `tools.secrets_redacted` via buildToolStats(). The pointer write does
+    // not carry it.
     {
       const idxSrc = fsTmp.readFileSync(pathTmp.join(__dirname, 'src', 'index.js'), 'utf8');
-      assert('index: updateSession accumulates secrets_redacted',
-        idxSrc.includes('s.secrets_redacted') && idxSrc.includes('e.secrets_redacted'));
+      assert('index: updateSession does not accumulate secrets_redacted',
+        !(idxSrc.includes('s.secrets_redacted += e.secrets_redacted')));
     }
 
-    // ── 7. index.js status command surfaces Redacted line ────────────────────
+    // ── 7. The Redacted line is now sourced from tools.secrets_redacted ──────
     {
       const idxSrc = fsTmp.readFileSync(pathTmp.join(__dirname, 'src', 'index.js'), 'utf8');
-      assert('index: status shows Redacted line',
-        idxSrc.includes("s.secrets_redacted") && idxSrc.includes('Redacted:'));
+      assert('index: exit summary reads tools.secrets_redacted',
+        idxSrc.includes('tools.secrets_redacted') && idxSrc.includes('Redacted:'));
     }
 
-    // ── 8. index.js exit banner surfaces Redacted line ───────────────────────
+    // ── 8. status command (src/cli/status.js) also surfaces Redacted line ───
     {
-      const idxSrc = fsTmp.readFileSync(pathTmp.join(__dirname, 'src', 'index.js'), 'utf8');
-      // Both the status command and the exit banner should contain the Redacted line
-      const matches = [...idxSrc.matchAll(/Redacted:/g)];
-      assert('index: both status and exit banner show Redacted line', matches.length >= 2);
+      const statusSrc = fsTmp.readFileSync(pathTmp.join(__dirname, 'src', 'cli', 'status.js'), 'utf8');
+      assert('status: shows Redacted line', statusSrc.includes('Redacted:'));
     }
 
     // ── 9. interceptor: blocked result handled defensively ────────────────────
@@ -5259,43 +5231,45 @@ console.log('\n3. runLocally');
     const { dispatch } = require('./src/executor/dispatcher');
     const fsMod = require('fs');
 
-    // ── 1. index.js session init includes tools_transformed ───────────────
+    // ── 1. Session pointer init no longer carries tools_transformed ────────
+    // After Phase 5 the per-request counter lives on the chain only.
     {
       const src = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
-      assert('session init: tools_transformed field', src.includes('tools_transformed:0'));
+      assert('session pointer init does not carry tools_transformed',
+        !src.includes('tools_transformed:0'));
     }
 
-    // ── 2. updateSession accumulates tools_transformed ────────────────────
+    // ── 2. updateSession no longer accumulates tools_transformed ──────────
     {
       const src = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
-      assert('updateSession: accumulates tools_transformed', src.includes('s.tools_transformed') && src.includes('e.tools_transformed'));
+      assert('updateSession does not accumulate tools_transformed',
+        !(src.includes('s.tools_transformed') && src.includes('e.tools_transformed')));
     }
 
-    // ── 3. log entry carries tools_transformed ────────────────────────────
+    // ── 3. Chain row carries tools_transformed (writeLog/auditRequest entry) ─
     {
       const src = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
       assert('log entry: tools_transformed field', src.includes('tools_transformed:') && src.includes('toolsTransformed'));
     }
 
-    // ── 4. status command shows Transforms line ────────────────────────────
+    // ── 4. Exit summary surfaces the Transforms line ─────────────────────────
     {
       const src = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
-      assert('status: Transforms line present',   src.includes('Transforms:'));
-      assert('status: tools_transformed guard',   src.includes('s.tools_transformed'));
-      assert('status: tool results shaped text',  src.includes('tool result'));
+      assert('exit: Transforms line present',   src.includes('Transforms:'));
+      assert('exit: tools.transformed guard',   src.includes('tools.transformed'));
+      assert('exit: tool result shaped text',   src.includes('tool result'));
     }
 
-    // ── 5. Transforms line does not appear when tools_transformed is 0 ────
-    // We test the guard condition by checking the source uses the value as a guard.
+    // ── 5. The Transforms line is guarded by chain-derived tools.transformed ─
+    // Both the exit summary (src/index.js) and the status command
+    // (src/cli/status.js) now derive tools.transformed from chain tool_call
+    // rows via buildToolStats(); the legacy s.tools_transformed pathway is gone.
     {
       const indexSrc  = fsMod.readFileSync(require('path').join(__dirname, 'src', 'index.js'), 'utf8');
       const statusSrc = fsMod.readFileSync(require('path').join(__dirname, 'src', 'cli', 'status.js'), 'utf8');
-      // Guarded once in exit (index.js, still reads s.tools_transformed) and
-      // once in status (cli/status.js, post-Phase-4 reads tools.transformed
-      // derived from chain tool_call rows via buildToolStats).
-      const exitGuard   = /if \(s\.tools_transformed\)/;
+      const exitGuard   = /if \(tools\.transformed\)/;
       const statusGuard = /if \(tools\.transformed\)/;
-      assert('status: Transforms guarded in both status+exit',
+      assert('Transforms guarded by tools.transformed in both status+exit',
         exitGuard.test(indexSrc) && statusGuard.test(statusSrc));
     }
 

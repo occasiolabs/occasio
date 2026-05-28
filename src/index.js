@@ -93,34 +93,16 @@ function getDistilledFile() { return path.join(LOG_DIR, 'distilled', `${todayStr
 function writeLog(e)        { ensureDirs(); fs.appendFileSync(getLogFile(),       JSON.stringify(e) + '\n'); }
 function writeBlocked(e)    { ensureDirs(); fs.appendFileSync(getBlockedFile(),   JSON.stringify(e) + '\n'); }
 function writeDistilledRaw(e) { ensureDirs(); fs.appendFileSync(getDistilledFile(), JSON.stringify(e) + '\n'); }
+// Phase 5 of truth-source unification: session.json is now a *pointer* to the
+// active run's config. All per-request counters live in the hash-chained audit
+// log (pipeline-events.jsonl) and are read back via src/models/events.js.
+// updateSession only refreshes the pointer's mutable config-y fields (model
+// becomes known after the first response).
 function updateSession(e) {
   ensureDirs();
-  let s = {
-    requests:0, input_tokens:0, output_tokens:0, cost:0, blocked:0, intercepted_count:0,
-    cache_read_tokens:0, cache_write_tokens:0, cache_savings:0,
-    lao_tokens_saved:0, lao_cost_saved:0, tools_local_count:0, tools_mcp_count:0,
-    tools_attempted:0,
-  };
+  let s = {};
   try { s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch { /* ignore */ }
-  s.requests++;
-  s.input_tokens       += e.input_tokens       || 0;
-  s.output_tokens      += e.output_tokens      || 0;
-  s.cost               += e.cost               || 0;
-  s.cache_read_tokens  += e.cache_read_tokens  || 0;
-  s.cache_write_tokens += e.cache_write_tokens || 0;
-  s.cache_savings      += e.cache_savings      || 0;
-  s.lao_tokens_saved      += e.lao_tokens_saved      || 0;
-  s.lao_cost_saved        += e.lao_cost_saved        || 0;
-  s.tools_local_count     += e.tools_local_count     || 0;
-  s.tools_mcp_count       += e.tools_mcp_count       || 0;
-  s.distill_tokens_saved  += e.distill_tokens_saved  || 0;
-  s.distill_cost_saved    += e.distill_cost_saved    || 0;
-  s.tools_attempted       += e.tools_attempted       || 0;
-  s.secrets_redacted      += e.secrets_redacted      || 0;
-  s.tools_transformed     += e.tools_transformed     || 0;
   if (e.model && !s.model) s.model = e.model;
-  if (e.intercepted)                               s.intercepted_count++;
-  if (e.event_type === 'blocked' || e.blocked?.length) s.blocked++;
   fs.writeFileSync(SESSION_FILE, JSON.stringify(s));
 }
 
@@ -668,12 +650,19 @@ if (cmd === 'doctor' || cmd === 'check') {
       } catch { /* powershell not on PATH or timed out — skip silently */ }
     }
 
-    // Session summary
+    // Session summary, sourced from the chain via events.js (Phase 5 of the
+    // truth-source unification). session.json now carries only the run pointer.
     try {
-      const s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
-      const localSavD = (s.lao_cost_saved || 0) + (s.distill_cost_saved || 0);
-      const savingStr = localSavD > 0 ? ` · saved $${localSavD.toFixed(4)}` : '';
-      process.stderr.write(col.d(`\n  Last session: ${s.requests} requests · $${(s.cost || 0).toFixed(4)}${savingStr}\n`));
+      const { loadEvents, summarize, currentRunId: chainRunId } = require('./models/events');
+      const runId = chainRunId();
+      if (!runId) {
+        process.stderr.write(col.d('\n  No session data yet.\n'));
+      } else {
+        const acct = summarize(loadEvents({ kind: 'request', runId }));
+        const localSavD = acct.lao_cost_saved + acct.distill_cost_saved;
+        const savingStr = localSavD > 0 ? ` · saved $${localSavD.toFixed(4)}` : '';
+        process.stderr.write(col.d(`\n  Last session: ${acct.requests} requests · $${acct.cost.toFixed(4)}${savingStr}\n`));
+      }
     } catch { process.stderr.write(col.d('\n  No session data yet.\n')); }
 
     process.stderr.write('\n');
@@ -823,17 +812,15 @@ function auditRequest(entry) {
 }
 
 ensureDirs();
+// session.json is the run pointer (config-only after Phase 5 of truth-source
+// unification). All counters live on the chain; see src/models/events.js.
 fs.writeFileSync(SESSION_FILE, JSON.stringify({
-  run_id: currentRunId,
+  run_id:   currentRunId,
   log_file: getLogFile(),
-  budget: budget,
-  requests:0, input_tokens:0, output_tokens:0, cost:0,
-  blocked:0, intercepted_count:0,
-  budget_exceeded_count: 0,
-  cache_read_tokens:0, cache_write_tokens:0, cache_savings:0,
-  lao_tokens_saved:0, lao_cost_saved:0, tools_local_count:0, tools_mcp_count:0,
-  distill_tokens_saved:0, distill_cost_saved:0, secrets_redacted:0, tools_transformed:0,
-  mode, start: new Date().toISOString(),
+  budget,
+  mode,
+  start: new Date().toISOString(),
+  cwd:   SESSION_CWD,
 }));
 
 process.stderr.write(col.b(`\n⚡ Occasio v${VERSION}\n`));
@@ -966,11 +953,8 @@ const server = http.createServer((req, res) => {
         };
         writeLog(bEntry);
         auditRequest(bEntry);
-        try {
-          const s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
-          s.budget_exceeded_count = (s.budget_exceeded_count || 0) + 1;
-          fs.writeFileSync(SESSION_FILE, JSON.stringify(s));
-        } catch { /* ignore */ }
+        // budget_exceeded count is now derived from chain rows where
+        // event_type === 'budget_exceeded' (see summarize() in events.js).
         const synth = decision.syntheticResponse;
         res.writeHead(synth.status, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(synth.body));
@@ -1624,15 +1608,30 @@ server.listen(PORT, '127.0.0.1', () => {
   claude.on('exit', code => {
     server.close();
     try {
-      const s = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
-      const cacheSavX = s.cache_savings      || 0;
-      const laoSavX   = s.lao_cost_saved     || 0;
-      const distSavX  = s.distill_cost_saved || 0;
+      // Phase 5: counters are sourced from the hash-chained audit log via the
+      // events.js facade. session.json carries only the run pointer (budget,
+      // mode, model, log_file). The exit summary mirrors `occasio status`
+      // exactly so the two surfaces never disagree.
+      const eventsModel = require('./models/events');
+      let cfg = {};
+      try { cfg = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')); } catch { /* none */ }
+      const runId = eventsModel.currentRunId();
+      // summarize() and buildToolStats() both return canonical zero shapes for
+      // an empty event list, so passing [] when there is no active run keeps
+      // every downstream property access defined without a manual fallback.
+      const acct  = eventsModel.summarize(
+        runId ? eventsModel.loadEvents({ kind: 'request', runId }) : []);
+      const tools = eventsModel.buildToolStats(
+        runId ? eventsModel.loadEvents({ kind: 'tool_call', runId }) : []);
+
+      const cacheSavX = acct.cache_savings;
+      const laoSavX   = acct.lao_cost_saved;
+      const distSavX  = acct.distill_cost_saved;
       const payloadX  = laoSavX + distSavX;
       const { savings: contextX } =
-        calcCompoundingSavings(s.run_id, s.log_file || getLogFile(), s.model || '');
+        calcCompoundingSavings(runId, cfg.log_file || getLogFile(), cfg.model || '');
       const totalSavX  = payloadX + contextX + cacheSavX;
-      const broaderCfX = (s.cost || 0) + totalSavX;
+      const broaderCfX = acct.cost + totalSavX;
       const savedPctX  = broaderCfX > 0.00001 ? Math.round(totalSavX / broaderCfX * 100) : 0;
 
       process.stderr.write(col.b('\n─── Session ────────────────────────────\n'));
@@ -1640,37 +1639,34 @@ server.listen(PORT, '127.0.0.1', () => {
       // Headline
       if (totalSavX > 0.00001) {
         process.stderr.write(col.g(`  Saved:       $${totalSavX.toFixed(4)}`) +
-          col.d(`  (${savedPctX}% off — would have cost $${broaderCfX.toFixed(4)})\n`));
+          col.d(`  (${savedPctX}% off, would have cost $${broaderCfX.toFixed(4)})\n`));
       } else {
         process.stderr.write(col.d(`  Saved:       $0.0000  (no interceptable tool calls in this session yet)\n`));
       }
-      process.stderr.write(col.y(`  Cost:        $${s.cost.toFixed(4)}\n`));
+      process.stderr.write(col.y(`  Cost:        $${acct.cost.toFixed(4)}\n`));
 
       // Plain-English coverage. See status command for clamping rationale.
-      const localCnt   = s.tools_local_count || 0;
-      const mcpCnt     = s.tools_mcp_count   || 0;
-      const attempted  = s.tools_attempted   || 0;
-      const totalLocal = localCnt + mcpCnt;
-      const denom      = Math.max(attempted, totalLocal);
+      const totalLocal = acct.tools_local_count + acct.tools_mcp_count;
+      const denom      = Math.max(acct.tools_attempted, totalLocal);
       if (denom > 0) {
         const cpct = Math.round(totalLocal / denom * 100);
         const cColor = cpct >= 80 ? col.g : cpct >= 50 ? col.y : col.r;
         process.stderr.write(cColor(`  Ran locally: ${totalLocal} of ${denom} tool calls (${cpct}%)\n`));
       }
-      if (s.blocked) process.stderr.write(col.r(`  Blocked:     ${s.blocked} secrets\n`));
-      if (s.secrets_redacted) process.stderr.write(col.c(`  Redacted:    ${s.secrets_redacted} secret${s.secrets_redacted !== 1 ? 's' : ''} in tool results\n`));
-      if (s.tools_transformed) process.stderr.write(col.c(`  Transforms:  ${s.tools_transformed} tool result${s.tools_transformed !== 1 ? 's' : ''} shaped\n`));
-      if (s.budget != null) {
-        const pct = Math.min(999, Math.round((s.cost || 0) / s.budget * 100));
-        const budgetStr = fmtBudget(s.cost || 0, s.budget);
+      if (acct.blocked) process.stderr.write(col.r(`  Blocked:     ${acct.blocked} secrets\n`));
+      if (tools.secrets_redacted) process.stderr.write(col.c(`  Redacted:    ${tools.secrets_redacted} secret${tools.secrets_redacted !== 1 ? 's' : ''} in tool results\n`));
+      if (tools.transformed) process.stderr.write(col.c(`  Transforms:  ${tools.transformed} tool result${tools.transformed !== 1 ? 's' : ''} shaped\n`));
+      if (cfg.budget != null) {
+        const pct = Math.min(999, Math.round(acct.cost / cfg.budget * 100));
+        const budgetStr = fmtBudget(acct.cost, cfg.budget);
         const budgetColor = pct >= 100 ? col.r : pct >= 80 ? col.y : col.g;
         process.stderr.write(budgetColor(`  Budget:      ${budgetStr}\n`));
-        if (s.budget_exceeded_count) process.stderr.write(col.r(`  BudgetBlk:   ${s.budget_exceeded_count} request(s) blocked\n`));
+        if (acct.budget_exceeded) process.stderr.write(col.r(`  BudgetBlk:   ${acct.budget_exceeded} request(s) blocked\n`));
       }
 
       // Detail
       process.stderr.write(col.d(`  ────\n`));
-      process.stderr.write(col.d(`  Requests:    ${s.requests} · ${(s.input_tokens/1000).toFixed(1)}k tokens in · ${(s.output_tokens/1000).toFixed(1)}k out\n`));
+      process.stderr.write(col.d(`  Requests:    ${acct.requests} · ${(acct.input_tokens/1000).toFixed(1)}k tokens in · ${(acct.output_tokens/1000).toFixed(1)}k out\n`));
       if (totalSavX > 0.00001) {
         const parts = [];
         if (payloadX  > 0.00001) parts.push(`$${payloadX.toFixed(4)} payload`);
