@@ -76,6 +76,74 @@ surfaces through the chain.
   literal in `src/audit/jsonl-auditor.js` is now caught — old chains
   would otherwise stop verifying against new code without notice.
 
+### Phase 5: `session.json` reduced to a run pointer
+
+Closes the truth-source unification. `session.json` no longer carries
+any per-request counters; it is a pointer to the active run holding
+`run_id`, `start`, `cwd`, `mode`, `budget`, `log_file` (plus `model`
+once observed). A fresh-session pointer is ~227 bytes (six fields),
+down from ~615 bytes (22 fields). The proxy exit summary and the
+`occasio doctor` "Last session" line, the last two readers of the
+legacy counters, now also derive from the chain via `events.js`.
+
+### Anti-SaaS proof surface: `occasio doctor --paranoid`
+
+A new diagnostic that scans the installed source for outbound network
+primitives and classifies every callsite (`proxy-bound`, `llm-endpoint`,
+`signing-infra`, `local-loopback`, `hardcoded-host`, `unclassified`).
+Also runs a telemetry self-audit against a curated catalogue of 40
+known observability SDKs, checks `package.json` deps for any of those
+packages, and embeds the audit-chain integrity status. Output is
+screenshot-grade ANSI; `--json` produces a structured form. Exit code
+is non-zero if any critical finding appears.
+
+The LLM-endpoint allowlist is intentionally narrow: only hosts
+referenced as string literals in the current `src/` tree (today:
+`api.anthropic.com`). A future provider adapter adds its host together
+with the adapter code, in the same PR, with review. This keeps the
+list honest as architectural commitment rather than a roster of
+endorsed providers.
+
+`test-paranoid.js` block 5 asserts zero critical findings against the
+real source tree, so a future contribution that introduces a hardcoded
+outbound URL or a telemetry SDK fails in CI. The Anti-SaaS claim is
+machine-checked. Signing the paranoid report (`--sign`) ships in v0.10.1.
+
+### Unified snapshot for `occasio` with no arguments
+
+Running `occasio` with no args used to silently launch the Claude
+proxy. It now prints a unified live snapshot (active-run pointer,
+chain-sourced accounting, tool coverage, last five chain events,
+in-window anomalies, next-command hints) and exits. The proxy still
+launches via the explicit `occasio claude` form, and the `claude`
+shell alias registered by `occasio register` continues to forward
+through it unchanged.
+
+### Anti-SaaS positioning docs
+
+- `docs/WHY-LOCAL.md`: data-flow diagram, "what does not happen"
+  inventory, and concrete verification path via `doctor --paranoid`.
+- `docs/COMPARE.md`: deployment-model comparison across LangSmith,
+  Helicone, Langfuse Cloud and self-host, Honeyhive, Arize Phoenix
+  self-host, and Occasio. Descriptive table, not a feature shootout.
+- `docs/SUSTAINABILITY.md`: Apache 2.0 commitment, three revenue
+  streams (consulting, curated policy bundles, enterprise support),
+  explicit non-streams (no telemetry, no managed cloud, no data
+  monetisation), and the architectural reason the model holds together.
+- README headline now leads with the local-first identity and links
+  to all three. `ARCHITECTURE.md` and `AUDIT.md` synced to the new
+  truth-source reality (three row kinds, `request` row field order,
+  truth-source-unification subsection).
+
+### Fixed (continued)
+- **Doctor ANSI color reset bleed**: `occasio policy doctor` now wraps
+  every coloured emission with an explicit `\x1b[0m` reset via a small
+  `safe()` helper. The internal reset inside `col.X()` lands mid-line
+  and is sufficient for VT100, but Windows Terminal carries colour
+  state across line breaks without a terminal-side reset; the previous
+  suggestion's colour bled into the next. `test-doctor-ansi.js` is a
+  regression guard.
+
 ## [0.9.2] — 2026-05-25
 
 ### Added
