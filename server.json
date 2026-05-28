@@ -6,12 +6,12 @@
     "url": "https://github.com/occasiolabs/occasio",
     "source": "github"
   },
-  "version": "0.8.5",
+  "version": "0.10.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@occasiolabs/occasio",
-      "version": "0.8.5",
+      "version": "0.10.0",
       "transport": {
         "type": "stdio"
       }
