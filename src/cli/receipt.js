@@ -17,7 +17,18 @@
  * What it does NOT carry:
  *   - tool inputs (file paths, prompts, command strings)
  *   - file contents, response bodies
- *   - any identifier beyond the run_id (no cwd, no email, no host)
+ *   - any identifier beyond the run_id (no cwd, no email, no host) in the
+ *     unsigned receipt body
+ *
+ * Signature identity note: when --sign is used the embedded
+ * `signature.identity` object carries OIDC claims (issuer, subject,
+ * audience). For GitHub Actions OIDC, `subject` is the workflow URL plus
+ * a ref (e.g. `https://github.com/.../publish.yml@refs/heads/main`),
+ * which reveals the producer's workflow path. Some OIDC providers
+ * include the user email in the subject claim. Before redistributing a
+ * signed receipt to an untrusted audience, callers can strip
+ * `signature.identity` and keep only `signature.rekor_entry` (which is
+ * a public Sigstore log URL anyone can verify against).
  *
  * Verification of a receipt is two-step:
  *   1. If --sign was used, verify the Sigstore bundle against the receipt JSON.

@@ -27,6 +27,14 @@
  * MVP scope: the JSON output is structurally close to a valid 1.6 ML-BOM.
  * Future work: full schema-conformance pass, formulation block for training
  * provenance, signature embedding.
+ *
+ * Sharing note: the emitted BOM contains absolute file paths the agent
+ * touched (as `data` components and `metadata.component.properties`). This
+ * is correct for an internal audit deliverable, where reviewers want to
+ * know what was accessed. Before publishing the BOM externally, callers
+ * should review and scrub paths that should not leave the environment.
+ * The receipt at src/cli/receipt.js is the path-free surface intended for
+ * public sharing.
  */
 
 const crypto = require('crypto');

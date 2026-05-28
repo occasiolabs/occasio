@@ -21,6 +21,12 @@
 
 const t0 = process.hrtime.bigint();
 
+// Cap the in-memory observation buffer so a long watch window with heavy
+// traffic cannot exhaust process memory. Surplus beyond the cap is counted
+// and surfaced as `summary.dropped` so the user knows the report is not
+// exhaustive when the cap fires.
+const MAX_OBSERVATIONS = 10000;
+
 function nowMs() {
   return Number((process.hrtime.bigint() - t0) / 1000000n);
 }
@@ -34,8 +40,13 @@ function nowMs() {
  */
 function installHooks() {
   const observed = [];
+  const stats = { dropped: 0 };
 
   const record = (entry) => {
+    if (observed.length >= MAX_OBSERVATIONS) {
+      stats.dropped++;
+      return;
+    }
     observed.push({ ts_ms: nowMs(), ...entry });
   };
 
@@ -99,7 +110,7 @@ function installHooks() {
     dgram.createSocket = origDgramCreate;
   };
 
-  return { observed, stop };
+  return { observed, stats, stop };
 }
 
 /**
@@ -112,7 +123,7 @@ function installHooks() {
 async function scan(opts = {}) {
   const seconds = Math.max(1, Number(opts.watchSeconds) || 30);
   const tStart = Date.now();
-  const { observed, stop } = installHooks();
+  const { observed, stats, stop } = installHooks();
 
   await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
   stop();
@@ -139,6 +150,8 @@ async function scan(opts = {}) {
     windowEndedAt:   new Date(tEnd).toISOString(),
     observations: observed,
     destinations: [...byDest.values()],
+    dropped: stats.dropped,
+    maxObservations: MAX_OBSERVATIONS,
     summary,
     durationMs: tEnd - tStart,
   };

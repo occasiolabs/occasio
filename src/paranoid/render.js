@@ -101,7 +101,8 @@ function renderHuman(report) {
     const nw = report.scanners['network-watch'];
     push(col.b('  Runtime network watch'));
     push(`    ${col.d('Window              ')} ${nw.windowSeconds}s (${nw.windowStartedAt} to ${nw.windowEndedAt})`);
-    push(`    ${col.d('Connections observed')} ${nw.observations.length}`);
+    push(`    ${col.d('Connections observed')} ${nw.observations.length}` +
+         (nw.dropped ? ` ${col.y('(+ ' + nw.dropped + ' dropped past cap of ' + nw.maxObservations + ')')}` : ''));
     push(`    ${col.d('Unique destinations ')} ${nw.destinations.length}`);
     if (nw.destinations.length === 0) {
       push(`    ${col.g('No outbound connection attempts during the window.')}`);
