@@ -88,18 +88,35 @@ recorded as part of the Result.
 
 `jsonl-auditor.js` appends one tamper-evident row per
 `(event, decision, result)` tuple to `~/.occasio/pipeline-events.jsonl`.
+The chain carries three row kinds:
+
+- `tool_call`: behavioural attestation per tool invocation.
+  Inputs go through `input-normalizer.js` first.
+- `request`: per-request accounting for cost, tokens, savings, coverage
+  counters. Written by `recordRequest()`. Introduced in Phase 2 of the
+  truth-source unification.
+- `policy_loaded`: a synthetic event written at process start and on
+  every policy-file edit. Binds the chain to a specific `policy.yml`
+  byte hash so a reviewer can prove which rules a block was decided
+  under.
 
 Key properties:
 
 - Each row carries `prev_hash` (SHA-256 of the previous row's `hash`)
   and `hash` (SHA-256 of the row minus the hash field).
 - The first row's `prev_hash` is `GENESIS` (64 zero hex digits).
-- Field order in the row literal is canonical and load-bearing. The
-  Python walker in `docs/audit_walker.py` mirrors that order so chain
-  verification does not depend on trusting Occasio's own code.
+- Field order in the row literal is canonical and load-bearing, per
+  row kind. The Python walker in `docs/audit_walker.py` mirrors each
+  field order so chain verification does not depend on trusting
+  Occasio's own code. The invariant is asserted by `test-audit-chain.js`
+  test #20 (canonical serialisation stability).
 - `audit_schema: 1` versions every new row. Verifier accepts legacy
   schema-less rows; unknown future versions log a warning but do not
   flip ok=false.
+- Writes are guarded by `proper-lockfile` so concurrent writers (the
+  HTTP proxy plus the MCP server) cannot corrupt the chain. The lock
+  default is `true` since v0.9; `test-audit-chain.js` test #21 exercises
+  it under multi-process contention.
 - `loadPrevHash()` reads only the trailing 64KB of the log so bootstrap
   on a million-row chain stays O(window) instead of O(file).
 - On a partial trailing line (crash mid-append), `loadPrevHash` fails
@@ -112,6 +129,19 @@ Subcommands:
 occasio audit verify [--file <path>]
 occasio audit repair --file <path> [--dry-run]
 ```
+
+#### Truth-source unification
+
+As of v0.9 every counter visible on a user-facing CLI surface
+(`status`, `ledger`, `replay`, `report`, the exit summary, the no-args
+snapshot) is derived from the chain via the single read facade at
+`src/models/events.js`. `session.json` is a pointer to the active
+run (it carries `run_id`, `start`, `cwd`, `mode`, `model`, `budget`,
+`log_file`) and writes no counters. The legacy `logs/YYYY-MM-DD.jsonl`
+file is still written but is consulted only by detail-view commands
+(`boundary`, `inspect`, `preflight`) that depend on per-tool byte
+fields not currently attested on the chain. The cross-surface
+equality invariant is locked in by `test-drift-guard.js`.
 
 ### 5. Attest — `src/attest/`
 

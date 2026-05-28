@@ -50,14 +50,29 @@ Fields whose value would be `undefined` (in JS) or `None` (in Python) are **omit
 
 ### Row kinds
 
-`kind` distinguishes what an audit row records. As of v0.6.6 there are two:
+`kind` distinguishes what an audit row records. As of v0.9 there are three:
 
 | `kind` | When it fires | Semantics |
 |---|---|---|
 | `tool_call` | Every governed tool call (Claude Code or MCP) | `tool_inputs` is per-tool (file path, glob, count). `action` is one of `LOCAL`/`PASS`/`BLOCK`/`TRANSFORM`. `result_kind` is `local`/`pass`/`block`/`transform`. |
-| `policy_loaded` | Process startup, and on every policy-file edit (hot-reload) | `tool_inputs` is `{ policy_hash, policy_path, version }`. `tool_name` is the placeholder string `"policy_loaded"`. `action` is `"INFO"`. `reason` is `"policy-loaded"`. **`result_kind` is omitted** — a policy-load event has no dispatcher Result. |
+| `request` | Every HTTP request through the proxy (Anthropic SSE or budget-blocked or local-only) | Per-request accounting row: cost, tokens, cache savings, savings breakdown, coverage counters (`tools_attempted`, `tools_local_count`, `tools_mcp_count`). `event_type` is `cloud_sent`, `local_only`, `blocked`, `trimmed`, or `budget_exceeded`. No `action`/`result_kind` (those are tool-call concepts). |
+| `policy_loaded` | Process startup, and on every policy-file edit (hot-reload) | `tool_inputs` is `{ policy_hash, policy_path, version }`. `tool_name` is the placeholder string `"policy_loaded"`. `action` is `"INFO"`. `reason` is `"policy-loaded"`. **`result_kind` is omitted** because a policy-load event has no dispatcher Result. |
 
-The `policy_loaded` row binds the audit chain to a specific policy file's bytes: a buyer can prove not just "what was blocked" but "under which exact `policy.yml` the block was decided." Because the hash is over the raw file bytes (not the normalized policy object), comments and whitespace count — the hash matches whatever a reviewer reads in source control.
+The `policy_loaded` row binds the audit chain to a specific policy file's bytes: a buyer can prove not just "what was blocked" but "under which exact `policy.yml` the block was decided." Because the hash is over the raw file bytes (not the normalized policy object), comments and whitespace count, so the hash matches whatever a reviewer reads in source control.
+
+#### `request` row field order
+
+The `request` row uses its own canonical field order. The order is load-bearing for hash stability and `test-audit-chain.js` test #20 locks it in:
+
+```
+audit_schema, ts, event_id, session_id, run_id, agent, protocol, direction,
+kind, event_type, model, cwd, input_tokens, output_tokens, cache_read_tokens,
+cache_write_tokens, cost, cache_savings, lao_tokens_saved, lao_cost_saved,
+distill_tokens_saved, distill_cost_saved, tools_attempted, tools_local_count,
+tools_mcp_count, prev_hash, hash
+```
+
+Adding a new accounting field is a chain-schema change. Append it to the end of the order (before `prev_hash`), bump `audit_schema` if the semantics break older verifiers, and update `docs/audit_walker.py` in lockstep so independent verification continues to walk every kind.
 
 ## 2. Genesis sentinel
 
