@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Occasio — see, control, and prove what your AI agent did</title>
+  <title>Occasio: see, control, and prove what your AI agent did</title>
   <meta name="description" content="Occasio is a local-first audit chain for AI coding agents. See what's leaving your machine in real time, block what shouldn't happen, and end up with a tamper-evident, Sigstore-signed log a third party can verify offline. No cloud, no account, no telemetry. npm install -g @occasiolabs/occasio.">
   <meta name="keywords" content="Occasio, Occasio Labs, @occasiolabs/occasio, AI coding agent audit, local-first audit chain, see what AI agent sends to cloud, prove what AI agent did, tamper-evident audit, Sigstore, in-toto, Claude Code, MCP, agent observability, black-box recorder, EU AI Act Article 12">
   <meta name="author" content="Occasio Labs">
   <link rel="canonical" href="https://useoccasio.com/">
 
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Occasio — see, control, and prove what your AI agent did">
-  <meta property="og:description" content="A local-first audit chain for AI coding agents. See what leaves your machine, block what shouldn't, and prove what happened — verifiable offline by anyone. No cloud, no telemetry.">
+  <meta property="og:title" content="Occasio: see, control, and prove what your AI agent did">
+  <meta property="og:description" content="A local-first audit chain for AI coding agents. See what leaves your machine, block what shouldn't, and prove what happened, verifiable offline by anyone. No cloud, no telemetry.">
   <meta property="og:url" content="https://useoccasio.com/">
   <meta property="og:site_name" content="Occasio Labs">
   <meta property="og:image" content="https://useoccasio.com/eyes-demo.png">
 
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Occasio — see, control, and prove what your AI agent did">
+  <meta name="twitter:title" content="Occasio: see, control, and prove what your AI agent did">
   <meta name="twitter:description" content="A local-first audit chain for AI coding agents. See what leaves your machine, block what shouldn't, and prove what happened. No cloud, no telemetry.">
   <meta name="twitter:image" content="https://useoccasio.com/eyes-demo.png">
 
@@ -55,7 +55,7 @@
       --muted: #9aa5b1;
       --faint: #6e7681;
       --accent: #58a6ff;     /* matches the eyes UI */
-      --accent-2: #56d4dd;   /* teal — verified / signed */
+      --accent-2: #56d4dd;   /* teal, verified / signed */
       --green: #3fb950;
       --amber: #d29922;
       --red: #f85149;
@@ -217,7 +217,7 @@
       <h1>See what your agent sends. <span class="g1">Control</span> it. <span class="g2">Prove</span> it.</h1>
       <p class="lede">
         Occasio is a local proxy between your AI coding agent and the cloud.
-        <strong>Your prompts, your tool calls, your audit log — all on your machine,</strong>
+        <strong>Your prompts, your tool calls, your audit log, all on your machine,</strong>
         cryptographically verifiable later. No cloud, no account, no telemetry.
       </p>
       <div class="cta">
@@ -227,15 +227,15 @@
         </span>
         <a class="btn btn-primary" href="https://github.com/occasiolabs/occasio">View on GitHub →</a>
       </div>
-      <p class="microcopy">then <code>occasio eyes --demo</code> — see it in 10 seconds, no setup</p>
+      <p class="microcopy">then <code>occasio eyes --demo</code> to see it in 10 seconds, no setup</p>
 
       <figure class="shot reveal">
         <div class="frame">
-          <div class="chrome"><i class="r"></i><i class="y"></i><i class="g"></i><span>occasio eyes — what your agent is sending to the cloud, right now</span></div>
+          <div class="chrome"><i class="r"></i><i class="y"></i><i class="g"></i><span>occasio eyes: what your agent is sending to the cloud, right now</span></div>
           <img src="/eyes-demo.png" width="3838" height="1704"
                alt="Occasio's eyes browser UI: a two-pane view of an outbound exchange to api.anthropic.com showing a 4.6 KB payload byte-breakdown, the files sent to the cloud, and a tool result with secrets highlighted as REDACTED BY OCCASIO." loading="eager">
         </div>
-        <figcaption><code>occasio eyes --demo</code> against synthetic data — every outbound payload, byte breakdown, secrets redacted in the clear.</figcaption>
+        <figcaption><code>occasio eyes --demo</code> against synthetic data. Every outbound payload, byte breakdown, secrets redacted in the clear.</figcaption>
       </figure>
     </div>
 
@@ -245,17 +245,17 @@
         <div class="sec-head reveal">
           <p class="kicker">Two ways to use it</p>
           <h2>Both views read the same local log. You get both for free.</h2>
-          <p class="sub">Most people land here for one of these. Run the proxy once — daily visibility and verifiable proof come together.</p>
+          <p class="sub">Most people land here for one of these. Run the proxy once. Daily visibility and verifiable proof come together.</p>
         </div>
         <div class="grid2">
           <div class="card reveal">
             <span class="tag">Daily dev work</span>
             <h3>See what's leaving your machine</h3>
-            <p class="q">"What is the agent actually sending to Anthropic — and what's it costing me?"</p>
+            <p class="q">"What is the agent actually sending to Anthropic, and what's it costing me?"</p>
             <ul>
-              <li><code>occasio eyes</code> — live browser UI of every outbound payload</li>
-              <li><code>occasio dashboard</code> — savings, cost, and coverage at a glance</li>
-              <li><code>--budget N</code> — stop a run once it crosses your dollar limit</li>
+              <li><code>occasio eyes</code> for a live browser UI of every outbound payload</li>
+              <li><code>occasio dashboard</code> for savings, cost, and coverage at a glance</li>
+              <li><code>--budget N</code> stops a run once it crosses your dollar limit</li>
               <li>Byte breakdown + secrets redacted before they leave</li>
             </ul>
           </div>
@@ -264,8 +264,8 @@
             <h3>Prove what the agent did</h3>
             <p class="q">"Prove exactly what the agent did during this run."</p>
             <ul>
-              <li><code>occasio attest</code> — signed in-toto behavioral attestation</li>
-              <li><code>occasio audit verify</code> — re-walk the tamper-evident chain</li>
+              <li><code>occasio attest</code> for a signed in-toto behavioral attestation</li>
+              <li><code>occasio audit verify</code> re-walks the tamper-evident chain</li>
               <li>Verifiable offline by Node, Python, or <code>cosign</code></li>
               <li>Hash-chained from a GENESIS sentinel, Sigstore-signed</li>
             </ul>
@@ -280,7 +280,7 @@
         <div class="sec-head reveal">
           <p class="kicker">Verify in 60 seconds</p>
           <h2>Hand someone the bundle. They confirm it offline.</h2>
-          <p class="sub">No account, no network to us. Each step is independent — any failure fails the whole.</p>
+          <p class="sub">No account, no network to us. Each step is independent. Any failure fails the whole.</p>
         </div>
         <div class="term reveal">
           <div class="chrome"><i class="r"></i><i class="y"></i><i class="g"></i><span>third-party verifier</span></div>
@@ -291,9 +291,9 @@
 <span class="dim"># or, with zero Occasio install:</span>
 <span class="cmd">python attest_verify.py session.json</span>
 <span class="cmd">cosign verify-blob --bundle session.sigstore.json session.json</span>
-<span class="sig">verified — there is no "trust us" path</span></pre>
+<span class="sig">verified, no "trust us" path</span></pre>
         </div>
-        <p class="verify-note">Sigstore signature · predicate equivalence · audit-chain integrity — none of them trust Occasio's own verifier.</p>
+        <p class="verify-note">Sigstore signature · predicate equivalence · audit-chain integrity. None of them trust Occasio's own verifier.</p>
       </div>
     </section>
 
@@ -309,17 +309,17 @@
           <div class="card reveal">
             <span class="tag">Enforce</span>
             <h3>Denied content never ships</h3>
-            <p>When the agent bakes a denied file or a secret into the outbound request, Occasio resolves the real path — symlinks too — and strips the content before the model receives it.</p>
+            <p>When the agent bakes a denied file or a secret into the outbound request, Occasio resolves the real path (symlinks too) and strips the content before the model receives it.</p>
           </div>
           <div class="card reveal">
             <span class="tag">One policy file</span>
             <h3>You control the rules</h3>
-            <p>Every tool call passes through one human-readable <code>policy.yml</code> you own. Deny-lists, path rules, transforms — hot-reloaded, and each decision is logged into the chain.</p>
+            <p>Every tool call passes through one human-readable <code>policy.yml</code> you own. Deny-lists, path rules, transforms, all hot-reloaded, and each decision is logged into the chain.</p>
           </div>
           <div class="card reveal">
             <span class="tag">Honest coverage</span>
             <h3>No silent gaps</h3>
-            <p>Every tool call gets a coverage code. You see exactly what was intercepted and what fell through — no inflated claims.</p>
+            <p>Every tool call gets a coverage code. You see exactly what was intercepted and what fell through, with no inflated claims.</p>
           </div>
         </div>
       </div>
@@ -330,7 +330,7 @@
       <div class="wrap">
         <div class="sec-head reveal">
           <p class="kicker">Built for the audit</p>
-          <h2>When someone asks "what did the agent do?" — there's a signed answer.</h2>
+          <h2>When someone asks "what did the agent do?", there's a signed answer.</h2>
           <p class="sub">Standard supply-chain rails, extended from build artifacts to agent actions. No hand-rolled crypto.</p>
         </div>
         <div class="badges reveal">
@@ -363,7 +363,7 @@
   <footer>
     <div class="wrap">
       © Occasio Labs. Occasio is open-source software (Apache-2.0).
-      Local-first audit and policy proxy for AI coding agents — built for
+      Local-first audit and policy proxy for AI coding agents, built for
       <a href="https://www.anthropic.com/claude-code">Claude Code</a>, Cline, and other agents.
     </div>
   </footer>
