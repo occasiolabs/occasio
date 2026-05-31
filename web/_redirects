@@ -1,0 +1,3 @@
+# Redirect the old Cloudflare Pages subdomain to the canonical custom domain.
+# Cloudflare Pages matches the source host when a full URL is given.
+https://occasio.pages.dev/* https://useoccasio.com/:splat 301

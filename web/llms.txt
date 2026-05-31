@@ -44,7 +44,7 @@ npm install -g @occasiolabs/occasio
 
 ## Links
 
-- Website: https://occasio.pages.dev/
+- Website: https://useoccasio.com/
 - npm: https://www.npmjs.com/package/@occasiolabs/occasio
 - Source: https://github.com/occasiolabs/occasio
 - MCP Registry entry: https://registry.modelcontextprotocol.io/v0/servers?search=occasio
