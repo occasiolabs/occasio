@@ -1,0 +1,25 @@
+# Force LF in the repository AND in every working tree on all platforms.
+#
+# Why: src/policy/loader.js computePolicyHash() hashes the raw bytes of
+# policy.yml, and that hash is recorded in the policy_loaded audit row and
+# the signed attestation. Without this, core.autocrlf=true checks the same
+# file out as CRLF on Windows and LF on Linux/CI, producing a different
+# policy_hash for byte-identical policy and silently breaking the
+# cross-machine reproducibility the product depends on. `eol=lf` overrides
+# core.autocrlf so the working-tree bytes are identical everywhere.
+* text=auto eol=lf
+
+# Binary files git must never touch / normalize.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.tgz  binary
+*.woff  binary
+*.woff2 binary
+*.sigstore.json -text

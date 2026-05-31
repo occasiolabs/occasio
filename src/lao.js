@@ -27,28 +27,47 @@ let _cache = { key: '', result: [], ts: 0 };
 
 // ── Python subprocess ──────────────────────────────────────────────────────────
 
-function scorePaths(task, repoPath) {
-  const key = `${task.slice(0, 120)}|${repoPath}`;
-  if (key === _cache.key && Date.now() - _cache.ts < CACHE_TTL) {
-    return Promise.resolve(_cache.result);
-  }
-  return new Promise(resolve => {
-    const py = spawn('python', [LAO_PY, task.slice(0, 500), repoPath], {
+// Try one interpreter. Resolves with the parsed scores (or [] on bad/slow
+// output); REJECTS only when the binary itself is missing (spawn 'error',
+// e.g. ENOENT) so the caller can fall back to the next candidate.
+function trySpawnScore(cmd, task, repoPath) {
+  return new Promise((resolve, reject) => {
+    const py = spawn(cmd, [LAO_PY, task.slice(0, 500), repoPath], {
       windowsHide: true,
     });
     let out = '';
-    const timer = setTimeout(() => { py.kill(); resolve([]); }, 8_000);
+    let settled = false;
+    const timer = setTimeout(() => { settled = true; py.kill(); resolve([]); }, 8_000);
     py.stdout.on('data', d => { out += d.toString(); });
     py.on('close', () => {
+      if (settled) return;
       clearTimeout(timer);
-      try {
-        const result = JSON.parse(out);
-        _cache = { key, result, ts: Date.now() };
-        resolve(result);
-      } catch { resolve([]); }
+      try { resolve(JSON.parse(out)); }
+      catch { resolve([]); }
     });
-    py.on('error', () => { clearTimeout(timer); resolve([]); });
+    py.on('error', err => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      reject(err);   // binary not found — caller tries the next candidate
+    });
   });
+}
+
+async function scorePaths(task, repoPath) {
+  const key = `${task.slice(0, 120)}|${repoPath}`;
+  if (key === _cache.key && Date.now() - _cache.ts < CACHE_TTL) {
+    return _cache.result;
+  }
+  // 'python' first (canonical on Windows), then 'python3' (canonical on
+  // macOS / modern Linux, where bare 'python' usually does not exist).
+  for (const cmd of ['python', 'python3']) {
+    try {
+      const result = await trySpawnScore(cmd, task, repoPath);
+      _cache = { key, result, ts: Date.now() };
+      return result;
+    } catch { /* binary missing — try the next candidate */ }
+  }
+  return [];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
