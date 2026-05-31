@@ -55,6 +55,12 @@ const auditor = createAuditor(chainPath);
 const runId = 'drift-guard-run-' + Date.now();
 const cwd   = process.cwd();
 
+// Fixture rows MUST be dated today: the replay surface defaults to a
+// `today: true` view (src/replay.js → loadEvents), so a hardcoded date
+// makes this guard fail every day after it. Date the fixture dynamically.
+const _d  = new Date();
+const ymd = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
+
 // Five rows: three cloud_sent, one local_only (zero cost), one blocked.
 // Costs chosen so the sum is a clean four-decimal number that survives
 // status.js's toFixed(4) display.
@@ -69,7 +75,7 @@ const fixtures = [
 for (let i = 0; i < fixtures.length; i++) {
   const f = fixtures[i];
   const r = auditor.recordRequest({
-    iso:   `2026-05-28T12:0${i}:00.000Z`,
+    iso:   `${ymd}T12:0${i}:00.000Z`,
     run_id: runId,
     cwd,
     model:  'claude-haiku-4-5',
@@ -81,7 +87,7 @@ for (let i = 0; i < fixtures.length; i++) {
 // session.json pointer — what currentRunId() reads
 fs.writeFileSync(sessionPath, JSON.stringify({
   run_id: runId,
-  start:  '2026-05-28T12:00:00.000Z',
+  start:  `${ymd}T12:00:00.000Z`,
   cwd,
   mode:   'intercept',
   budget: null,
