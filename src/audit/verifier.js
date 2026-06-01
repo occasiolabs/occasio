@@ -130,6 +130,64 @@ function verifyFile(filePath = DEFAULT_LOG) {
   };
 }
 
+/**
+ * Verify an in-memory chain *slice* (a contiguous run of rows lifted out of a
+ * full chain, e.g. embedded in a portable evidence bundle).
+ *
+ * Unlike verifyFile, this does NOT require the first row's prev_hash to be
+ * GENESIS — a slice begins mid-chain. It checks the two properties that hold
+ * for any contiguous segment:
+ *   1. content integrity — every row's hash equals computeHash(rowWithoutHash);
+ *   2. internal continuity — row[i].prev_hash === row[i-1].hash for i >= 1.
+ *
+ * The slice is anchored to its attestation elsewhere (by comparing the
+ * returned firstHash/lastHash to the attestation's audit_chain.first_hash /
+ * last_hash), so genesis-anchoring is not this function's job.
+ *
+ * Returns { ok, errors:[{index,detail}], firstHash, lastHash, chained }.
+ */
+function verifySlice(rows) {
+  const errors = [];
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { ok: false, errors: [{ index: 0, detail: 'slice is empty' }], firstHash: null, lastHash: null, chained: 0 };
+  }
+
+  let firstHash = null, lastHash = null, chained = 0;
+  let expectedPrevHash = null;  // null until the first chained row is seen
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || typeof row.hash !== 'string' || row.hash.length !== 64) {
+      errors.push({ index: i, detail: 'row missing a valid 64-hex hash (slices must be fully hash-chained)' });
+      continue;
+    }
+    chained++;
+
+    // Internal continuity: every row after the first must link to its
+    // predecessor. The first row's prev_hash is whatever anchored it in the
+    // producer's full chain — recorded but not constrained here.
+    if (expectedPrevHash === null) {
+      firstHash = row.hash;
+    } else if (row.prev_hash !== expectedPrevHash) {
+      errors.push({ index: i, detail: `chain broken — prev_hash mismatch (expected ${String(expectedPrevHash).slice(0, 12)}…, got ${String(row.prev_hash).slice(0, 12)}…)` });
+    }
+
+    // Content integrity: recompute the stored hash.
+    const { hash: storedHash, ...rowWithoutHash } = row;
+    const recomputed = computeHash(rowWithoutHash);
+    if (recomputed !== storedHash) {
+      errors.push({ index: i, detail: `hash mismatch — row was modified (stored ${storedHash.slice(0, 12)}…, computed ${recomputed.slice(0, 12)}…)` });
+    }
+
+    // Advance using the recomputed hash so a tampered row cascades into the
+    // next row's continuity check too.
+    expectedPrevHash = recomputed;
+    lastHash = storedHash;
+  }
+
+  return { ok: errors.length === 0, errors, firstHash, lastHash, chained };
+}
+
 function runAuditCli(args) {
   const sub = args[0];
 
@@ -183,4 +241,4 @@ function runAuditCli(args) {
   }
 }
 
-module.exports = { verifyFile, runAuditCli };
+module.exports = { verifyFile, verifySlice, runAuditCli };

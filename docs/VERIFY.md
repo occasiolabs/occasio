@@ -4,6 +4,26 @@ You received an Occasio attestation bundle (typically a `.json` predicate plus a
 
 You do not need an Occasio account, a network connection to Occasio Labs, or any vendor portal. The three checks below run offline.
 
+## Simplest: a single evidence bundle (one file, one command)
+
+If the producer sent you a single `*.occasio.json` **evidence bundle** (produced by `occasio bundle --run <id> --out run.occasio.json`), you do not need to juggle separate files — the bundle embeds the attestation, the run's audit-chain slice, the policy snapshot, and (if signed) the Sigstore bundle.
+
+```bash
+npm install -g @occasiolabs/occasio
+occasio verify run.occasio.json
+```
+
+`occasio verify` runs six checks offline and exits non-zero on any failure (so it drops straight into CI):
+
+1. **schema** — recognised bundle format.
+2. **manifest integrity** — embedded artifacts hash to the recorded manifest.
+3. **chain slice integrity** — every chain row's hash recomputes and links to its predecessor, anchored to the attestation's `first_hash`/`last_hash`.
+4. **policy binding** — the embedded policy bytes match the attestation's `policy.file_hash` (proves which `policy.yml` was active; skipped only when the producer's attestation marked the policy `inferred`).
+5. **git state matches chain** — the attestation's `subject.git_state` (commit, diff hash, changed/untracked files) byte-matches the `git_state` rows in the embedded chain — so a forged "what the agent changed" claim fails verification.
+6. **signature** — when present, the Sigstore bundle is cryptographically valid and its signed predicate matches the embedded attestation.
+
+The sections below cover the older multi-file form (separate `.json` + `.sigstore.json` + `pipeline-events.jsonl`).
+
 ## What you need
 
 - The three files: `<name>.json`, `<name>.sigstore.json`, `pipeline-events.jsonl`.

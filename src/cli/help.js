@@ -62,6 +62,8 @@ ${col.b('Audit')} ${col.d('— tamper-evidence and attestation')}
   attest --run-id <uuid>     ${col.d('(stable)')} Behavioral attestation: hash-chain + execution summary
                              ${col.d('Add --sign in GitHub Actions for Sigstore keyless signing')}
   attest verify <file>       ${col.d('(stable)')} Re-verify signed attestation (bundle + DSSE + chain)
+  bundle --run <uuid>        ${col.d('(stable)')} Pack one run into a single portable evidence file (--sign, --out)
+  verify <file>              ${col.d('(stable)')} Verify an evidence bundle offline (chain + policy + git + signature)
   selftest                   ${col.d('(stable)')} Run governance self-checks on scratch chain
 
 ${col.b('Detect')} ${col.d('— anomalies, adversarial probes')}
