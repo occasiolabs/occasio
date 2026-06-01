@@ -50,15 +50,18 @@ Fields whose value would be `undefined` (in JS) or `None` (in Python) are **omit
 
 ### Row kinds
 
-`kind` distinguishes what an audit row records. As of v0.9 there are three:
+`kind` distinguishes what an audit row records. There are four:
 
 | `kind` | When it fires | Semantics |
 |---|---|---|
 | `tool_call` | Every governed tool call (Claude Code or MCP) | `tool_inputs` is per-tool (file path, glob, count). `action` is one of `LOCAL`/`PASS`/`BLOCK`/`TRANSFORM`. `result_kind` is `local`/`pass`/`block`/`transform`. |
 | `request` | Every HTTP request through the proxy (Anthropic SSE or budget-blocked or local-only) | Per-request accounting row: cost, tokens, cache savings, savings breakdown, coverage counters (`tools_attempted`, `tools_local_count`, `tools_mcp_count`). `event_type` is `cloud_sent`, `local_only`, `blocked`, `trimmed`, or `budget_exceeded`. No `action`/`result_kind` (those are tool-call concepts). |
 | `policy_loaded` | Process startup, and on every policy-file edit (hot-reload) | `tool_inputs` is `{ policy_hash, policy_path, version }`. `tool_name` is the placeholder string `"policy_loaded"`. `action` is `"INFO"`. `reason` is `"policy-loaded"`. **`result_kind` is omitted** because a policy-load event has no dispatcher Result. |
+| `git_state` | Run start and run end (when launched via the `claude` proxy) | `tool_inputs` is `{ phase, cwd, is_repo, head, branch, dirty, changed_files, untracked_files, diff_hash, digest }`. `phase` is `run_start` or `run_end`. `tool_name` is the placeholder string `"git_state"`. `action` is `"INFO"`. `reason` is `"git-state"`. **`result_kind` is omitted.** Capture is best-effort: a non-git directory or missing git binary records `is_repo:false` rather than aborting the run. |
 
 The `policy_loaded` row binds the audit chain to a specific policy file's bytes: a buyer can prove not just "what was blocked" but "under which exact `policy.yml` the block was decided." Because the hash is over the raw file bytes (not the normalized policy object), comments and whitespace count, so the hash matches whatever a reviewer reads in source control.
+
+The `git_state` rows bind a run to the concrete repository state it ran against: the `run_start` row records HEAD + a `diff_hash` before the agent acts, and the `run_end` row records what it left behind (changed/untracked files, post-run `diff_hash`). `occasio attest` lifts these rows into `subject.git_state` (`provenance: "chain"`), and `occasio attest verify` re-derives the same object straight from the hash-protected rows and requires byte-equality — so a tampered git claim in an attestation fails verification.
 
 #### `request` row field order
 

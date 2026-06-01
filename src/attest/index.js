@@ -152,6 +152,48 @@ function summariseExecution(events, startedAt) {
   return summary;
 }
 
+// Pull a clean, fixed-key-order git-state object out of a `git_state` chain
+// row's tool_inputs. Field order is the canonical contract — buildAttestation
+// and the verifier both call this so what lands in the attestation is
+// byte-reproducible from the (hash-protected) chain rows.
+function gitStateFromRow(row) {
+  const t = (row && row.tool_inputs) || {};
+  return {
+    is_repo:         !!t.is_repo,
+    head:            t.head || null,
+    branch:          t.branch || null,
+    dirty:           !!t.dirty,
+    changed_files:   Array.isArray(t.changed_files) ? t.changed_files.slice() : [],
+    untracked_files: Array.isArray(t.untracked_files) ? t.untracked_files.slice() : [],
+    diff_hash:       t.diff_hash || null,
+    digest:          t.digest || null,
+  };
+}
+
+/**
+ * deriveGitState(events) → null | { provenance:'chain', run_start, run_end }
+ *
+ * Reads `git_state` rows out of a run slice. Returns the first 'run_start' and
+ * the last 'run_end' phase rows (each as a fixed-order state object), or null
+ * when the slice carries no git_state rows. Exported so the verifier can
+ * independently re-derive the same object from the chain and cross-check it
+ * against what an attestation claims.
+ */
+function deriveGitState(events) {
+  let start = null, end = null;
+  for (const e of (events || [])) {
+    if (!e || e.kind !== 'git_state') continue;
+    const phase = e.tool_inputs && e.tool_inputs.phase;
+    if (phase === 'run_end') {
+      end = gitStateFromRow(e);            // last run_end wins
+    } else if (!start) {
+      start = gitStateFromRow(e);          // first run_start wins
+    }
+  }
+  if (!start && !end) return null;
+  return { provenance: 'chain', run_start: start, run_end: end };
+}
+
 // ── public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -197,6 +239,15 @@ function buildAttestation({ runId, logFile, policyFile, gitCommit, filesChanged 
     polSource = 'inferred';
   }
 
+  // Chain-sourced git state (if the run recorded git_state rows). This is
+  // strictly stronger than the --git-commit/--files-changed flags: it is
+  // bound to hash-protected rows the verifier re-derives independently.
+  const gitState = deriveGitState(slice.events);
+  const chainGitCommit = gitState
+    ? ((gitState.run_start && gitState.run_start.head) ||
+       (gitState.run_end && gitState.run_end.head) || null)
+    : null;
+
   const agent = pickAgentMeta(slice.events);
   const first = slice.events[0];
   const last  = slice.events[slice.events.length - 1];
@@ -208,8 +259,15 @@ function buildAttestation({ runId, logFile, policyFile, gitCommit, filesChanged 
     predicate_type: PREDICATE_TYPE,
     subject: Object.assign(
       { run_id: runId },
-      (gitCommit && typeof gitCommit === 'string') ? { git_commit: gitCommit } : {},
-      (Array.isArray(filesChanged) && filesChanged.length) ? { files_changed: filesChanged.slice() } : {}
+      // git_commit: an explicit flag wins (CI may pass the merge/squash SHA);
+      // otherwise fall back to the chain-recorded HEAD when present.
+      (gitCommit && typeof gitCommit === 'string')
+        ? { git_commit: gitCommit }
+        : (chainGitCommit ? { git_commit: chainGitCommit } : {}),
+      (Array.isArray(filesChanged) && filesChanged.length) ? { files_changed: filesChanged.slice() } : {},
+      // git_state is only present when the run actually recorded git_state
+      // rows — keeps flag-only / no-git attestations byte-identical to before.
+      gitState ? { git_state: gitState } : {}
     ),
     agent: {
       platform:    agent.platform,
@@ -359,6 +417,7 @@ function emitUnsigned(attestation, out, toStdout, runId) {
 
 module.exports = {
   buildAttestation,
+  deriveGitState,
   runAttestCli,
   SCHEMA_VERSION,
   PREDICATE_TYPE,

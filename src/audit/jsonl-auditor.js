@@ -21,6 +21,7 @@ const path   = require('path');
 const os     = require('os');
 const crypto = require('crypto');
 const { normalizeToolInputsForAudit } = require('./input-normalizer');
+const { gitStateDigest } = require('../git/state');
 
 const DEFAULT_LOG = path.join(os.homedir(), '.occasio', 'pipeline-events.jsonl');
 
@@ -292,6 +293,27 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
   }
 
   /**
+   * Write a synthetic `git_state` row binding a run to the concrete repository
+   * state at a lifecycle phase ('run_start' | 'run_end').
+   *
+   * Like recordPolicyLoaded, this uses record()'s field order so the canonical
+   * serialization (and the Python independent walker) needs no change — the
+   * git facts live inside tool_inputs. Semantics for this row kind:
+   *
+   *   kind:        'git_state'
+   *   tool_name:   'git_state'
+   *   tool_inputs: { phase, cwd, digest, ...capturedState }
+   *   action:      'INFO'              (not a Decision action)
+   *   reason:      'git-state'
+   *
+   * Returns { ok: true } on success; { ok: false, error, droppedRow } on append
+   * failure, mirroring record()'s contract.
+   */
+  function recordGitState(args) {
+    return withLock(() => recordGitStateInner(args));
+  }
+
+  /**
    * Record a per-request accounting row (kind:"request").
    *
    * Phase-2 of the truth-source unification: every cloud-bound or
@@ -396,7 +418,53 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
     return { ok: true };
   }
 
-  return { record, recordPolicyLoaded, recordRequest, file: filePath };
+  function recordGitStateInner({ phase, runId, sessionId, cwd, state } = {}) {
+    const s = state || {};
+    const row = {
+      audit_schema: 1,
+      ts:            new Date().toISOString(),
+      event_id:      crypto.randomUUID(),
+      session_id:    sessionId,
+      run_id:        runId,
+      agent:         'occasio',
+      protocol:      'internal',
+      direction:     'inbound',
+      kind:          'git_state',
+      tool_name:     'git_state',
+      tool_inputs:   {
+        phase:           phase === 'run_end' ? 'run_end' : 'run_start',
+        cwd:             cwd,
+        is_repo:         !!s.is_repo,
+        head:            s.head || null,
+        branch:          s.branch || null,
+        dirty:           !!s.dirty,
+        changed_files:   Array.isArray(s.changed_files) ? s.changed_files : [],
+        untracked_files: Array.isArray(s.untracked_files) ? s.untracked_files : [],
+        diff_hash:       s.diff_hash || null,
+        digest:          gitStateDigest(s),
+      },
+      action:        'INFO',
+      reason:        'git-state',
+      policy_source: undefined,
+      executor:      undefined,
+      transform:     undefined,
+      exit_code:        undefined,
+      secrets_redacted: undefined,
+      distilled:        undefined,
+      tokens_saved:     undefined,
+      prev_hash:        prevHash,
+    };
+    row.hash = computeHash(row);
+    try {
+      fs.appendFileSync(filePath, JSON.stringify(row) + '\n');
+    } catch (e) {
+      return { ok: false, error: e, droppedRow: row };
+    }
+    prevHash = row.hash;
+    return { ok: true };
+  }
+
+  return { record, recordPolicyLoaded, recordRequest, recordGitState, file: filePath };
 }
 
 module.exports = {

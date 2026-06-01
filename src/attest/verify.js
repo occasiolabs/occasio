@@ -27,6 +27,8 @@ const path = require('path');
 const { verifyFile } = require('../audit/verifier');
 const { DSSE_PAYLOAD_TYPE, PREDICATE_TYPE } = require('./sign');
 const { canonicalize } = require('./canonicalize');
+const { loadRunSlice } = require('./run-slice');
+const { deriveGitState } = require('./index');
 
 /**
  * Verify a saved attestation pair.
@@ -128,6 +130,36 @@ async function verifyAttestation(attestationPath, bundlePath, ctx = {}) {
       detail: `chain_length=${ver.chained}, slice rows ${firstIdx + 1}..${lastIdx + 1}` });
   } catch (e) {
     checks.push({ name: 'audit chain integrity', ok: false, detail: e.message });
+    return { ok: false, checks, identity, rekor_entry };
+  }
+
+  // ── 4. git state matches chain (only when chain-sourced git_state claimed) ─
+  // Binds the attestation's repo claim to the hash-protected git_state rows:
+  // re-derive git_state straight from the chain and require byte-equality with
+  // what the attestation declares. Skipped entirely for attestations that
+  // carry no chain-sourced subject.git_state (backward compatible).
+  try {
+    const claimed = attestation?.subject?.git_state;
+    if (claimed && claimed.provenance === 'chain') {
+      const chainFile = attestation?.audit_chain?.chain_file;
+      const runId     = attestation?.subject?.run_id;
+      if (!chainFile || !runId) {
+        throw new Error('missing chain_file or run_id for git-state cross-check');
+      }
+      const slice = loadRunSlice(chainFile, runId);
+      const rederived = deriveGitState(slice.events);
+      if (!rederived) {
+        throw new Error('attestation claims chain-sourced git_state but chain has no git_state rows');
+      }
+      if (canonicalize(rederived) !== canonicalize(claimed)) {
+        throw new Error('subject.git_state differs from the git_state recorded in the chain');
+      }
+      const fp = (s) => (s && s.head) ? s.head.slice(0, 12) : (s ? 'no-head' : '—');
+      checks.push({ name: 'git state matches chain', ok: true,
+        detail: `run_start ${fp(rederived.run_start)} · run_end ${fp(rederived.run_end)}` });
+    }
+  } catch (e) {
+    checks.push({ name: 'git state matches chain', ok: false, detail: e.message });
     return { ok: false, checks, identity, rekor_entry };
   }
 
