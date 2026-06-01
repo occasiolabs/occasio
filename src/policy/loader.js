@@ -52,6 +52,10 @@ const DEFAULT_POLICY = Object.freeze({
   redact_secrets_in_tool_results: false,
   distill_tool_results:           false,
   block_requests_over_budget:     true,
+  // Opt-in: also run the richer prefix/jwt/env-key/entropy detectors
+  // (src/scanner/detectors.js) on tool results. Default off so existing
+  // behaviour and the conservative scanSecrets BLOCK path are unchanged.
+  entropy_secret_detection:       false,
   tools:                          DEFAULT_TOOLS,
   deny_paths:    Object.freeze([]),
   allow_paths:   Object.freeze([]),
@@ -238,6 +242,9 @@ function normalize(parsed) {
   }
   if (typeof parsed.block_requests_over_budget === 'boolean') {
     merged.block_requests_over_budget = parsed.block_requests_over_budget;
+  }
+  if (typeof parsed.entropy_secret_detection === 'boolean') {
+    merged.entropy_secret_detection = parsed.entropy_secret_detection;
   }
   // deny_paths / allow_paths: arrays of pre-resolved absolute path strings.
   // Invalid entries emit a stderr warning and are skipped — silent drops of

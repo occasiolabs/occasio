@@ -67,6 +67,7 @@ ${col.b('Audit')} ${col.d('— tamper-evidence and attestation')}
   selftest                   ${col.d('(stable)')} Run governance self-checks on scratch chain
 
 ${col.b('Detect')} ${col.d('— anomalies, adversarial probes')}
+  scan                       ${col.d('(stable)')} Explainable secret scan of a file/stdin (prefix/jwt/env-key/entropy)
   anomalies                  ${col.d('(beta)')}   Windowed EDR over the audit chain (--window 15m --json)
   harness                    ${col.d('(alpha)')}  Real Claude Code run vs. governance claims (API key required)
   redteam                    ${col.d('(alpha)')}  Autonomous adversarial probe (API key + SDK required)

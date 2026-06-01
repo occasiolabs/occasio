@@ -27,6 +27,10 @@
       "type": "boolean",
       "description": "Block outbound requests once the session spend reaches the --budget limit. Returns HTTP 402 without invoking the model."
     },
+    "entropy_secret_detection": {
+      "type": "boolean",
+      "description": "Opt-in (default false). When true, tool results are also scanned with the richer prefix/JWT/.env/Shannon-entropy detectors (src/scanner/detectors.js) in addition to the built-in pattern scanner. Off by default so existing behaviour is unchanged."
+    },
     "tools": {
       "type": "object",
       "description": "Per-tool routing. When present, REPLACES the built-in defaults entirely — every tool not listed here will PASS to the cloud. Use sparingly; the defaults are usually what you want.",

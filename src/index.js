@@ -368,6 +368,10 @@ if (cmd === 'explain') {
   process.exit(require('./cli/explain').run(args.slice(1)));
 }
 
+if (cmd === 'scan') {
+  process.exit(require('./cli/scan').run(args.slice(1)));
+}
+
 if (cmd === 'receipt') {
   (async () => process.exit(await require('./cli/receipt').run(args.slice(1))))();
   return;
