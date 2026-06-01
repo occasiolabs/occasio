@@ -27,6 +27,7 @@
     "restart-check": "node scripts/restart-check.js",
     "check-validation": "node scripts/check-validation.js",
     "demo:release": "node scripts/demo-release.js",
+    "verify:stress": "node scripts/stress-verify.js",
     "start": "node bin/occasio.js"
   },
   "keywords": [
