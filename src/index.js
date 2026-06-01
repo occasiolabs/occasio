@@ -865,6 +865,28 @@ const sessionAuditor = _createAuditor(process.env.OCCASIO_AUDIT_FILE || undefine
   policyLoader.load();
 }
 
+// Git-state binding: record the repository state at run start so the run's
+// attestation can be cryptographically bound to the concrete code it ran
+// against (and cross-checked by a verifier). Best-effort and non-fatal — git
+// evidence is additive; a non-git project, a missing git binary, or a one-off
+// audit-write hiccup must never abort the proxy. The captured state lives in a
+// hash-chained `git_state` row, so its integrity is still tamper-evident.
+function recordGitStatePhase(phase) {
+  try {
+    const { captureGitState } = require('./git/state');
+    const state  = captureGitState(SESSION_CWD);
+    const status = sessionAuditor.recordGitState({
+      phase, runId: currentRunId, sessionId: currentRunId, cwd: SESSION_CWD, state,
+    });
+    if (status && status.ok === false) {
+      process.stderr.write(`${col.y('[occasio][audit-warn]')} git_state(${phase}) row not written: ${status.error?.message || 'unknown'}\n`);
+    }
+  } catch (e) {
+    process.stderr.write(`${col.y('[occasio][audit-warn]')} git_state(${phase}) capture skipped: ${e.message}\n`);
+  }
+}
+recordGitStatePhase('run_start');
+
 // Phase 2: per-request accounting row to the audit chain. Soft-fail (warn
 // but keep serving) during the transition while legacy logs/*.jsonl writes
 // still run in parallel — after Phase 5 (logs/* writes removed) this should
@@ -1677,6 +1699,9 @@ server.listen(PORT, '127.0.0.1', () => {
   });
 
   claude.on('exit', code => {
+    // Bind the post-run repository state before tearing down — captures what
+    // the agent actually left behind (diff vs HEAD, changed/untracked files).
+    recordGitStatePhase('run_end');
     server.close();
     try {
       // Phase 5: counters are sourced from the hash-chained audit log via the

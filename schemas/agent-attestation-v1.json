@@ -35,12 +35,23 @@
         },
         "git_commit": {
           "type": ["string", "null"],
-          "description": "Reserved for v1.1 — populated when the attestation is bound to a single git commit (set by GitHub Action in Phase 2)."
+          "description": "Commit the run is bound to. An explicit --git-commit flag (e.g. a CI merge/squash SHA) wins; otherwise defaults to the HEAD recorded in the run's git_state chain rows."
         },
         "files_changed": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Reserved for v1.1 — paths modified by the agent during this run."
+          "description": "Paths modified by the agent during this run, as passed via --files-changed (CI). For chain-sourced evidence see git_state.run_end.changed_files."
+        },
+        "git_state": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Repository state bound to this run, derived from `git_state` audit-chain rows (provenance 'chain'). Present only when the run recorded git_state rows; a verifier re-derives this object from the hash-protected chain and requires byte-equality. run_end may be null when only run-start was captured.",
+          "required": ["provenance"],
+          "properties": {
+            "provenance": { "type": "string", "enum": ["chain"] },
+            "run_start": { "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/gitPhaseState" }] },
+            "run_end":   { "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/gitPhaseState" }] }
+          }
         }
       }
     },
@@ -185,6 +196,23 @@
     "generated_at": {
       "type": "string",
       "format": "date-time"
+    }
+  },
+  "definitions": {
+    "gitPhaseState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["is_repo", "head", "branch", "dirty", "changed_files", "untracked_files", "diff_hash", "digest"],
+      "properties": {
+        "is_repo":         { "type": "boolean" },
+        "head":            { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+        "branch":          { "type": ["string", "null"] },
+        "dirty":           { "type": "boolean" },
+        "changed_files":   { "type": "array", "items": { "type": "string" } },
+        "untracked_files": { "type": "array", "items": { "type": "string" } },
+        "diff_hash":       { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "digest":          { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" }
+      }
     }
   }
 }
