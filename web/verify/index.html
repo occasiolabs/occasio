@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Zero network: connect-src 'none' hard-blocks fetch/XHR/WebSocket. Scripts are
+     local files only (CSP forbids inline/eval). The bundle never leaves the browser. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>Verify an Occasio attestation — in your browser, nothing uploaded</title>
+<meta name="description" content="Verify an Occasio attestation entirely in your browser. The audit chain is re-hashed with SHA-256 from GENESIS; nothing is uploaded; disconnect your network and it still works.">
+<link rel="icon" href="data:,">
+<style>
+  :root{
+    --bg:#0b0e13; --panel:#131a23; --panel-2:#0f151d; --line:#21262d; --line-soft:#1a1f27;
+    --fg:#e6edf3; --muted:#9aa5b1; --faint:#6e7681;
+    --accent:#58a6ff; --accent-2:#56d4dd; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+    --maxw:920px; --r:14px;
+  }
+  *{box-sizing:border-box} html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 500px at 78% -8%,rgba(88,166,255,.10),transparent 60%),radial-gradient(800px 520px at 10% 4%,rgba(86,212,221,.07),transparent 55%);background-repeat:no-repeat}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  code,pre,.mono{font-family:var(--mono)}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 1.5rem}
+  .nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(10px);background:rgba(11,14,19,.72);border-bottom:1px solid var(--line-soft)}
+  .nav .inner{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .brand{font-family:var(--mono);font-weight:600;letter-spacing:.16em;font-size:.95rem;display:flex;align-items:center;gap:.5rem;color:var(--fg)}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+  .nav nav a{color:var(--muted);font-size:.88rem;padding:.4rem .7rem;border-radius:8px}
+  .nav nav a:hover{color:var(--fg);background:var(--panel);text-decoration:none}
+  .hero{padding:3.4rem 0 1.4rem;text-align:center}
+  .eyebrow{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-2);border:1px solid var(--line);background:var(--panel-2);padding:.35rem .8rem;border-radius:999px;margin-bottom:1.2rem}
+  h1{font-size:clamp(1.9rem,4.6vw,2.8rem);line-height:1.08;letter-spacing:-.02em;margin:0 auto .9rem;max-width:20ch;font-weight:700}
+  .sub{color:var(--muted);max-width:60ch;margin:0 auto}
+  .offline{display:flex;gap:.6rem;align-items:flex-start;max-width:760px;margin:1.4rem auto 0;padding:.7rem .95rem;border:1px solid var(--line);background:var(--panel-2);border-radius:12px;font-size:.9rem;color:var(--muted);text-align:left}
+  .offline b{color:var(--fg)} .offline .lock{color:var(--green)}
+  section{padding:1.2rem 0}
+  .drop{border:1.5px dashed var(--line);background:var(--panel-2);border-radius:var(--r);padding:2.2rem 1.2rem;text-align:center;transition:border-color .15s,background .15s}
+  .drop.over{border-color:var(--accent);background:rgba(88,166,255,.06)}
+  .drop p{margin:.3rem 0;color:var(--muted)} .drop .big{color:var(--fg);font-size:1.05rem}
+  .btn{display:inline-block;cursor:pointer;font:inherit;font-size:.9rem;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:.5rem .9rem}
+  .btn:hover{border-color:var(--accent)} .btn.primary{border-color:var(--accent);color:var(--accent)}
+  .btn.danger:hover{border-color:var(--red);color:var(--red)}
+  .row{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center;margin-top:1rem}
+  .cards{display:grid;grid-template-columns:1fr;gap:.8rem}
+  @media(min-width:760px){.cards{grid-template-columns:1fr 1fr 1fr}}
+  .card{border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:1rem 1.05rem}
+  .card .mk{font-family:var(--mono);font-size:1.3rem;line-height:1}
+  .card h3{margin:.5rem 0 .25rem;font-size:1rem}
+  .card .what{color:var(--muted);font-size:.86rem;margin:0 0 .5rem}
+  .card .detail{font-family:var(--mono);font-size:.78rem;color:var(--faint);word-break:break-word}
+  .card.ok{border-color:rgba(63,185,80,.5)} .card.ok .mk{color:var(--green)}
+  .card.fail{border-color:rgba(248,81,73,.6)} .card.fail .mk{color:var(--red)}
+  .card.na{border-color:var(--line)} .card.na .mk{color:var(--amber)}
+  .card.pend .mk{color:var(--faint)}
+  .democtl{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:1rem;padding:.7rem .9rem;border:1px solid var(--line);border-radius:11px;background:var(--panel-2)}
+  .democtl .lbl{color:var(--muted);font-size:.86rem;margin-right:auto}
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  td{padding:.4rem .2rem;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  td:first-child{color:var(--muted);width:34%;white-space:nowrap}
+  .warn{color:var(--amber)}
+  details{margin-top:1rem;border:1px solid var(--line);border-radius:11px;background:var(--panel-2)}
+  details summary{cursor:pointer;padding:.7rem .9rem;color:var(--muted);font-size:.88rem}
+  details pre{margin:0;padding:.9rem;overflow:auto;font-size:.78rem;border-top:1px solid var(--line-soft);max-height:340px}
+  .hint{color:var(--faint);font-size:.82rem;text-align:center;margin-top:.8rem}
+  footer{border-top:1px solid var(--line-soft);margin-top:2.5rem;padding:1.6rem 0;color:var(--faint);font-size:.85rem;text-align:center}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body>
+  <header class="nav"><div class="wrap inner">
+    <a class="brand" href="/"><span class="dot"></span> OCCASIO</a>
+    <nav><a href="/">Home</a><a href="https://github.com/occasiolabs/occasio" target="_blank" rel="noopener">GitHub</a></nav>
+  </div></header>
+
+  <main class="wrap">
+    <div class="hero">
+      <span class="eyebrow">Verify it yourself</span>
+      <h1>Confirm an attestation in your own browser.</h1>
+      <p class="sub">Drag in an attestation and its <code>pipeline-events.jsonl</code> chain. The audit log is re-hashed with SHA-256, link by link, back to the GENESIS sentinel. No account. No upload.</p>
+      <div class="offline">
+        <span class="lock">●</span>
+        <span><b>Runs entirely in your browser — nothing is uploaded.</b> There is no server here. Disconnect your network and it still works. Your bundle stays in this tab and is never stored.</span>
+      </div>
+    </div>
+
+    <section>
+      <div class="drop" id="dropzone">
+        <p class="big">Drop your attestation files here</p>
+        <p>attestation <code>.json</code> · chain <code>pipeline-events.jsonl</code> · optional <code>.sigstore.json</code></p>
+        <div class="row">
+          <label class="btn">Choose files<input id="filepick" type="file" multiple hidden></label>
+          <button class="btn primary" id="loaddemo" type="button">Load demo attestation</button>
+        </div>
+        <p class="hint" id="demonote" hidden>Demo data is synthetic — no real paths, identities, or secrets.</p>
+      </div>
+    </section>
+
+    <section id="result" hidden>
+      <div class="cards">
+        <div class="card pend" id="card-chain"><div class="mk">○</div><h3>Audit-chain integrity</h3><p class="what">Re-hashes every line and checks the links back to GENESIS. Proves the log was not edited.</p><div class="detail" id="d-chain"></div></div>
+        <div class="card pend" id="card-pred"><div class="mk">○</div><h3>Predicate equivalence</h3><p class="what">Confirms the signed payload is byte-for-byte the attestation you are holding.</p><div class="detail" id="d-pred"></div></div>
+        <div class="card pend" id="card-sig"><div class="mk">○</div><h3>Signature (Sigstore)</h3><p class="what">Cryptographic cert/Rekor verification is not done in-browser. Here is how to verify it for real.</p><div class="detail" id="d-sig"></div></div>
+      </div>
+
+      <div class="democtl" id="democtl" hidden>
+        <span class="lbl">This is the synthetic demo. Edit the record and watch the chain catch it:</span>
+        <button class="btn danger" id="tamper" type="button">Tamper one byte</button>
+        <button class="btn" id="reset" type="button">Reset</button>
+      </div>
+
+      <details>
+        <summary>Attestation summary</summary>
+        <div style="padding:.4rem .9rem .9rem"><table id="summary"></table></div>
+      </details>
+      <details>
+        <summary>Raw attestation JSON</summary>
+        <pre id="raw"></pre>
+      </details>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    Three independent checks — chain integrity (real SHA-256), predicate equivalence, signature.
+    None of them trust Occasio's own verifier. ·
+    <a href="https://github.com/occasiolabs/occasio/blob/main/docs/VERIFY.md" target="_blank" rel="noopener">How verification works</a>
+  </footer>
+
+  <script src="demo.js"></script>
+  <script src="verify.js"></script>
+</body>
+</html>
