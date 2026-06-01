@@ -203,7 +203,7 @@
       <div class="brand"><span class="dot" aria-hidden="true"></span>OCC·ASIO</div>
       <nav aria-label="Primary">
         <a class="hide-sm" href="#use">How it's used</a>
-        <a class="hide-sm" href="#verify">Verify</a>
+        <a href="/verify">Verify</a>
         <a class="hide-sm" href="#trust">Compliance</a>
         <a class="ghbtn btn" href="https://github.com/occasiolabs/occasio">GitHub</a>
       </nav>
@@ -226,6 +226,7 @@
           <button class="copy" id="copyBtn" type="button" aria-label="Copy install command">copy</button>
         </span>
         <a class="btn btn-primary" href="https://github.com/occasiolabs/occasio">View on GitHub →</a>
+        <a class="btn" href="/verify">Verify in your browser →</a>
       </div>
       <p class="microcopy">then <code>occasio eyes --demo</code> to see it in 10 seconds, no setup</p>
 
@@ -296,7 +297,10 @@
 <span class="sig">tamper one byte → verification fails</span></pre>
         </div>
         <p class="verify-note">Six independent checks — schema · manifest · chain slice · policy binding · git-state · signature. None of them trust Occasio's own verifier.</p>
-        <p class="verify-note"><a href="/verify">Try the live verifier →</a> &nbsp;Re-hash a chain in your own browser. Nothing is uploaded; disconnect your network and it still works.</p>
+        <div class="cta" style="margin-top:1.6rem">
+          <a class="btn btn-primary" href="/verify">Try the live verifier →</a>
+        </div>
+        <p class="verify-note" style="text-align:center">Re-hash a chain in your own browser. Nothing is uploaded — disconnect your network and it still works.</p>
       </div>
     </section>
 
