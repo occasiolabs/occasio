@@ -386,6 +386,16 @@ if (cmd === 'compliance') {
   process.exit(require('./cli/compliance').run(args.slice(1)));
 }
 
+if (cmd === 'bundle') {
+  (async () => process.exit(await require('./bundle').runCli(args.slice(1))))();
+  return;
+}
+
+if (cmd === 'verify') {
+  (async () => process.exit(await require('./bundle/verify').runCli(args.slice(1))))();
+  return;
+}
+
 if (cmd === 'live') {
   require('./cli/live').run(args.slice(1));
   return;
