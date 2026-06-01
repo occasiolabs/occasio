@@ -54,6 +54,7 @@ ${col.b('Inspect')} ${col.d('— forensics over what the agent did')}
   distill                    ${col.d('(stable)')} Inspect distilled outputs (--last N, --entry <N>)
   report                     ${col.d('(stable)')} Governance export (--format csv for SIEM)
   preflight                  ${col.d('(beta)')}   Read-only miner over past logs
+  preflight simulate         ${col.d('(stable)')} Predict allow/block for candidate actions vs the active policy (--read/--bash/--mined)
   baseline                   ${col.d('(beta)')}   Behavior baseline: [learn|show|compare|reset]
 
 ${col.b('Audit')} ${col.d('— tamper-evidence and attestation')}

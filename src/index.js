@@ -479,6 +479,9 @@ if (cmd === 'attest') {
 }
 
 if (cmd === 'preflight') {
+  if (args[1] === 'simulate') {
+    process.exit(require('./preflight/simulate').runSimulateCli(args.slice(2), { cwd: process.cwd() }));
+  }
   const { runPreflightCli } = require('./preflight/cli');
   runPreflightCli(args.slice(1));
   process.exit(0);
