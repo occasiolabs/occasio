@@ -57,6 +57,8 @@
   .card.pend .mk{color:var(--faint)}
   .democtl{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:1rem;padding:.7rem .9rem;border:1px solid var(--line);border-radius:11px;background:var(--panel-2)}
   .democtl .lbl{color:var(--muted);font-size:.86rem;margin-right:auto}
+  .trustline{margin:.9rem 0 0;padding:.65rem .9rem;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;background:var(--panel-2);font-size:.9rem;color:var(--muted)}
+  .trustline b{color:var(--fg)}
   table{width:100%;border-collapse:collapse;font-size:.86rem}
   td{padding:.4rem .2rem;border-bottom:1px solid var(--line-soft);vertical-align:top}
   td:first-child{color:var(--muted);width:34%;white-space:nowrap}
@@ -104,6 +106,8 @@
         <div class="card pend" id="card-pred"><div class="mk">○</div><h3>Predicate equivalence</h3><p class="what">Confirms the signed payload is byte-for-byte the attestation you are holding.</p><div class="detail" id="d-pred"></div></div>
         <div class="card pend" id="card-sig"><div class="mk">○</div><h3>Signature (Sigstore)</h3><p class="what">Cryptographic cert/Rekor verification is not done in-browser. Here is how to verify it for real.</p><div class="detail" id="d-sig"></div></div>
       </div>
+
+      <p class="trustline"><b>What green means:</b> the log is unaltered and internally consistent. <b>Who it's from</b> is proven only by the signature — and that is checked with <code>cosign</code> or <code>occasio attest verify</code>, not in this browser. Two green checks ≠ "trusted source."</p>
 
       <div class="democtl" id="democtl" hidden>
         <span class="lbl">This is the synthetic demo. Edit the record and watch the chain catch it:</span>

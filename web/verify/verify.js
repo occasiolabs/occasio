@@ -59,7 +59,12 @@ function classifyJson(obj){
   if(obj && obj.audit_chain && obj.execution_summary) return 'attestation';
   return 'unknown';
 }
+const MAX_FILE_BYTES = 64 * 1024 * 1024;   // friendly guard: this verifies audit logs, not arbitrary huge files
 async function ingestFile(file){
+  if (file.size > MAX_FILE_BYTES){
+    alert(`"${file.name}" is ${Math.round(file.size/1048576)} MB — too large. The verifier handles attestations and audit logs (typically well under 64 MB), not arbitrary files.`);
+    return;
+  }
   const text = await file.text();
   if(/\.jsonl$/i.test(file.name) || (text.indexOf('\n')>0 && text.trimStart().indexOf('{')===0)){
     try{ const lines=text.split('\n').filter(Boolean); const first=JSON.parse(lines[0]);
