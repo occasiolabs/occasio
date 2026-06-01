@@ -429,11 +429,21 @@ if (cmd === 'policy') {
     runDoctorCli(args.slice(2));
     process.exit(0);
   }
+  if (sub === 'lock') {
+    (async () => process.exit(await require('./policy/lock').runLockCli(args.slice(2))))();
+    return;
+  }
+  if (sub === 'diff') {
+    const r = require('./policy/diff').runDiffCli(args.slice(2));
+    process.exit(r.changed ? 1 : 0);
+  }
   console.error(col.r(`Unknown policy subcommand: ${sub}`));
   console.error(col.d('  Usage: occasio policy [show] [--diff]'));
   console.error(col.d('         occasio policy validate [--file path]'));
   console.error(col.d('         occasio policy init [--template dev-default|strict|finance] [--force] [--file path]'));
   console.error(col.d('         occasio policy doctor [--days N]'));
+  console.error(col.d('         occasio policy lock [--sign] [--out policy.lock.json]  |  policy lock --verify <lock>'));
+  console.error(col.d('         occasio policy diff [--since <lock>] [<a.yml> <b.yml>]'));
   process.exit(1);
 }
 

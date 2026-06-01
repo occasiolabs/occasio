@@ -76,6 +76,8 @@ ${col.b('Policy & extras')}
   policy show --diff         ${col.d('(stable)')} Only values that differ from defaults
   policy validate            ${col.d('(stable)')} Validate policy.yml and report errors/warnings
   policy doctor              ${col.d('(beta)')}   Cross-reference logs with policy; suggest tightening
+  policy lock [--sign]       ${col.d('(stable)')} Write policy.lock.json — the approved policy (hash + summary, optional Sigstore)
+  policy diff [--since lock] ${col.d('(stable)')} Show drift between the active policy and the lock (exit 1 on drift)
   computer-use               ${col.d('(alpha)')}  Apply policy to a JSONL of tool_use blocks (--dry-run --example)
   mcp-experiment             ${col.d('(beta)')}   MCP vs. built-in tool adoption stats
   demo audit                 ${col.d('(stable)')} Auditor scenario: signed attestation + cross-verifier proof
