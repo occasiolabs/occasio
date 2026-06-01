@@ -56,6 +56,9 @@ const DEFAULT_POLICY = Object.freeze({
   deny_paths:    Object.freeze([]),
   allow_paths:   Object.freeze([]),
   deny_patterns: Object.freeze([]),
+  // Per-round volume caps (runaway-agent guard). Empty = nothing enforced;
+  // strictly opt-in so existing policies are unaffected. See src/limits.js.
+  limits:        Object.freeze({}),
 });
 
 /**
@@ -269,6 +272,13 @@ function normalize(parsed) {
       }
     }
     merged.deny_patterns = Object.freeze(patterns);
+  }
+
+  // limits: per-round volume caps. Coerced to positive integers; absent/≤0
+  // keys are dropped (unenforced). Lazy-require keeps loader's import graph thin.
+  if (parsed.limits && typeof parsed.limits === 'object' && !Array.isArray(parsed.limits)) {
+    const { normalizeLimits } = require('../limits');
+    merged.limits = Object.freeze(normalizeLimits(parsed.limits));
   }
 
   if (parsed.tools && typeof parsed.tools === 'object') {

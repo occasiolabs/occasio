@@ -32,6 +32,13 @@ const KNOWN_TOP_LEVEL = new Set([
   'deny_paths',
   'allow_paths',
   'deny_patterns',
+  'limits',
+]);
+
+const KNOWN_LIMIT_KEYS = new Set([
+  'max_tool_calls_per_round',
+  'max_bash_calls_per_round',
+  'max_bytes_to_model_per_round',
 ]);
 
 const BOOLEAN_FLAGS = [
@@ -211,6 +218,29 @@ function validatePolicy(parsed) {
               message: `invalid RegExp "${rawPattern}" — ${e.message}`,
             });
           }
+        }
+      }
+    }
+  }
+
+  // limits block — per-round volume caps. Each value must be a positive
+  // integer; unknown keys warn (ignored at runtime). Error severity for bad
+  // values because a silently dropped cap is a silent governance gap.
+  if ('limits' in parsed) {
+    const lim = parsed.limits;
+    if (!lim || typeof lim !== 'object' || Array.isArray(lim)) {
+      errors.push({ path: 'limits', message: 'must be a mapping of limit names to positive integers' });
+    } else {
+      for (const [key, value] of Object.entries(lim)) {
+        if (!KNOWN_LIMIT_KEYS.has(key)) {
+          warnings.push({ path: `limits.${key}`, message: 'unknown limit — will be ignored at runtime' });
+          continue;
+        }
+        if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+          errors.push({
+            path:    `limits.${key}`,
+            message: `expected a positive integer, got ${JSON.stringify(value)} — entry will be ignored at runtime`,
+          });
         }
       }
     }

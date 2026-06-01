@@ -228,6 +228,47 @@ async function runToolLoop({
     FALLBACK_REASONS,
   } = require('../interceptor');
 
+  // #4 per-round limits (runaway-agent guard). Opt-in: an empty `limits` block
+  // means nothing is enforced, so existing policies are unaffected. Loaded once
+  // per loop; enforcement points below are all BEFORE forwardToCloud so a
+  // runaway batch never reaches the cloud.
+  const { checkRoundLimits } = require('../limits');
+  const roundLimits = (require('../policy/loader').load().limits) || {};
+  const isShellBlock = (b) => {
+    const c = toolNames.toCanonical(_agent, b.name);
+    return c === 'shell_bash' || c === 'shell_powershell';
+  };
+  // Build the halt result for a violated limit: record a tamper-evident
+  // limit_exceeded chain row, then return a synthetic assistant turn (reusing
+  // the existing intercepted:true/response path — no proxy changes) so the
+  // agent receives a clear "run halted" message and stops.
+  function blockForLimit({ kind, max, actual, round, toolsRun = [], toolsAttempted = 0, secretsInResults = [] }) {
+    if (auditor && typeof auditor.recordLimitExceeded === 'function') {
+      auditor.recordLimitExceeded({ runId, sessionId, kind, max, actual, round });
+    }
+    const synth = {
+      id:            (initialMessage && initialMessage.id) || 'msg_limit',
+      type:          'message',
+      role:          'assistant',
+      model:         reqBody.model,
+      content:       [{ type: 'text', text: `⛔ Occasio: per-round limit exceeded — ${kind} ${actual} > ${max}. Run halted.` }],
+      stop_reason:   'end_turn',
+      stop_sequence: null,
+      usage:         { input_tokens: toolCallUsage.input_tokens, output_tokens: 0 },
+    };
+    return {
+      intercepted:     true,
+      response:        synth,
+      toolsRun,
+      toolsAttempted,
+      limitExceeded:   { kind, max, actual, round },
+      fallbackReasons: [],
+      savedInputTokens,
+      toolCallUsage,
+      secretsInResults,
+    };
+  }
+
   const { blocks: initialBlocks, stopReason: initialStop, message: initialMessage } =
     _parser(initialSse, { sessionId, runId });
 
@@ -253,6 +294,21 @@ async function runToolLoop({
 
   const initialToolBlocks = Object.values(initialBlocks).filter(b => b.type === 'tool_use');
   if (!initialToolBlocks.length) return { intercepted: false, toolsAttempted: 0, fallbackReasons: [] };
+
+  // #4 round-0 count limits — checked on the full model-emitted batch BEFORE the
+  // handled/partial classification, so a runaway turn is halted whether or not
+  // its tools are locally interceptable (and before any cloud call).
+  {
+    const r = checkRoundLimits(roundLimits, {
+      toolCalls: initialToolBlocks.length,
+      bashCalls: initialToolBlocks.filter(isShellBlock).length,
+      bytesToModel: 0,
+    });
+    if (r.exceeded) {
+      if (verbose) process.stderr.write(`  [interceptor] per-round limit hit: ${r.kind} ${r.actual} > ${r.max} — halting run (round 0)\n`);
+      return blockForLimit({ kind: r.kind, max: r.max, actual: r.actual, round: 0, toolsAttempted: initialToolBlocks.length });
+    }
+  }
 
   // Stage 3: classify via the policy engine + canonical-name registry rather
   // than the Claude-specific classifyBlock. For Claude Code, this produces
@@ -341,6 +397,19 @@ async function runToolLoop({
       toolBlocks = round0Blocks;
     } else {
       toolBlocks = Object.values(curBlocks).filter(b => b.type === 'tool_use');
+      // #4 round-N count limits (round 0 was checked before the loop on the
+      // full initial batch). Checked before dispatch / cloud call.
+      if (round > 0) {
+        const rl = checkRoundLimits(roundLimits, {
+          toolCalls: toolBlocks.length,
+          bashCalls: toolBlocks.filter(isShellBlock).length,
+          bytesToModel: 0,
+        });
+        if (rl.exceeded) {
+          if (verbose) process.stderr.write(`  [interceptor] per-round limit hit: ${rl.kind} ${rl.actual} > ${rl.max} — halting run (round ${round})\n`);
+          return blockForLimit({ kind: rl.kind, max: rl.max, actual: rl.actual, round, toolsRun, toolsAttempted, secretsInResults: allSecretsInResults });
+        }
+      }
       // Stage 3: mid-loop interceptability check is also registry+policy-driven.
       const midClassified = toolBlocks.map(b => classifyForAgent(b));
       if (!midClassified.every(c => c.handled)) {
@@ -392,6 +461,18 @@ async function runToolLoop({
         fallbackReason:   `partial: ${[...new Set(unhandledNames)].join(', ')} not handled`,
         toolCallUsage,
       };
+    }
+
+    // #4 bytes-to-model limit: sum of bytes that actually re-enter the model
+    // this round (kept_bytes, post-shaping). Only the locally-intercepted path
+    // is measurable here. Checked before the follow-up cloud call.
+    {
+      const bytesToModel = _round.toolsRun.reduce((s, t) => s + (t.kept_bytes || 0), 0);
+      const rb2 = checkRoundLimits(roundLimits, { toolCalls: 0, bashCalls: 0, bytesToModel });
+      if (rb2.exceeded) {
+        if (verbose) process.stderr.write(`  [interceptor] per-round limit hit: ${rb2.kind} ${rb2.actual} > ${rb2.max} — halting run (round ${round})\n`);
+        return blockForLimit({ kind: rb2.kind, max: rb2.max, actual: rb2.actual, round, toolsRun, toolsAttempted, secretsInResults: allSecretsInResults });
+      }
     }
 
     messages = [...messages, { role: 'user', content: toolResults }];

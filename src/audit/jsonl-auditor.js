@@ -314,6 +314,24 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
   }
 
   /**
+   * Write a synthetic `limit_exceeded` row when a per-round volume cap
+   * (policy.limits) is hit and the run is halted. Mirrors recordGitState's
+   * field order / append+hash contract so the canonical serialization (and the
+   * Python walker) need no change. Semantics for this row kind:
+   *
+   *   kind:        'limit_exceeded'
+   *   tool_name:   'limit_exceeded'
+   *   tool_inputs: { limit, max, actual, round, decision: 'block' }
+   *   action:      'BLOCK'      (it IS an enforcement decision)
+   *   reason:      'limit-exceeded'
+   *
+   * Returns { ok: true } / { ok: false, error, droppedRow } like record().
+   */
+  function recordLimitExceeded(args) {
+    return withLock(() => recordLimitExceededInner(args));
+  }
+
+  /**
    * Record a per-request accounting row (kind:"request").
    *
    * Phase-2 of the truth-source unification: every cloud-bound or
@@ -464,7 +482,47 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
     return { ok: true };
   }
 
-  return { record, recordPolicyLoaded, recordRequest, recordGitState, file: filePath };
+  function recordLimitExceededInner({ runId, sessionId, kind, max, actual, round } = {}) {
+    const row = {
+      audit_schema: 1,
+      ts:            new Date().toISOString(),
+      event_id:      crypto.randomUUID(),
+      session_id:    sessionId,
+      run_id:        runId,
+      agent:         'occasio',
+      protocol:      'internal',
+      direction:     'inbound',
+      kind:          'limit_exceeded',
+      tool_name:     'limit_exceeded',
+      tool_inputs:   {
+        limit:    kind,
+        max:      typeof max === 'number' ? max : null,
+        actual:   typeof actual === 'number' ? actual : null,
+        round:    typeof round === 'number' ? round : null,
+        decision: 'block',
+      },
+      action:        'BLOCK',
+      reason:        'limit-exceeded',
+      policy_source: undefined,
+      executor:      undefined,
+      transform:     undefined,
+      exit_code:        undefined,
+      secrets_redacted: undefined,
+      distilled:        undefined,
+      tokens_saved:     undefined,
+      prev_hash:        prevHash,
+    };
+    row.hash = computeHash(row);
+    try {
+      fs.appendFileSync(filePath, JSON.stringify(row) + '\n');
+    } catch (e) {
+      return { ok: false, error: e, droppedRow: row };
+    }
+    prevHash = row.hash;
+    return { ok: true };
+  }
+
+  return { record, recordPolicyLoaded, recordRequest, recordGitState, recordLimitExceeded, file: filePath };
 }
 
 module.exports = {
