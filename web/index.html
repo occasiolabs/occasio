@@ -34,7 +34,7 @@
     "description": "Occasio is a local-first audit chain for AI coding agents. It shows what is leaving your machine in real time, blocks what should not happen, and produces a tamper-evident, Sigstore-signed log that a third party can verify offline. No cloud, no account, no telemetry.",
     "url": "https://useoccasio.com/",
     "downloadUrl": "https://www.npmjs.com/package/@occasiolabs/occasio",
-    "softwareVersion": "0.10.0",
+    "softwareVersion": "0.11.0",
     "license": "https://github.com/occasiolabs/occasio/blob/main/LICENSE",
     "codeRepository": "https://github.com/occasiolabs/occasio",
     "author": { "@type": "Organization", "name": "Occasio Labs", "url": "https://useoccasio.com/" },
@@ -254,7 +254,8 @@
             <p class="q">"What is the agent actually sending to Anthropic, and what's it costing me?"</p>
             <ul>
               <li><code>occasio eyes</code> for a live browser UI of every outbound payload</li>
-              <li><code>occasio dashboard</code> for savings, cost, and coverage at a glance</li>
+              <li><code>occasio scan</code> flags secrets in a file or stdin, explained and masked</li>
+              <li><code>occasio preflight simulate</code> previews what your policy would block before the agent runs</li>
               <li><code>--budget N</code> stops a run once it crosses your dollar limit</li>
               <li>Byte breakdown + secrets redacted before they leave</li>
             </ul>
@@ -265,9 +266,9 @@
             <p class="q">"Prove exactly what the agent did during this run."</p>
             <ul>
               <li><code>occasio attest</code> for a signed in-toto behavioral attestation</li>
-              <li><code>occasio audit verify</code> re-walks the tamper-evident chain</li>
-              <li>Verifiable offline by Node, Python, or <code>cosign</code></li>
-              <li>Hash-chained from a GENESIS sentinel, Sigstore-signed</li>
+              <li><code>occasio bundle</code> → <code>occasio verify</code> — one portable file, checked offline</li>
+              <li><code>occasio policy lock</code> + <code>diff</code> pin the approved policy and catch drift</li>
+              <li>Hash-chained from GENESIS, Sigstore-signed, bound to the git commit it ran against</li>
             </ul>
           </div>
         </div>
@@ -284,16 +285,17 @@
         </div>
         <div class="term reveal">
           <div class="chrome"><i class="r"></i><i class="y"></i><i class="g"></i><span>third-party verifier</span></div>
-<pre><span class="cmd">occasio attest verify session.json</span>
-<span class="ok">✓</span> sigstore signature       <span class="dim">valid (Fulcio + Rekor)</span>
-<span class="ok">✓</span> predicate equivalence    <span class="dim">byte-identical</span>
-<span class="ok">✓</span> audit chain integrity    <span class="dim">GENESIS → HEAD</span>
-<span class="dim"># or, with zero Occasio install:</span>
-<span class="cmd">python attest_verify.py session.json</span>
-<span class="cmd">cosign verify-blob --bundle session.sigstore.json session.json</span>
-<span class="sig">verified, no "trust us" path</span></pre>
+<pre><span class="cmd">occasio bundle --run &lt;id&gt; --out run.occasio.json</span>
+<span class="cmd">occasio verify run.occasio.json</span>
+<span class="ok">✓</span> manifest integrity       <span class="dim">embedded artifacts hash-match</span>
+<span class="ok">✓</span> chain slice integrity    <span class="dim">SHA-256 walk, anchored</span>
+<span class="ok">✓</span> git state matches chain   <span class="dim">bound to the commit it ran against</span>
+<span class="ok">✓</span> signature                <span class="dim">Sigstore (optional)</span>
+<span class="dim"># or with zero Occasio install:</span>
+<span class="cmd">python audit_walker.py pipeline-events.jsonl</span>
+<span class="sig">tamper one byte → verification fails</span></pre>
         </div>
-        <p class="verify-note">Sigstore signature · predicate equivalence · audit-chain integrity. None of them trust Occasio's own verifier.</p>
+        <p class="verify-note">Six independent checks — schema · manifest · chain slice · policy binding · git-state · signature. None of them trust Occasio's own verifier.</p>
       </div>
     </section>
 
@@ -314,7 +316,7 @@
           <div class="card reveal">
             <span class="tag">One policy file</span>
             <h3>You control the rules</h3>
-            <p>Every tool call passes through one human-readable <code>policy.yml</code> you own. Deny-lists, path rules, transforms, all hot-reloaded, and each decision is logged into the chain.</p>
+            <p>Every tool call passes through one human-readable <code>policy.yml</code> you own — deny-lists, path rules, transforms, per-round limits — all hot-reloaded, each decision logged into the chain. Lock the approved policy and <code>diff</code> catches any drift.</p>
           </div>
           <div class="card reveal">
             <span class="tag">Honest coverage</span>
