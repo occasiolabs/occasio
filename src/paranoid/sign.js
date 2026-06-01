@@ -84,7 +84,11 @@ async function signParanoidReport(reportJsonString, ctx = {}) {
   }
 
   const sigstore = ctx.sigstoreModule || require('sigstore');
-  const bundle = await sigstore.attest(payload, DSSE_PAYLOAD_TYPE, {
+  // Callers may override the DSSE payload type so different artifact kinds
+  // (paranoid report, receipt, policy lock) carry a distinct, self-describing
+  // type tag. Defaults to the paranoid-report type for existing callers.
+  const payloadType = ctx.payloadType || DSSE_PAYLOAD_TYPE;
+  const bundle = await sigstore.attest(payload, payloadType, {
     identityToken,
     tlogUpload: ctx.tlogUpload !== false,
   });
@@ -97,7 +101,7 @@ async function signParanoidReport(reportJsonString, ctx = {}) {
     rekor_entry:  extractRekorEntry(bundle),
     signed_at:    now,
     payload_sha256: payloadSha256,
-    payload_type: DSSE_PAYLOAD_TYPE,
+    payload_type: payloadType,
   };
   return { bundle, signatureBlock, payloadSha256 };
 }
