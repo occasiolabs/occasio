@@ -54,6 +54,28 @@
         "minLength": 1,
         "description": "JavaScript-flavored regular expression source (without leading/trailing slashes)."
       }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-round volume caps — a runaway-agent guard. Each key is a positive integer; absent (or omitted) means that limit is not enforced. When a round exceeds a limit, the run is halted with a synthetic refusal and a `limit_exceeded` audit row is recorded.",
+      "properties": {
+        "max_tool_calls_per_round": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum tool_use blocks the model may emit in a single assistant turn (round)."
+        },
+        "max_bash_calls_per_round": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum shell (bash/powershell) tool calls within a single round."
+        },
+        "max_bytes_to_model_per_round": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum bytes of locally-intercepted tool output that may re-enter the model in a single round (sum of kept bytes)."
+        }
+      }
     }
   },
   "$defs": {

@@ -124,6 +124,21 @@ function runPolicyCli(args, opts = {}) {
     }
   }
 
+  // ── Per-round limits ───────────────────────────────────────────────────────
+  const activeLimits = active.limits || {};
+  const limitKeys    = Object.keys(activeLimits);
+  if (!diffMode || limitKeys.length > 0) {
+    console.log(col.b('\n  Per-round limits:'));
+    if (limitKeys.length === 0) {
+      console.log(col.d('    (none set — runaway-agent caps are opt-in)'));
+    } else {
+      const lw = Math.max(...limitKeys.map(k => k.length)) + 2;
+      for (const k of limitKeys) {
+        console.log(`    ${pad(k, lw)}  ${col.y(String(activeLimits[k]))}${col.c('  ← set')}`);
+      }
+    }
+  }
+
   // ── Tool routing ──────────────────────────────────────────────────────────
   const defaultTools = defaults.tools || {};
   const activeTools  = active.tools   || {};
