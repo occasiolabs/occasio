@@ -69,6 +69,38 @@ End card: `useoccasio.com` · `github.com/occasiolabs/occasio`
 
 ---
 
+## v0.11.0 evidence + policy demo (copy-paste)
+
+A second, command-line demo for the evidence / policy / scanner surfaces. One
+asserted run: `npm run demo:release` (builds a throwaway policy + fixture chain
+and checks every exit code, including the tamper-fail). The copy-paste version:
+
+```bash
+# 1. Approve a policy, then prove it can't drift silently
+occasio policy lock --out policy.lock.json
+occasio policy diff --since policy.lock.json            # exit 0 — unchanged
+#   …edit policy.yml…
+occasio policy diff --since policy.lock.json            # exit 1 — DRIFT, shows what changed
+
+# 2. Preview what the policy would block, before running the agent
+occasio preflight simulate --read ~/.ssh/id_rsa --bash "npm test" --strict
+#   ⛔ block  read ~/.ssh/id_rsa  · path-denied  → deny_paths[0] (policy.yml:5)   exit 1
+
+# 3. Catch a secret — explainable, never printed in the clear
+occasio scan --file .env                                # exit 1, masked snippet + sha256
+
+# 4. Hand off one portable file; the auditor verifies it offline
+occasio bundle --run <run-id> --out run.occasio.json
+occasio verify run.occasio.json                         # ✓ all six checks, exit 0
+
+# 5. Headline beat — tamper one byte, verification fails
+#   (edit run.occasio.json)
+occasio verify run.occasio.json                         # ✗ exit ≠ 0 — manifest / chain mismatch
+```
+
+The headline for this flow is the same as the video's: **edit the record, it
+breaks.** Here it's the evidence bundle rather than the raw chain.
+
 ## Recording checklist
 - [ ] Font ≥ 18pt, dark theme, terminal fills the frame.
 - [ ] Pre-run every command once so output timing looks live, not staged.

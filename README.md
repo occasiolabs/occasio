@@ -30,9 +30,9 @@ Most people land here for one of these — pick the column that fits and skim ac
 | | Daily dev work | CI / compliance |
 |---|---|---|
 | Question you're asking | "What is the agent actually sending to Anthropic, and what's it costing me?" | "Prove what the agent did during this run." |
-| Main commands | `occasio eyes`, `occasio dashboard`, `--budget N`, `--eyes` | `occasio attest`, `occasio anomalies`, `occasio audit verify`, `occasio report` |
-| What you get | Live browser UI on `127.0.0.1` — every outbound payload, byte breakdown, redactions in the clear | Signed in-toto attestation + tamper-evident chain, verifiable offline by Node, Python, or `cosign` |
-| Jump to | [Live visibility — for developers](#live-visibility--for-developers) | [Verification](#verification) |
+| Main commands | `occasio eyes`, `occasio dashboard`, `--budget N`, `--eyes`, `occasio scan`, `occasio preflight simulate` | `occasio attest`, `occasio bundle` → `occasio verify`, `occasio policy lock`/`diff`, `occasio anomalies`, `occasio audit verify` |
+| What you get | Live browser UI on `127.0.0.1` — every outbound payload, byte breakdown, redactions in the clear; plus a preview of what your policy would allow/block | One portable evidence file a third party verifies offline in one command, a signed/approved policy lock, and per-round volume limits |
+| Jump to | [Live visibility](#live-visibility--for-developers) · [Scanner & preflight](#scanner--preflight) | [Evidence workflow](#evidence-workflow) · [Policy workflow](#policy-workflow) |
 
 Both views read the same underlying log. You don't have to pick one — running the proxy gives you both for free.
 
@@ -60,7 +60,74 @@ occasio replay --detail         # Run-level audit
 occasio audit verify            # Re-walk the hash chain end-to-end
 occasio anomalies               # Run EDR detectors over the last 15 minutes
 occasio attest --run-id <uuid>  # Build a behavioral attestation for one session
+occasio explain <event-id>      # Why was this blocked? — the matched policy rule + how to unblock
 ```
+
+---
+
+## Command matrix
+
+Grouped by what you're doing. `(stable)` = load-bearing with test coverage; `(beta)` = works end-to-end, narrower; `(alpha)` = scaffold. Full list: `occasio help`.
+
+| Command | Purpose | |
+|---|---|---|
+| `claude [args]` | Start Claude Code through the local proxy | (stable) |
+| `status` · `ledger` · `replay` · `boundary` · `inspect` | Inspect cost / tokens / per-run audit / cloud boundary | (stable) |
+| `eyes` · `dashboard` | Live browser/terminal view of outbound traffic | (beta) |
+| `scan --file\|--stdin` | Explainable secret scan (prefix/jwt/env-key/entropy), exit 1 on findings | (stable) |
+| `preflight simulate` | Predict allow/block for candidate actions vs the active policy | (stable) |
+| `preflight` | Backward-looking miner of past opening-move patterns | (beta) |
+| `audit verify` · `attest [verify]` | Verify the hash chain · build/verify a signed attestation | (stable) |
+| `bundle --run <id>` → `verify <file>` | Pack one run into a portable evidence file · verify it offline | (stable) |
+| `policy show/validate/lock/diff` | Inspect · lint · record the approved policy · detect drift | (stable) |
+| `explain <event-id>` | Connect a BLOCK to the rule that caused it + how to unblock | (stable) |
+| `anomalies` | Windowed EDR over the chain | (beta) |
+| `doctor [--paranoid]` | Setup health · local-first self-audit | (stable) |
+
+## Evidence workflow
+
+Produce one file an auditor or CI receives and checks in a single command:
+
+```bash
+occasio attest --run-id <uuid> --sign          # behavioral attestation (Sigstore optional)
+occasio bundle --run <uuid> --out run.occasio.json   # pack attestation + chain slice + policy + manifest
+occasio verify run.occasio.json                 # 6 offline checks; exit ≠ 0 on tamper
+```
+
+`verify` checks the schema, the manifest hashes, the chain slice integrity, the
+policy binding, the **git-state vs chain** cross-check, and the Sigstore signature
+when present — all against data embedded in the file (never the producer's
+machine). The run is bound to the concrete code it touched via `git_state` rows
+(HEAD + diff hash + changed files). Signing is optional; an unsigned bundle still
+verifies everything else. Bundles embed absolute producer paths — an
+internal-audit artifact; review before sharing publicly. → [`docs/VERIFY.md`](docs/VERIFY.md)
+
+## Policy workflow
+
+`~/.occasio/policy.yml` governs the Occasio-controlled path: secret handling,
+`deny_paths`/`allow_paths`, custom `deny_patterns`, per-round `limits`, and tool
+routing. Approve it and pin against drift:
+
+```bash
+occasio policy init                              # starter policy.yml
+occasio policy validate                          # lint before you rely on it
+occasio policy lock --sign --out policy.lock.json   # record the approved policy
+occasio policy diff --since policy.lock.json     # CI gate: exit 1 if the policy drifted
+```
+
+→ [`docs/POLICY.md`](docs/POLICY.md)
+
+## Scanner & preflight
+
+```bash
+occasio scan --file .env                         # explainable secret findings (masked, exit 1)
+occasio preflight simulate --read ~/.ssh/id_rsa --bash "npm test" --strict   # would the policy block this?
+```
+
+`scan` never prints the secret in plaintext (masked snippet + SHA-256). `preflight
+simulate` runs candidate actions through the **same policy engine the runtime
+uses** and shows the matched rule + how to unblock for anything it would block.
+→ [`docs/SCAN.md`](docs/SCAN.md) · [`docs/PREFLIGHT.md`](docs/PREFLIGHT.md)
 
 ---
 

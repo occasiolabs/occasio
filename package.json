@@ -1,6 +1,6 @@
 {
   "name": "@occasiolabs/occasio",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "mcpName": "io.github.occasiolabs/occasio",
   "description": "Occasio — cryptographically verifiable behavioral attestation for AI coding agents. Tool-call interception + policy enforcement + tamper-evident audit chain + Sigstore-signed in-toto attestations + windowed EDR detection. Same engine for Claude Code and MCP; Computer-Use scaffold included.",
   "main": "src/index.js",
@@ -26,6 +26,7 @@
     "test:mcp": "node test-mcp-server.js",
     "restart-check": "node scripts/restart-check.js",
     "check-validation": "node scripts/check-validation.js",
+    "demo:release": "node scripts/demo-release.js",
     "start": "node bin/occasio.js"
   },
   "keywords": [
