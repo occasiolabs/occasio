@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.11.0] — 2026-06-01
+
+### Evidence, policy governance, and explainability
+
+This release turns the audit chain into something you can hand to a third party
+and check in one command, and gives the policy layer the governance + preview
+surfaces it was missing. Everything is additive and backward-compatible: two new
+chain row kinds verify under the existing JSON and Python walkers via the
+unknown-kind passthrough, and the two new behaviours are opt-in / default-off.
+
+### Added
+- **Git-state attestation.** Runs record `git_state` rows (run start/end: HEAD,
+  branch, dirty, changed/untracked files, diff hash) into the tamper-evident
+  chain. `occasio attest` lifts them into `subject.git_state`, and `attest verify`
+  cross-checks the claim against the chain. Capture is best-effort — a non-git
+  directory or missing git binary records `is_repo:false` and never aborts a run.
+- **Portable evidence bundle + one-command verify.** `occasio bundle --run <id>
+  --out run.occasio.json` packs the attestation, the run's chain slice, a
+  policy.yml snapshot, an optional Sigstore bundle, and a SHA-256 manifest into
+  one self-contained file. New top-level `occasio verify <file>` runs six offline
+  checks (schema, manifest, chain-slice integrity, policy binding, git-state vs
+  chain, signature) and exits non-zero on tamper — a drop-in CI gate. Verifies
+  against embedded data only; never reads the producer's absolute chain path.
+  Bundles embed absolute producer paths (internal-audit artifact — review before
+  public sharing). See [`docs/VERIFY.md`](docs/VERIFY.md).
+- **Per-round volume limits.** Opt-in `limits:` block in `policy.yml`
+  (`max_tool_calls_per_round` / `max_bash_calls_per_round` /
+  `max_bytes_to_model_per_round`), enforced in the Claude-Code round loop before
+  any cloud call. On violation: a synthetic "run halted" turn + a tamper-evident
+  `limit_exceeded` chain row. Absent ⇒ unenforced (existing policies unaffected).
+- **Richer explainable secret scanning + `occasio scan`.** New prefix / JWT /
+  `.env` / Shannon-entropy detectors with an allowlist (UUID, pure-hex, fixtures)
+  and hash-only redaction ledger. `occasio scan --file|--stdin` prints
+  explainable findings (detector · confidence · reason · location, value masked),
+  exit 1 on findings. Live use is opt-in via `entropy_secret_detection: true`
+  (**default off** — the pattern scanner remains the default). See
+  [`docs/SCAN.md`](docs/SCAN.md).
+- **Forward preflight simulator.** `occasio preflight simulate
+  --read/--grep/--glob/--bash/--ps/--from/--mined [--strict]` predicts allow/block
+  for candidate actions through the same policy engine the runtime uses, before
+  the agent runs; `--strict` exits 1 if any action would block. The existing
+  backward-looking miner (`occasio preflight`) is unchanged. See
+  [`docs/PREFLIGHT.md`](docs/PREFLIGHT.md).
+- **Signed policy lock + diff.** `occasio policy lock [--sign]` writes
+  `policy.lock.json` (raw-byte `policy_hash` + machine-independent summary,
+  optional Sigstore signature with a dedicated `…policy-lock+json` payload type).
+  `occasio policy diff` shows semantic drift from the lock (exit 1 on drift);
+  `policy lock --verify --against` checks signature + payload + hash. See
+  [`docs/POLICY.md`](docs/POLICY.md).
+- **`occasio explain` → matched rule + how to unblock.** A BLOCK now resolves
+  back to the concrete policy rule (e.g. `deny_paths[0]: ~/.ssh`, with the
+  `policy.yml` line) and suggested next actions; `limit_exceeded` explains the
+  cap (name/max/actual). Read-only re-derivation against the current policy,
+  flagged best-effort when the policy hash changed since the decision.
+
+### Added — chain row kinds
+- `git_state` and `limit_exceeded` rows (kinds 4 and 5). Both verify unchanged
+  under `occasio audit verify` and the independent Python walker
+  (`docs/audit_walker.py`) via the schema-agnostic unknown-kind passthrough.
+
+### Docs
+- New: [`docs/POLICY.md`](docs/POLICY.md), [`docs/SCAN.md`](docs/SCAN.md),
+  [`docs/PREFLIGHT.md`](docs/PREFLIGHT.md). Updated: `docs/AUDIT.md` (new row
+  kinds), `docs/VERIFY.md` (one-file bundle). `scripts/demo-release.js`
+  (`npm run demo:release`) drives the full evidence/policy/scanner flow and
+  asserts the tamper-fails beat.
+
+### Verification
+- `npm test` green. New per-feature suites: git-state 37, bundle 31, limits 35,
+  policy-lock 24, explain 27, detectors 30, preflight-simulate 22 assertions.
+  CLI smokes cover honest + tamper paths (bundle verify exit≠0 on tamper, policy
+  drift exit 1, scan exit 1 with no plaintext, preflight `--strict` exit 1).
+  Zero new runtime dependencies.
+
 ## [0.10.0] — 2026-05-28
 
 ### Audit chain — single source of truth for user-visible counters
