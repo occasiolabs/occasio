@@ -287,10 +287,20 @@ function evaluateToolResults(toolResults, ctx = {}) {
   const extraPatterns = (policy.deny_patterns && policy.deny_patterns.length)
     ? policy.deny_patterns : undefined;
   const secrets = [];
+  // Opt-in (policy.entropy_secret_detection, default off): also run the richer
+  // prefix/JWT/.env/entropy detectors. Lazy-require so the module only loads
+  // when enabled; default-off keeps the existing scanSecrets path unchanged.
+  const richDetect = (policy.entropy_secret_detection === true)
+    ? require('../scanner/detectors').detectSecrets : null;
   for (const r of toolResults || []) {
     if (typeof r?.content !== 'string') continue;
     for (const hit of scanSecrets(r.content, extraPatterns ? { extraPatterns } : undefined)) {
       secrets.push({ ...hit, tool_use_id: r.tool_use_id });
+    }
+    if (richDetect) {
+      for (const hit of richDetect(r.content)) {
+        secrets.push({ ...hit, tool_use_id: r.tool_use_id });
+      }
     }
   }
   if (secrets.length === 0) {

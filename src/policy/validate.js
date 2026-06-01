@@ -28,6 +28,7 @@ const KNOWN_TOP_LEVEL = new Set([
   'redact_secrets_in_tool_results',
   'distill_tool_results',
   'block_requests_over_budget',
+  'entropy_secret_detection',
   'tools',
   'deny_paths',
   'allow_paths',
@@ -46,6 +47,7 @@ const BOOLEAN_FLAGS = [
   'redact_secrets_in_tool_results',
   'distill_tool_results',
   'block_requests_over_budget',
+  'entropy_secret_detection',
 ];
 
 const VALID_ACTIONS    = new Set(['PASS', 'LOCAL', 'TRANSFORM']);
