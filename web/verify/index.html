@@ -82,7 +82,7 @@
       <p class="sub">Drag in an attestation and its <code>pipeline-events.jsonl</code> chain. The audit log is re-hashed with SHA-256, link by link, back to the GENESIS sentinel. No account. No upload.</p>
       <div class="offline">
         <span class="lock">●</span>
-        <span><b>Runs entirely in your browser — nothing is uploaded.</b> There is no server here. Disconnect your network and it still works. Your bundle stays in this tab and is never stored.</span>
+        <span><b>Runs entirely in your browser — nothing is uploaded, ever.</b> You need a connection once, to load this page. After that, disconnect your network and it keeps working — or save it (Ctrl/Cmd+S) and run it fully offline, forever. Your files stay in this tab; they are never stored or sent.</span>
       </div>
     </div>
 
@@ -126,6 +126,10 @@
     Three independent checks — chain integrity (real SHA-256), predicate equivalence, signature.
     None of them trust Occasio's own verifier. ·
     <a href="https://github.com/occasiolabs/occasio/blob/main/docs/VERIFY.md" target="_blank" rel="noopener">How verification works</a>
+    <p style="margin:.9rem 0 0;color:var(--faint);font-size:.8rem">
+      Provided as-is, without warranty of any kind. All results are computed locally in your browser; Occasio accepts no liability for them. If a result matters, re-verify independently with <code>occasio attest verify</code>, <code>cosign</code>, or the Python walker.
+      &nbsp;<a href="/legal-notice.html">Legal notice</a> · <a href="/privacy-policy.html">Privacy</a>
+    </p>
   </footer>
 
   <script src="demo.js"></script>
