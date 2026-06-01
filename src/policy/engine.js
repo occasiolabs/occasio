@@ -96,6 +96,21 @@ function evaluatePathAgainstPolicy(resolvedAbsPath, policy) {
 }
 
 /**
+ * Does a raw input path fall under a raw policy prefix? Resolves both the same
+ * way enforcement does (~ expansion + realpath + platform case-folding) and
+ * applies the safe prefix match. Exported for `occasio explain` to re-derive
+ * which deny_paths/allow_paths entry produced a block (the matched rule is not
+ * stored in the audit row).
+ */
+function pathPrefixMatch(rawInputPath, rawPrefix) {
+  if (typeof rawInputPath !== 'string' || typeof rawPrefix !== 'string') return false;
+  const i = resolveInputPath(rawInputPath);
+  const d = resolveInputPath(rawPrefix);
+  if (!i || !d) return false;
+  return matchesPrefix(normCase(i), normCase(d));
+}
+
+/**
  * Check a tool input path against deny_paths and allow_paths.
  * Returns a BLOCK Decision if the path is denied/not-allowed, null otherwise.
  */
@@ -335,4 +350,4 @@ function evaluateRequest(ctx = {}) {
   return { action: 'PASS', reason: 'within-budget' };
 }
 
-module.exports = { evaluate, evaluateToolResults, evaluateRequest };
+module.exports = { evaluate, evaluateToolResults, evaluateRequest, pathPrefixMatch, primaryInputPath };

@@ -16,6 +16,8 @@ const path = require('path');
 const os   = require('os');
 
 const { loadEvents } = require('../models/events');
+const loader = require('../policy/loader');
+const { resolveBlockedRule } = require('../policy/explain-rule');
 
 const col = {
   r: s => `\x1b[31m${s}\x1b[0m`, g: s => `\x1b[32m${s}\x1b[0m`,
@@ -99,6 +101,47 @@ function explainToolCall(e, all) {
     lines.push('');
     lines.push(col.d('  (no policy_loaded event found in this run; ' +
       'decision was made under whatever policy was active in-process)'));
+  }
+
+  // Matched policy rule + how to unblock. Re-derive the concrete rule from the
+  // event's inputs against the policy file (the audit row stores only the
+  // reason code). Read-only; best-effort against the CURRENT policy.yml.
+  {
+    const polPath = (policySnapshot && policySnapshot.tool_inputs && policySnapshot.tool_inputs.policy_path)
+      || loader.DEFAULT_PATH;
+    let ctx = null;
+    try {
+      const rawText = fs.readFileSync(polPath, 'utf8');
+      ctx = {
+        rawText,
+        parsed:      loader.parse(rawText),
+        policyPath:  polPath,
+        currentHash: loader.computePolicyHash(polPath),
+        eventHash:   policySnapshot && policySnapshot.tool_inputs ? policySnapshot.tool_inputs.policy_hash : null,
+      };
+    } catch {
+      // policy file unreadable → derive from inputs only (no line/parse)
+      ctx = { rawText: '', parsed: {}, policyPath: polPath, currentHash: null,
+              eventHash: policySnapshot && policySnapshot.tool_inputs ? policySnapshot.tool_inputs.policy_hash : null };
+    }
+
+    const rule = resolveBlockedRule(e, ctx);
+    if (rule) {
+      lines.push('');
+      lines.push(col.b('  Matched policy rule'));
+      lines.push(`    ${col.d('section    ')} ${rule.section}`);
+      lines.push(`    ${col.d('rule       ')} ${rule.rule_id}`);
+      if (rule.matched_value != null) lines.push(`    ${col.d('matched    ')} ${rule.matched_value}`);
+      lines.push(`    ${col.d('location   ')} ${rule.line != null ? `${ctx.policyPath}:${rule.line}` : col.d('(line not located in current policy.yml)')}`);
+      if (rule.provenance === 'policy-changed') {
+        lines.push(`    ${col.y('⚠ policy.yml changed since this decision (current hash ≠ policy_loaded hash) — rule derived from the current file, best-effort')}`);
+      }
+      if (Array.isArray(rule.alternatives) && rule.alternatives.length) {
+        lines.push('');
+        lines.push(col.b('  Suggested next actions'));
+        for (const a of rule.alternatives) lines.push(`    ${col.g('→')} ${a}`);
+      }
+    }
   }
 
   // Verify and chain pointer
