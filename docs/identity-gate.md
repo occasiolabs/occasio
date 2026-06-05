@@ -149,6 +149,22 @@ denylist.
   single-user box the agent runs with the user's full rights, so no purely-software
   gate is absolute. **The real boundary is OS-level store isolation** (a separate
   uid / OS keychain the agent's uid cannot read) — the stated hardening path.
+- **The control-plane guard is a command *pattern*, not a wall.** `checkControlPlane`
+  matches `occasio` / `oc` / `occasio.js` / `npx occasio` followed by `approvals
+  approve|deny` or `identity set`. It is a speed-bump: a copied/renamed binary
+  (`cp $(which occasio) x; x approvals approve …`) or a programmatic call
+  (`node -e "require('…/identity-store').approve(…)"`) carries no matched anchor and
+  is **not** blocked. Self-approval this way still needs write access to `~/.occasio`,
+  so it collapses into the same OS-isolation boundary as the forgery residual above —
+  the regex narrows the *easy* path, it does not close the class.
+- **Single-use is enforced by store integrity, not by the signature.** The HMAC binds
+  `id | command_hash | actor | approved_by | expires_at | max_uses` — deliberately
+  **not** the consume counter (`uses`) or `state`, since the consumer rewrites those.
+  The atomic `uses++` under a lock makes single-use sound against honest races, but an
+  attacker who can *write* `approvals.jsonl` (the runtime-indirection residual) can
+  resurrect the pre-consume line — already validly signed at `uses:0` — and replay the
+  grant **without the key**. A lower bar than forging a token; the same OS-isolation
+  boundary closes it.
 
 ## Implementation: single source of truth
 
