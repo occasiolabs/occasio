@@ -400,27 +400,10 @@ function evaluate(event) {
   // inside cd-prefixed compound chains. Closes the bypass where shell tools
   // were unguarded because they are not in PATH_BEARING_TOOLS.
   if (SHELL_TOOLS.has(event.toolName)) {
-    // Control-plane guard (ALWAYS ON, structural — not policy-tunable). An
-    // actor=ai_agent may never mutate the approval control plane (approve/deny/
-    // identity set): self-approval would forge the very provenance the gate
-    // sells. The human authorizes out-of-band (their terminal is un-proxied).
-    // Runs first so it cannot be shadowed by another rule.
-    const cpBlock = checkControlPlane(event.toolInput);
-    if (cpBlock) return cpBlock;
-
-    const shellBlock = checkShellPathPolicy(event.toolInput, policy);
-    if (shellBlock) return shellBlock;
-
-    // Identity gate — hard deny (v2). Runs after path enforcement so an
-    // explicit deny_commands rule blocks the command regardless of routing.
-    const denyBlock = checkDenyCommands(event.toolInput, policy);
-    if (denyBlock) return denyBlock;
-
-    // Identity gate — approval (v2). A borrow (ssh/az/sudo) is gated behind
-    // human approval: a valid one-time token lets the re-attempt pass through;
-    // otherwise a fail-closed deferred BLOCK with an approval id.
-    const approvalDecision = checkIdentityApproval(event.toolInput, policy);
-    if (approvalDecision) return approvalDecision;
+    // One shared shell-decision core (also used by gateShellCommand → the gate
+    // CLI + the PreToolUse hook), so the proxy and the hook can never diverge.
+    const shellDecision = decideShellCommand(event.toolInput, policy);
+    if (shellDecision) return shellDecision;
   }
 
   // Stage 3: tool routing is policy-driven. Read ~/.occasio/policy.yml's
@@ -609,14 +592,33 @@ function evaluateRequest(ctx = {}) {
  */
 function gateShellCommand(command, policy) {
   const pol = policy || loader.load();
-  const toolInput = { command };
-  const pathBlock = checkShellPathPolicy(toolInput, pol);
-  if (pathBlock) return pathBlock;
-  const denyBlock = checkDenyCommands(toolInput, pol);
-  if (denyBlock) return denyBlock;
-  const approvalBlock = checkIdentityApproval(toolInput, pol);
-  if (approvalBlock) return approvalBlock;
-  return PASS('allow');
+  const d = decideShellCommand({ command }, pol);
+  return d || PASS('allow');
 }
 
-module.exports = { evaluate, evaluateToolResults, evaluateRequest, pathPrefixMatch, primaryInputPath, gateShellCommand };
+/**
+ * The single shell-decision core, in the load-bearing order
+ * control-plane → path → deny_commands → identity_approval. Returns the BLOCK or
+ * approval decision, or null when the command is not gated by any of them. Both
+ * `evaluate` (proxy) and `gateShellCommand` (gate CLI + PreToolUse hook) call
+ * this, so the two enforcement points cannot drift (a parity test pins it).
+ */
+function decideShellCommand(toolInput, policy) {
+  // Control-plane guard FIRST (always on, structural): an actor=ai_agent may
+  // never mutate the approval control plane — self-approval would forge the
+  // provenance the gate sells. The human authorizes out-of-band.
+  const cp = checkControlPlane(toolInput);
+  if (cp) return cp;
+  // Path enforcement (deny_paths / allow_paths over shell-mediated reads).
+  const pathBlock = checkShellPathPolicy(toolInput, policy);
+  if (pathBlock) return pathBlock;
+  // Hard deny (deny_commands).
+  const denyBlock = checkDenyCommands(toolInput, policy);
+  if (denyBlock) return denyBlock;
+  // Identity-borrow approval: valid token → grant (PASS); else fail-closed BLOCK.
+  const approvalDecision = checkIdentityApproval(toolInput, policy);
+  if (approvalDecision) return approvalDecision;
+  return null;
+}
+
+module.exports = { evaluate, evaluateToolResults, evaluateRequest, pathPrefixMatch, primaryInputPath, gateShellCommand, decideShellCommand };
