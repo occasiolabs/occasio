@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.12.0] — 2026-06-05
+
+### Identity gate — an agent may *request* an identity, not assume one
+
+Built for the incident where an agent asked only for a deploy command reaches for
+the server's `env` / `ssh`es into it on its own. A new policy posture denies the
+commands an agent uses to *exfiltrate* an identity and gates the commands it uses
+to *borrow* one (ssh / cloud / root) behind an explicit, single-use, human-approved
+handshake — every decision recorded to the tamper-evident chain. Additive: existing
+policies are unaffected; the `strict` template now carries the gate. See
+[`docs/identity-gate.md`](docs/identity-gate.md).
+
+### Added
+- **Identity gate.** `deny_commands` (env/secret dumps, secret-name greps) and
+  `identity_approval` (`ssh`/`scp`/`paramiko`, `az`/azure-HTTP/IMDS,
+  `sudo`/`systemctl`/`pkexec`/`doas`/`su`) policy keys. File/credential protection
+  is **path-based** (`deny_paths` globs `**/.env`, `**/environ`, `**/id_rsa`) so it
+  holds for the Read/Glob/Grep tools *and* any shell verb, with a verb-agnostic
+  backstop. Redaction is the best-effort value floor under it.
+- **The approval handshake (human-vs-agent).** A borrow is a `pending` BLOCK; a
+  human authorizes out-of-band with `occasio approvals approve <id> --once` → a
+  single-use, TTL-capped (300s/3600s), **HMAC-signed** token bound to the exact
+  `command_hash` → the agent's re-attempt passes through once and is consumed. The
+  asymmetry is **enforced**: an agent shell command that mutates the control plane
+  (`approvals approve|deny`, `identity set`) is hard-BLOCKed, so the agent cannot
+  self-approve. Audit lifecycle `identity_borrow_request/approved/consumed/denied`.
+- **PreToolUse hook — a second enforcement point.** `occasio hook` gates shell
+  tool calls *inside* Claude Code for execution that does not flow through the
+  proxy; fail-closed, and a no-op when the proxy is verified active. Install with
+  `occasio hook --install`. Verified end-to-end against real Claude Code.
+- **New commands:** `occasio identity set|show`, `occasio approvals
+  list|show|approve|deny`, `occasio gate "<cmd>" [--enforce]`, `occasio hook`.
+- **`occasio init`** now works as the 60-second-start alias for `occasio policy
+  init`, and **`--template strict` installs the identity gate** (was the old
+  secret-only strict; `strict-identity-gate` stays a back-compat alias).
+- **Cross-language proof for the new rows:** `identity_borrow_*` and
+  `control_plane_blocked` events verify under both the Node verifier and the
+  Python walker.
+
+### Fixed
+- **Cross-language audit verification.** The independent Python walker
+  (`docs/audit_walker.py`) reproduces V8's `Number::toString` instead of
+  `json.dumps`, which diverged for small floats (request-row sub-`$0.0001` costs:
+  V8 `0.00003` vs `3e-05`) and falsely rejected real chains. New
+  `test-audit-xlang.js` pins Node≡Python over an adversarial number/string battery.
+- **`occasio hook --install` matcher** is now `"Bash"` — a raw `"Bash|PowerShell"`
+  is not a valid match for the `Bash` tool, so the hook silently never fired.
+
+### Security
+- Threat model stated precisely (`docs/identity-gate.md`): the control-plane guard
+  is a command *pattern* (a renamed binary or programmatic call evades it);
+  single-use is enforced by store integrity, not the HMAC (`uses` is unsigned). The
+  boundary for both is OS-level store isolation — the stated, deferred hardening
+  path. `npm audit`: 0 vulnerabilities.
+
 ## [0.11.0] — 2026-06-01
 
 ### Evidence, policy governance, and explainability
