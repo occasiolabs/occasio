@@ -159,7 +159,10 @@ function loadPrevHash(filePath, opts = {}) {
  * call. prevHash is only advanced on a successful append, keeping the
  * in-memory chain consistent with what is on disk if the proxy is restarted.
  */
-function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
+function createAuditor(filePath, opts = {}) {
+  // Read the chain path at call time so OCCASIO_AUDIT_FILE (test isolation) is
+  // honored even when the default is requested. Explicit filePath still wins.
+  if (!filePath) filePath = process.env.OCCASIO_AUDIT_FILE || DEFAULT_LOG;
   // lock=true wraps each append in a proper-lockfile lockSync/unlockSync pair
   // and re-reads prev_hash from disk inside the lock. Default ON: Occasio's
   // own architecture spawns concurrent writers against the default chain file
@@ -579,18 +582,20 @@ function identityAuditFields(event, decision, result) {
   // human token), so coverage is 'authorized', not 'enforced' (which means a
   // command provably did not run). The approval block carries who authorized it.
   const isConsumed = idy.event_type === 'identity_borrow_consumed';
+  // The approval block: present whenever the event carries an approval id (the
+  // request/consume/approve/deny lifecycle) or a pending borrow was blocked.
   const approval =
-    isConsumed
-      ? { approval_id: idy.approval_id || null, state: 'consumed',
+    idy.approval_id
+      ? { approval_id: idy.approval_id, state: idy.approval_state || (isConsumed ? 'consumed' : 'pending'),
           approved_by: idy.approved_by || null, identity_source: idy.identity_source || null }
       : approvalRequired
-        ? { approval_id: idy.approval_id || null, state: 'pending', scope: null }
+        ? { approval_id: null, state: 'pending', scope: null }
         : null;
   return {
     event_type: idy.event_type,
-    // High-signal: an enforced deny / approval gate. Separates these from the
-    // chatty best-effort secret_redacted rows when scanning the chain by eye.
-    severity: 'high',
+    // High-signal by default (enforced deny / approval gate); idy may override
+    // (e.g. a chatty lifecycle event). Separates these from best-effort rows.
+    severity: idy.severity || 'high',
     actor: {
       type:        event.actorType || 'ai_agent',
       id:          event.agent || null,
@@ -622,8 +627,8 @@ function identityAuditFields(event, decision, result) {
       policy_name: 'identity-gate',
     },
     approval,
-    enforcement_point: 'proxy',
-    coverage:          isConsumed ? 'authorized' : 'enforced',
+    enforcement_point: idy.enforcement_point || 'proxy',
+    coverage:          idy.coverage || (isConsumed ? 'authorized' : 'enforced'),
   };
 }
 
