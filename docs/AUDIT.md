@@ -77,20 +77,28 @@ these rows rather than a migration.
 
 | Field | Type | Notes |
 |---|---|---|
-| `event_type` | string | `secret_identity_access_blocked`, `identity_borrow_denied`, or `identity_borrow_request` (a borrow gated pending human approval). |
+| `event_type` | string | One of: `identity_borrow_request` (agent attempted a borrow → blocked pending approval), `identity_borrow_consumed` (a human-approved one-time token was spent → the command was let through), `identity_borrow_approved` / `identity_borrow_denied` (a human decided, from the CLI), `identity_borrow_expired` (an approved token expired unused), `secret_identity_access_blocked` (deny_commands), `control_plane_blocked` (the agent tried to mutate the approval control plane). |
 | `actor` | object | `{ type, id, session_id, trust_level }` — the AI agent. `type` defaults to `ai_agent`, `trust_level` to `untrusted`. |
 | `delegator` | object | `{ type, id }` — the human the agent acts on behalf of, from `~/.occasio/identity.json` (fallback: OS username). |
-| `tool` | object | `{ type, name, raw_command, command_hash }` — `command_hash` is SHA-256 of the trimmed command. |
+| `tool` | object | `{ type, name, raw_command, command_hash }` — `command_hash` is the canonical normalized-command hash (`src/policy/command-normalize.js`), identical to the approval token's hash so a row can be joined to its approval. |
 | `identity_requested` | object | `{ type, target_class, risk }` — the identity being borrowed and its blast-radius class. |
 | `classification` | object | `{ action, reason, matched_rule }` — the identity classifier's verdict. |
 | `policy_decision` | object | `{ decision, reason, policy_name }`. |
-| `approval` | object \| null | `{ state: "pending", scope }` when approval is required; `null` otherwise. |
-| `enforcement_point` | string | `proxy` — the block was enforced inside Occasio's proxy loop. |
-| `coverage` | string | `enforced` — the `tool_use` stayed inside the loop and never reached the agent. A non-proxied path would record `uncovered`. |
+| `approval` | object \| null | The handshake state: `{ approval_id, state, approved_by, identity_source }`. `state` ∈ `pending` (request), `consumed` (a grant was spent), `approved`/`denied`/`expired` (lifecycle). `approved_by` + `identity_source` (`explicit`/`os_fallback`) name *who* authorized. |
+| `enforcement_point` | string | `proxy` (decided inside the proxy loop) or `cli` (a human approve/deny/expire, written from the un-proxied terminal). |
+| `coverage` | string | `enforced` (the command provably did not run), `authorized` (it ran under a valid human token — `identity_borrow_consumed`), or `n/a` (a lifecycle event, not a command decision). |
+| `decided_by` | string \| absent | `human` for a CLI approve/deny, `policy` for a deny_commands hard-deny — disambiguates a human rejection from a policy block. |
 
 The `coverage` field is an honesty guarantee: a `denied`/`request` row with
-`coverage: enforced` means the command provably did not execute. The gate never
-records `enforced` for a path it did not actually intercept.
+`coverage: enforced` means the command provably did not execute; `authorized`
+means it ran but under a recorded human approval (the `approval` block names who).
+The gate never records `enforced` for a path it did not actually intercept. The
+control plane (`occasio approvals approve|deny`, `occasio identity set`) is itself
+hard-BLOCKed on the agent path (`control_plane_blocked`), so an agent cannot forge
+its own approval — a human authorizes out-of-band, from a terminal that is not
+proxied. Forging the store/identity files directly is mitigated by HMAC-signed
+tokens + `deny_paths ~/.occasio/**`; an obfuscated-interpreter write is the
+documented residual (see [identity-gate.md](identity-gate.md)).
 
 #### `request` row field order
 

@@ -203,6 +203,7 @@ function checkDenyCommands(toolInput, policy) {
           matched_rule:   label,
           classification: cls.action,
           classify_reason: cls.reason,
+          decided_by:     'policy',
         };
       }
       return block;

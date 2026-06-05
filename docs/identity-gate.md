@@ -14,7 +14,7 @@ strict-identity-gate`) and composed from three independent mechanisms.
 |---|---|---|---|
 | `deny_paths` (globs + prefixes) | Reading a sensitive **file** (`.env`, ssh keys, `/proc/<pid>/environ`) | **Yes** — Read/Glob/Grep tools *and* any shell command | always |
 | `deny_commands` | Genuine **command behaviours** with no file path (`printenv`, `env`, `set`, `declare -p`, `export -p`, grep-for-secret-names) | shell only | always |
-| `identity_approval` | **Borrowing** an identity (`ssh`/`scp`, `az`/azure-HTTP, `sudo`/`pkexec`/`doas`/`su`, `paramiko`) | shell only | always (P0: fail-closed) |
+| `identity_approval` | **Borrowing** an identity (`ssh`/`scp`, `az`/azure-HTTP, `sudo`/`pkexec`/`doas`/`su`, `paramiko`) — blocked until a human authorizes (single-use, short TTL) | shell only | always |
 | `redact_secrets_in_tool_results` + `deny_patterns` | A secret **value** reaching the model in tool output | **Yes** — value-based, command/tool/path-agnostic | always (**best-effort**) |
 | `block_secrets_in_tool_results` | Hard-refuse a turn whose output carries a secret | output scan | **`block_secrets` mode only** |
 
@@ -31,6 +31,39 @@ path-like token in a shell command. This is verified to hold with
 `deny_commands` is reserved for behaviours that genuinely have **no file path**:
 `printenv` / `env` / `set` / `declare -p` / `export -p` dump the live process
 environment; grep-for-secret-names is a discovery pattern.
+
+## The approval handshake — *who is who*
+
+An identity borrow is not a flat deny; it is a handshake that distinguishes the
+**agent** (which may *request* an identity) from the **human** (who *authorizes*
+it). The distinction is enforced, not guessed from the prompt:
+
+1. The agent emits e.g. `ssh azureuser@host` → **BLOCK**, and a `pending` record
+   is written to `~/.occasio/approvals.jsonl` with an id. The agent sees:
+   `Denied … Run: occasio approvals approve apr_… --once`.
+2. **You** authorize, from **your own terminal** (which is not proxied):
+   `occasio approvals approve apr_… --once`. This mints a **single-use**,
+   short-TTL (default 300s, cap 3600s), **HMAC-signed** token bound to the *exact*
+   command (`command_hash`, incl. the remote part), stamped with your identity
+   (`occasio identity set --id <you>`; OS-user fallback).
+3. The agent re-attempts the same command → the token is found → it **passes
+   through** (Claude Code runs it) and the token is **consumed** (single-use). A
+   second attempt, or any *different* command, is blocked again.
+
+The chain records the whole handshake: `identity_borrow_request` →
+`identity_borrow_approved` → `identity_borrow_consumed`, so a reviewer reads
+`actor=ai_agent · delegator=<you> · approval.approved_by=<you>` — "the agent ran
+ssh, authorized by you via apr_…". Verifiable, not guessed.
+
+**The asymmetry is enforced.** An `actor=ai_agent` shell command that tries to
+mutate the control plane (`occasio approvals approve|deny`, `occasio identity
+set`) is **hard-BLOCKed** (`control_plane_blocked`), and `deny_paths ~/.occasio/**`
+denies the agent direct read/write of the store. The agent cannot self-approve;
+your terminal, being un-proxied, can. *That* is the human-vs-agent boundary.
+
+After approval the command runs **client-side** (pass-through), so the returning
+`tool_result` re-enters via the next request and the **redaction floor still
+applies** — approval to *execute* is not approval to *leak*.
 
 ## Coverage — honestly
 
@@ -106,6 +139,16 @@ denylist.
   (network egress) without ever entering the model's context, so read-blocking
   and redaction cannot help. `identity_approval` gates traffic to *known* cloud
   control planes, but arbitrary egress is the egress layer's job.
+- **Approval forgery via an obfuscated-interpreter write to `~/.occasio` (privilege
+  escalation).** The control-plane guard + `deny_paths ~/.occasio/**` close the
+  *literal* paths (the CLI verbs, `echo > approvals.jsonl`, the typed Read/Write
+  tools), and HMAC-signed tokens make a hand-written `approvals.jsonl` entry fail
+  verification. But an `node -e` / `python -c` that builds the path *and* reads the
+  HMAC key at runtime is the **same runtime-indirection residual** as the gate —
+  and here it forges an approval, so the consequence is privilege escalation. On a
+  single-user box the agent runs with the user's full rights, so no purely-software
+  gate is absolute. **The real boundary is OS-level store isolation** (a separate
+  uid / OS keychain the agent's uid cannot read) — the stated hardening path.
 
 ## Implementation: single source of truth
 
@@ -138,9 +181,12 @@ intercept. See [`AUDIT.md`](AUDIT.md#identity-gate-enrichment-v2).
 
 ## Roadmap
 
-- **Approval store + re-attempt** (next): `identity_approval` matches become a
-  deferred block with an approval id; `occasio approvals approve <id> --once`
-  grants a single use. Until then a match is a fail-closed deny.
+- **Approval store + re-attempt** — **shipped** (see *The approval handshake*).
+- **OS-level store isolation**: the real fix for approval forgery via an
+  obfuscated-interpreter write — run the agent under a uid / put the store behind
+  a keychain the agent cannot read.
+- **Broker / human-execute mode** (per-rule, for the most sensitive targets):
+  Occasio executes the approved command itself instead of passing it through.
 - **PreToolUse hook**: a second enforcement point (`occasio gate`) inside the
   agent for execution that does not flow through the proxy.
 - **Egress control**: the real backstop for the "exfil without reading" class.

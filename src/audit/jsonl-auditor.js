@@ -629,6 +629,9 @@ function identityAuditFields(event, decision, result) {
     approval,
     enforcement_point: idy.enforcement_point || 'proxy',
     coverage:          idy.coverage || (isConsumed ? 'authorized' : 'enforced'),
+    // Disambiguates a human rejection (CLI) from a policy block — present only
+    // when the producer set it.
+    ...(idy.decided_by ? { decided_by: idy.decided_by } : {}),
   };
 }
 
