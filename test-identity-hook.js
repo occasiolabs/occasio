@@ -33,12 +33,12 @@ let passed = 0, failed = 0;
 function assert(label, cond, detail = '') { if (cond) { console.log(`  ✓ ${label}`); passed++; } else { console.error(`  ✗ ${label}${detail ? ' — ' + detail : ''}`); failed++; } }
 function quiet(fn) { const o = process.stdout.write, e = process.stderr.write; process.stdout.write = () => true; process.stderr.write = () => true; try { return fn(); } finally { process.stdout.write = o; process.stderr.write = e; } }
 
-const strictParsed = loader.parse(fs.readFileSync(path.join(__dirname, 'policy-templates', 'strict-identity-gate.yml'), 'utf8'));
+const strictParsed = loader.parse(fs.readFileSync(path.join(__dirname, 'policy-templates', 'strict.yml'), 'utf8'));
 loader._setOverrideForTests(strictParsed);
 const ev = (c) => makeBoundaryEvent({ direction: 'inbound', kind: 'tool_call', agent: 'claude-code', protocol: 'anthropic-http', toolName: 'shell_bash', toolInput: { command: c } });
 
 // spawn `occasio hook` with stdin JSON + env (the real PreToolUse path)
-const HOOK_ENV = { ...process.env, OCCASIO_POLICY_FILE: path.join(__dirname, 'policy-templates', 'strict-identity-gate.yml'), OCCASIO_SESSION_FILE: path.join(TMP, 'session.json') };
+const HOOK_ENV = { ...process.env, OCCASIO_POLICY_FILE: path.join(__dirname, 'policy-templates', 'strict.yml'), OCCASIO_SESSION_FILE: path.join(TMP, 'session.json') };
 function hook(input, extra) { return spawnSync('node', [path.join(__dirname, 'bin', 'occasio.js'), 'hook'], { input: JSON.stringify(input), env: { ...HOOK_ENV, ...extra }, encoding: 'utf8' }); }
 function bash(cmd) { return { tool_name: 'Bash', tool_input: { command: cmd } }; }
 function rows() { try { return fs.readFileSync(process.env.OCCASIO_AUDIT_FILE, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } }

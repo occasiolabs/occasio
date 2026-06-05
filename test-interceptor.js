@@ -7629,8 +7629,10 @@ console.log('\n3. runLocally');
 
     for (const name of VALID_TEMPLATES) {
       const body = readTemplate(name);
-      assert(`template ${name}: ships in TEMPLATES_DIR`,
-        fsMod.existsSync(pathMod10.join(TEMPLATES_DIR, `${name}.yml`)));
+      // `name` resolves to shipped content — either its own <name>.yml or, for a
+      // back-compat alias (strict-identity-gate → strict), the aliased file.
+      assert(`template ${name}: resolves to shipped content`,
+        typeof body === 'string' && body.length > 0);
       assert(`template ${name}: has $schema directive`,
         body.includes('yaml-language-server: $schema='));
       assert(`template ${name}: schema directive uses correct URL`,

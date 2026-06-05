@@ -43,7 +43,7 @@ function assert(label, cond, detail = '') {
 function quiet(fn) { const o = process.stdout.write, e = process.stderr.write; process.stdout.write = () => true; process.stderr.write = () => true; try { return fn(); } finally { process.stdout.write = o; process.stderr.write = e; } }
 function sleep(ms) { const until = Date.now() + ms; while (Date.now() < until) { /* spin */ } }
 
-const strictParsed = loader.parse(fs.readFileSync(path.join(__dirname, 'policy-templates', 'strict-identity-gate.yml'), 'utf8'));
+const strictParsed = loader.parse(fs.readFileSync(path.join(__dirname, 'policy-templates', 'strict.yml'), 'utf8'));
 loader._setOverrideForTests(strictParsed);
 
 function ev(cmd) {
