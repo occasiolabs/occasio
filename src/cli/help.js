@@ -32,7 +32,7 @@ ${col.b('60-Second Start:')}
 ${col.b('Usage:')}  occasio <command> [args...]   (or  oc <command>)
 
 ${col.b('Setup')} ${col.d('— one-time, per project')}
-  init                       ${col.d('(stable)')} Create starter policy.yml (--template strict|finance)
+  init                       ${col.d('(stable)')} Create starter policy.yml (--template strict = identity gate | finance)
   register                   ${col.d('(stable)')} Register shell alias (type 'claude' directly)
   doctor                     ${col.d('(stable)')} Check setup: Node, claude CLI, port, Python, profile
 

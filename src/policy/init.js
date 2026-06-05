@@ -30,8 +30,14 @@ const TEMPLATES_DIR  = path.join(__dirname, '..', '..', 'policy-templates');
 const VALID_TEMPLATES = ['dev-default', 'strict', 'finance', 'strict-identity-gate'];
 const DEFAULT_TEMPLATE = 'dev-default';
 
+// Back-compat: `strict-identity-gate` was the former name of the identity-gate
+// template; the identity gate is now the `strict` posture itself. Both names
+// resolve to strict.yml so existing `--template strict-identity-gate` keeps working.
+const TEMPLATE_ALIASES = { 'strict-identity-gate': 'strict' };
+
 function readTemplate(name) {
-  return fs.readFileSync(path.join(TEMPLATES_DIR, `${name}.yml`), 'utf8');
+  const file = TEMPLATE_ALIASES[name] || name;
+  return fs.readFileSync(path.join(TEMPLATES_DIR, `${file}.yml`), 'utf8');
 }
 
 // ── Starter file ───────────────────────────────────────────────────────────────

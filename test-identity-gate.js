@@ -47,7 +47,7 @@ function assert(label, cond, detail = '') {
   else { console.error(`  ✗ ${label}${detail ? ' — ' + detail : ''}`); failed++; }
 }
 
-const TEMPLATE = path.join(__dirname, 'policy-templates', 'strict-identity-gate.yml');
+const TEMPLATE = path.join(__dirname, 'policy-templates', 'strict.yml');
 // strictParsed = raw mapping (for _setOverrideForTests, which normalizes it the
 // same way load() does). strictPolicy = the compiled form (for direct field
 // assertions + gateShellCommand, which consume a normalized policy as-is).

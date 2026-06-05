@@ -388,6 +388,14 @@ if (cmd === 'hook') {
   process.exit(require('./cli/hook').run(args.slice(1)));
 }
 
+// `occasio init` is the advertised 60-second-start command; route it to the
+// real implementation (`occasio policy init`) so the bare form works too.
+if (cmd === 'init') {
+  const { runInitCli } = require('./policy/init');
+  const result = runInitCli(args.slice(1));
+  process.exit(result.ok ? 0 : 1);
+}
+
 if (cmd === 'receipt') {
   (async () => process.exit(await require('./cli/receipt').run(args.slice(1))))();
   return;
@@ -460,7 +468,7 @@ if (cmd === 'policy') {
   console.error(col.r(`Unknown policy subcommand: ${sub}`));
   console.error(col.d('  Usage: occasio policy [show] [--diff]'));
   console.error(col.d('         occasio policy validate [--file path]'));
-  console.error(col.d('         occasio policy init [--template dev-default|strict|finance] [--force] [--file path]'));
+  console.error(col.d('         occasio policy init [--template dev-default|strict|finance]  (strict = the identity gate) [--force] [--file path]'));
   console.error(col.d('         occasio policy doctor [--days N]'));
   console.error(col.d('         occasio policy lock [--sign] [--out policy.lock.json]  |  policy lock --verify <lock>'));
   console.error(col.d('         occasio policy diff [--since <lock>] [<a.yml> <b.yml>]'));

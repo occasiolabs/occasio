@@ -4,9 +4,9 @@
 
 The identity gate classifies identity-bearing shell commands and tool calls and
 either **denies** them, **gates them behind human approval**, or allows them —
-recording every decision into the tamper-evident audit chain. It is enabled by
-the `strict-identity-gate` policy template (`occasio policy init --template
-strict-identity-gate`) and composed from three independent mechanisms.
+recording every decision into the tamper-evident audit chain. It is the `strict`
+policy posture (`occasio init --template strict`, or `occasio policy init
+--template strict`) and composed from three independent mechanisms.
 
 ## What enforces what
 
