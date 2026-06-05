@@ -61,6 +61,8 @@ Both views read the same underlying log. You don't have to pick one — running 
 
 ## Quickstart
 
+> **New here?** The **[5-minute Getting Started guide](docs/GETTING-STARTED.md)** walks the identity-gate flow end to end — install → `init --template strict` → run your agent → approve a borrow → verify the log. Every command in it is tested against the published release.
+
 Requires Node.js ≥ 18. Works on Windows, macOS, Linux.
 
 ```bash
