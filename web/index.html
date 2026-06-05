@@ -203,6 +203,7 @@
       <div class="brand"><span class="dot" aria-hidden="true"></span>OCC·ASIO</div>
       <nav aria-label="Primary">
         <a class="hide-sm" href="#use">How it's used</a>
+        <a class="hide-sm" href="#start">Get started</a>
         <a href="/verify">Verify</a>
         <a class="hide-sm" href="#trust">Compliance</a>
         <a class="ghbtn btn" href="https://github.com/occasiolabs/occasio">GitHub</a>
@@ -329,6 +330,28 @@
             <p>Every tool call gets a coverage code. You see exactly what was intercepted and what fell through, with no inflated claims.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- GET STARTED -->
+    <section id="start">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <p class="kicker">Get started in 5 minutes</p>
+          <h2>Let your agent work. Approve only what matters.</h2>
+          <p class="sub">No account, no cloud. The strict template turns on the identity gate — secrets stay home, and ssh / cloud / root wait for your approval.</p>
+        </div>
+        <div class="term reveal">
+          <div class="chrome"><i class="r"></i><i class="y"></i><i class="g"></i><span>your terminal</span></div>
+<pre><span class="cmd">npm install -g @occasiolabs/occasio</span>
+<span class="cmd">occasio init --template strict</span>          <span class="dim">deny secrets · gate ssh/cloud/root</span>
+<span class="cmd">occasio claude "fix the failing test"</span>   <span class="dim">your agent, now gated</span>
+
+<span class="dim"># the agent reaches for .env / ssh on its own → blocked. you decide:</span>
+<span class="cmd">occasio approvals approve apr_… --once</span>     <span class="ok">authorized once — the agent can't approve itself</span>
+<span class="cmd">occasio audit verify</span>                      <span class="ok">✓ cryptographic proof of what it did</span></pre>
+        </div>
+        <p class="verify-note" style="text-align:center">Every command is verified against the published release. Full walkthrough → <a href="https://github.com/occasiolabs/occasio/blob/main/docs/GETTING-STARTED.md">5-minute Getting Started guide</a>.</p>
       </div>
     </section>
 
