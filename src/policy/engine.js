@@ -211,6 +211,45 @@ function checkDenyCommands(toolInput, policy) {
   return null;
 }
 
+// Control-plane mutations an AI agent must never perform: approving/denying its
+// own borrow, or changing the authorizing identity. Matches an occasio
+// invocation (occasio / oc / occasio.js / npx occasio) followed by a mutating
+// subcommand. Best-effort on the invocation spelling; the `~/.occasio/**`
+// deny_paths backstop covers direct file forgery of the store/identity.
+const CONTROL_PLANE_RE =
+  /(?:\boccasio\b|\boc\b|occasio\.js|npx\s+occasio)[\s\S]*?\b(?:approvals\s+(?:approve|deny)|identity\s+set)\b/i;
+
+// P0 single-agent approval actor (request and lookup must use the same value).
+const APPROVAL_ACTOR = 'ai_agent';
+
+/**
+ * Built-in control-plane guard (always on). Hard-BLOCK an agent shell command
+ * that would mutate the approval control plane. Returns a BLOCK Decision or null.
+ */
+function checkControlPlane(toolInput) {
+  const command = toolInput && toolInput.command;
+  if (typeof command !== 'string' || !command) return null;
+  if (!CONTROL_PLANE_RE.test(command)) return null;
+  const message =
+    'Denied: an AI agent may not mutate the approval control plane ' +
+    '(approvals approve/deny, identity set). A human authorizes out-of-band, ' +
+    'in their own terminal.';
+  return Object.assign(
+    BLOCK({ type: 'policy', reason: 'control_plane_denied', message }, 'control_plane_denied'),
+    {
+      identity: {
+        event_type:      'control_plane_blocked',
+        identity_type:   'control_plane',
+        target_class:    'secrets',
+        risk:            'high',
+        matched_rule:    'control_plane_guard',
+        classification:  'control_plane',
+        classify_reason: 'control_plane_mutation',
+      },
+    }
+  );
+}
+
 /**
  * Identity gate — approval (v2). Tests the shell command against the compiled
  * `identity_approval` rules. On the first match, enriches with the built-in
@@ -230,6 +269,7 @@ function checkIdentityApproval(toolInput, policy) {
   if (typeof command !== 'string' || !command) return null;
 
   const { classify } = require('./identity-classifier');
+  const { commandHash, normalizeCommand } = require('./command-normalize');
 
   for (const rule of rules) {
     if (!rule.regex.test(command)) continue;
@@ -240,9 +280,52 @@ function checkIdentityApproval(toolInput, policy) {
     const targetClass  = cls.target_class  || rule.target_class || 'unknown';
     const risk         = cls.risk          || 'high';
 
+    const store        = require('./identity-store').getStore();
+    const command_hash = commandHash(command);
+    // P0: single agent — scope the token to the canonical agent actor. lookup and
+    // requestApproval use the same value so they pair. (Per-agent scoping later.)
+    const actor        = APPROVAL_ACTOR;
+
+    // ── valid one-time token? → tagged PASS (the re-attempt passes through). ──
+    // lookup is READ-ONLY (no consume here); runToolLoop consumes once at the
+    // PASS decision (the single write point that has the auditor).
+    const token = store.lookup({ command_hash, actor });
+    if (token) {
+      return Object.assign(
+        PASS('identity_approved'),
+        {
+          identityApprovalGranted: true,
+          approval_id:             token.id,
+          command_hash,
+          identity_requested:      identityType,
+          target_class:            targetClass,
+          risk,
+          identity: {
+            event_type:      'identity_borrow_consumed',
+            identity_type:   identityType,
+            target_class:    targetClass,
+            risk,
+            matched_rule:    rule.label,
+            classification:  cls.action || 'identity_borrow',
+            classify_reason: cls.reason || rule.reason,
+            approval_id:     token.id,
+            approved_by:     token.approved_by,
+            identity_source: token.identity_source,
+          },
+        }
+      );
+    }
+
+    // ── no token → record/refresh the pending request and deny it. ──
+    // requestApproval is an idempotent upsert (safe under the evaluate-twice path).
+    const apr = store.requestApproval({
+      command_hash, normalized_command: normalizeCommand(command),
+      actor, identity_type: identityType, target_class: targetClass, risk,
+    });
     const message =
       `Denied: ${identityType} requires human approval (${rule.reason}). ` +
-      `This action borrows a ${targetClass} identity; an AI agent may request it, not assume it.`;
+      `This action borrows a ${targetClass} identity; an AI agent may request it, not assume it. ` +
+      `A human can authorize once with: occasio approvals approve ${apr.id} --once`;
 
     return Object.assign(
       BLOCK(
@@ -251,11 +334,11 @@ function checkIdentityApproval(toolInput, policy) {
       ),
       {
         approval_required:  true,
+        approval_id:        apr.id,
         identity_requested: identityType,
         target_class:       targetClass,
         risk,
         matched_rule:       rule.label,
-        // Identity audit tag (consumed by the auditor to emit a rich row).
         identity: {
           event_type:      'identity_borrow_request',
           identity_type:   identityType,
@@ -264,6 +347,7 @@ function checkIdentityApproval(toolInput, policy) {
           matched_rule:    rule.label,
           classification:  cls.action || 'identity_borrow',
           classify_reason: cls.reason || rule.reason,
+          approval_id:     apr.id,
         },
       }
     );
@@ -315,6 +399,14 @@ function evaluate(event) {
   // inside cd-prefixed compound chains. Closes the bypass where shell tools
   // were unguarded because they are not in PATH_BEARING_TOOLS.
   if (SHELL_TOOLS.has(event.toolName)) {
+    // Control-plane guard (ALWAYS ON, structural — not policy-tunable). An
+    // actor=ai_agent may never mutate the approval control plane (approve/deny/
+    // identity set): self-approval would forge the very provenance the gate
+    // sells. The human authorizes out-of-band (their terminal is un-proxied).
+    // Runs first so it cannot be shadowed by another rule.
+    const cpBlock = checkControlPlane(event.toolInput);
+    if (cpBlock) return cpBlock;
+
     const shellBlock = checkShellPathPolicy(event.toolInput, policy);
     if (shellBlock) return shellBlock;
 
@@ -323,11 +415,11 @@ function evaluate(event) {
     const denyBlock = checkDenyCommands(event.toolInput, policy);
     if (denyBlock) return denyBlock;
 
-    // Identity gate — approval (v2). A command that borrows an identity
-    // (ssh/az/sudo) is gated behind human approval. Today (no approval store)
-    // a match is a fail-closed BLOCK; the store + re-attempt land later.
-    const approvalBlock = checkIdentityApproval(event.toolInput, policy);
-    if (approvalBlock) return approvalBlock;
+    // Identity gate — approval (v2). A borrow (ssh/az/sudo) is gated behind
+    // human approval: a valid one-time token lets the re-attempt pass through;
+    // otherwise a fail-closed deferred BLOCK with an approval id.
+    const approvalDecision = checkIdentityApproval(event.toolInput, policy);
+    if (approvalDecision) return approvalDecision;
   }
 
   // Stage 3: tool routing is policy-driven. Read ~/.occasio/policy.yml's
