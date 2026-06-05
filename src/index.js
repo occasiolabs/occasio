@@ -41,7 +41,7 @@ function selectAdapter(headers, sseBody) {
 }
 const { parseFileTokens, scanSecrets } = require('./analyzer');
 const { optimizeContext } = require('./lao');
-const { randomUUID }      = require('crypto');
+const { randomUUID, randomBytes } = require('crypto');
 const { runLedgerCli }    = require('./ledger');
 const { runReplayCli }    = require('./replay');
 const { runInspectCli }   = require('./inspect');
@@ -382,6 +382,10 @@ if (cmd === 'identity') {
 
 if (cmd === 'approvals') {
   process.exit(require('./cli/approvals').run(args.slice(1)));
+}
+
+if (cmd === 'hook') {
+  process.exit(require('./cli/hook').run(args.slice(1)));
 }
 
 if (cmd === 'receipt') {
@@ -865,6 +869,11 @@ let sessionCost       = 0;      // running in-memory total for budget enforcemen
 let budgetWarnFired   = false;   // fires warning at most once per session
 
 const currentRunId = randomUUID();
+// Per-session token for the PreToolUse hook's unforgeable proxy detection: set
+// into Claude Code's env at spawn AND written to session.json. The agent can set
+// neither (can't mutate Claude Code's env; can't read session.json under
+// deny_paths), so it cannot make the hook no-op. A fresh secret per run.
+const proxySessionToken = randomBytes(16).toString('hex');
 const sessionTodoStore       = [];          // session-scoped todo list, shared across all runToolLoop calls
 const pendingToolInjections  = new Map();   // tool_use_id → distilled content (partial-batch pre-runs)
 
@@ -953,6 +962,7 @@ fs.writeFileSync(SESSION_FILE, JSON.stringify({
   mode,
   start: new Date().toISOString(),
   cwd:   SESSION_CWD,
+  proxy_session: proxySessionToken,
 }));
 
 process.stderr.write(col.b(`\n⚡ Occasio v${VERSION}\n`));
@@ -1709,7 +1719,7 @@ server.listen(PORT, '127.0.0.1', () => {
     try { printSessionRecapBanner(); } catch { /* never block startup */ }
   }
 
-  const env = { ...process.env, ANTHROPIC_BASE_URL: `http://localhost:${PORT}` };
+  const env = { ...process.env, ANTHROPIC_BASE_URL: `http://localhost:${PORT}`, OCCASIO_PROXY_SESSION: proxySessionToken };
   // On Windows, npm installs binaries as .cmd wrappers (claude.cmd).
   // spawn() without shell:true calls CreateProcess directly, which won't
   // execute .cmd files — claude would silently fail to start.
