@@ -380,6 +380,10 @@ if (cmd === 'identity') {
   process.exit(require('./cli/identity').run(args.slice(1)));
 }
 
+if (cmd === 'approvals') {
+  process.exit(require('./cli/approvals').run(args.slice(1)));
+}
+
 if (cmd === 'receipt') {
   (async () => process.exit(await require('./cli/receipt').run(args.slice(1))))();
   return;
