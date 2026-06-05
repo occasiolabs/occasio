@@ -546,7 +546,8 @@ function resolveDelegator() {
   if (_delegatorCache !== undefined) return _delegatorCache;
   let delegatorId = null;
   try {
-    const raw = fs.readFileSync(path.join(os.homedir(), '.occasio', 'identity.json'), 'utf8');
+    const idFile = process.env.OCCASIO_IDENTITY_FILE || path.join(os.homedir(), '.occasio', 'identity.json');
+    const raw = fs.readFileSync(idFile, 'utf8');
     const j = JSON.parse(raw);
     delegatorId = j.id || j.delegator || j.user || null;
   } catch { /* no identity file → fall back to OS user */ }
