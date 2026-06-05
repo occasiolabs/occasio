@@ -25,13 +25,22 @@ honoring its exit code.** This runbook verifies exactly that seam.
 
 - `occasio` on `PATH` (`occasio --version` works).
 - Real Claude Code installed and logged in (`claude --version` works).
-- A terminal where typing `claude` runs the **real** Claude Code, not the
-  `occasio claude` alias. Check: `Get-Command claude` (PowerShell) / `type claude`
-  (bash) should resolve to the Claude Code binary, **not** a shell function/alias.
-  If it shows the alias, use a fresh terminal (the steps below set a scratch HOME,
-  so a new shell won't load your real profile's alias).
+- Typing `claude` must run the **real** Claude Code, not the `occasio claude`
+  alias. Check: `Get-Command claude` (PowerShell) / `type claude` (bash) should
+  resolve to the Claude Code **binary**, not a shell function/alias. If `occasio
+  register` aliased it, the test would run *proxied* (the hook then no-ops by
+  design) — call the real Claude Code binary directly so the hook is the enforcer.
 
-## Setup (sandboxed)
+## Setup (sandboxed — no HOME hijack)
+
+Point **only Occasio's own state** at a scratch dir via `OCCASIO_*` env vars, and
+put the hook in a **project-level** `.claude/settings.json` (Claude Code runs
+project hooks too — verified, no trust gate). Your real `~/.occasio`, `~/.claude`,
+and Claude **login** stay untouched — so Claude Code does not re-authenticate and
+no browser profile is created in the scratch.
+
+> Earlier versions of this runbook repointed `HOME`. Don't — a fresh HOME makes
+> Claude Code re-login, and the browser dumps a whole profile into your scratch.
 
 PowerShell (Windows):
 
@@ -39,19 +48,28 @@ PowerShell (Windows):
 $SCRATCH = Join-Path $env:TEMP "occasio-hook-smoke"
 Remove-Item $SCRATCH -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $SCRATCH | Out-Null
-$env:USERPROFILE = $SCRATCH ; $env:HOME = $SCRATCH      # scratch ~/.occasio and ~/.claude
 Set-Location $SCRATCH
 
-occasio init --template strict     # identity-gated policy → scratch ~/.occasio/policy.yml
-occasio hook --install             # PreToolUse hook → scratch ~/.claude/settings.json
-occasio doctor                     # expect: "PreToolUse hook — installed"
-Get-Content (Join-Path $SCRATCH ".claude/settings.json")   # confirm the hook entry
+# sandbox ONLY Occasio's files — real ~/.occasio, real HOME, real login untouched
+$env:OCCASIO_POLICY_FILE       = "$SCRATCH\policy.yml"
+$env:OCCASIO_APPROVALS_FILE    = "$SCRATCH\approvals.jsonl"
+$env:OCCASIO_APPROVAL_KEY_FILE = "$SCRATCH\approval-key"
+$env:OCCASIO_IDENTITY_FILE     = "$SCRATCH\identity.json"
+$env:OCCASIO_AUDIT_FILE        = "$SCRATCH\pipeline-events.jsonl"
+$env:OCCASIO_CLAUDE_SETTINGS   = "$SCRATCH\.claude\settings.json"  # project hook config
+
+occasio policy init --template strict   # identity-gated policy → $OCCASIO_POLICY_FILE
+occasio hook --install                  # PreToolUse hook → the project .claude/settings.json
+occasio doctor                          # expect: "PreToolUse hook — installed"
+Get-Content (Join-Path $SCRATCH ".claude/settings.json")   # matcher "Bash" → occasio hook
 ```
 
-bash (macOS/Linux): same, with `export HOME=$(mktemp -d)` and `cd "$HOME"`.
+bash (macOS/Linux): same, with `export OCCASIO_…="$SCRATCH/…"` and `cd "$SCRATCH"`.
 
-You should see a `hooks.PreToolUse` entry with `matcher: "Bash"` →
-`command: "occasio hook"`.
+The `OCCASIO_*` vars are inherited by Claude Code (you launch it from this shell)
+and by the hook subprocess it spawns — so the hook reads the scratch policy/store,
+never your real `~/.occasio`. You should see a `hooks.PreToolUse` entry with
+`matcher: "Bash"` → `command: "occasio hook"`.
 
 ## The test — three acts
 
@@ -80,10 +98,16 @@ seam: Claude Code invoked the hook and obeyed exit 2.
 > returns 0 and you *do* fall through to that native Yes/No prompt — there it's
 > the expected signal that the hook let it through.
 
-Confirm out-of-band (a second terminal, **same** scratch HOME):
+Confirm out-of-band. Use the **same shell** (it still has the `OCCASIO_*` vars),
+or a second terminal that re-exports them first:
 
 ```powershell
-$env:USERPROFILE = $env:TEMP + "\occasio-hook-smoke" ; $env:HOME = $env:USERPROFILE
+$SCRATCH = Join-Path $env:TEMP "occasio-hook-smoke"
+$env:OCCASIO_APPROVALS_FILE = "$SCRATCH\approvals.jsonl"
+$env:OCCASIO_AUDIT_FILE     = "$SCRATCH\pipeline-events.jsonl"
+$env:OCCASIO_POLICY_FILE    = "$SCRATCH\policy.yml"
+$env:OCCASIO_APPROVAL_KEY_FILE = "$SCRATCH\approval-key"
+$env:OCCASIO_IDENTITY_FILE  = "$SCRATCH\identity.json"
 occasio approvals list      # one pending apr_… for the ssh command
 ```
 
@@ -130,9 +154,13 @@ If all three hold, the settings.json → hook seam works end-to-end.
 
 ## Teardown
 
+Trivial — the scratch holds only Occasio's files (no browser profile, nothing
+locked). Exit any Claude session, then:
+
 ```powershell
-Remove-Item $SCRATCH -Recurse -Force
-# open a fresh terminal to restore your normal HOME
+Set-Location $env:TEMP            # don't delete a folder you're standing in
+Remove-Item (Join-Path $env:TEMP "occasio-hook-smoke") -Recurse -Force
+Get-ChildItem Env:OCCASIO_* | ForEach-Object { Remove-Item "Env:$($_.Name)" }
 ```
 
 ## Troubleshooting
@@ -147,16 +175,17 @@ Remove-Item $SCRATCH -Recurse -Force
   - **The matcher must be exactly `"Bash"`.** A raw `"Bash|PowerShell"` is NOT a
     valid match for the `Bash` tool — Claude Code never fires the hook and fails
     open. Confirm with `/hooks` inside Claude Code (it should list one PreToolUse
-    hook) and check `~/.claude/settings.json`.
+    hook) and check `$SCRATCH\.claude\settings.json`.
   - **Restart Claude Code after editing settings** — hooks load at session start.
 - **The `ssh` ran in Act 1 (not blocked).** You're likely proxied or un-gated:
   (a) you launched `occasio claude` instead of `claude` (the hook no-ops under the
   proxy — that's correct, but then you're testing the proxy); (b) `occasio` isn't
   on `PATH` for the hook subprocess (Claude Code couldn't spawn it → re-check
-  `occasio --version`); (c) the wrong HOME, so the strict policy / hook isn't the
-  active one (re-run setup; `occasio policy show` should be the `strict` posture).
+  `occasio --version`); (c) the `OCCASIO_*` vars weren't set in the shell you
+  launched `claude` from, so the hook reads a different policy/store (re-run setup
+  in that shell; `occasio policy show` should be the `strict` posture).
 - **Hook errors instead of a clean block.** That's still fail-closed (it denies),
   but capture the stderr Claude shows and check `occasio gate "ssh deploy@192.0.2.1" --enforce`
-  directly in the scratch HOME.
+  with the `OCCASIO_*` vars set.
 - **Nothing in `approvals list`.** The borrow never reached the hook — see the
   first bullet.
