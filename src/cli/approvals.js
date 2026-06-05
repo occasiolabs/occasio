@@ -64,8 +64,23 @@ function run(args) {
   const store = require('../policy/identity-store').getStore();
   const sub = args[0];
 
-  // sweep stale records first so list/show reflect reality.
-  try { store.sweep(); } catch { /* best effort */ }
+  // sweep stale records first so list/show reflect reality; audit each approved-
+  // but-unused token that just expired (the tuning signal: was the TTL too short?).
+  try {
+    const { expired } = store.sweep();
+    const unused = (expired || []).filter(r => r._kind === 'approved_unused');
+    if (unused.length) {
+      const auditor = makeAuditor();
+      for (const r of unused) {
+        recordLifecycle(auditor, r, {
+          event_type: 'identity_borrow_expired', identity_type: r.identity_type, target_class: r.target_class,
+          risk: r.risk, matched_rule: r.identity_type, classification: 'identity_borrow', classify_reason: 'ttl_expired',
+          approval_id: r.id, approval_state: 'expired', approved_by: r.approved_by, identity_source: r.identity_source,
+          enforcement_point: 'cli', coverage: 'n/a', severity: 'low',
+        });
+      }
+    }
+  } catch { /* best effort */ }
 
   if (!sub || sub === 'list') {
     const state = flag(args, '--state');

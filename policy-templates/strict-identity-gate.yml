@@ -34,6 +34,8 @@ block_requests_over_budget: true
 # AND for any shell command (cat, less, awk, cp, grep …). Directory entries are
 # prefixes; glob entries (**/.env) match a filename anywhere, tool-agnostically.
 deny_paths:
+  - "~/.occasio/**"  # the control plane: agent may not read/forge approvals.jsonl
+                     #   or identity.json (the engine also hard-BLOCKs the CLI verbs)
   - "**/.env"        # any .env file, in any directory, read by any tool/command
   - "**/.env.*"      # .env.local, .env.production, …
   - "**/environ"     # /proc/<pid>/environ — the live-env dump *file* (Class 1)
