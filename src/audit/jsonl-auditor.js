@@ -590,7 +590,9 @@ function identityAuditFields(event, decision, result) {
       type:         'shell',
       name:         event.toolName,
       raw_command:  command,
-      command_hash: command ? sha256hex(command.trim()) : null,
+      // Same canonical hash the approval store keys on, so a reviewer can join
+      // an audit row to its approval token.
+      command_hash: command ? require('../policy/command-normalize').commandHash(command) : null,
     },
     identity_requested: {
       type:         idy.identity_type || null,
