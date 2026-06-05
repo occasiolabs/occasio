@@ -64,6 +64,34 @@ The `policy_loaded` row binds the audit chain to a specific policy file's bytes:
 
 The `git_state` rows bind a run to the concrete repository state it ran against: the `run_start` row records HEAD + a `diff_hash` before the agent acts, and the `run_end` row records what it left behind (changed/untracked files, post-run `diff_hash`). `occasio attest` lifts these rows into `subject.git_state` (`provenance: "chain"`), and `occasio attest verify` re-derives the same object straight from the hash-protected rows and requires byte-equality — so a tampered git claim in an attestation fails verification.
 
+#### Identity-gate enrichment (v2)
+
+When the identity gate (`deny_commands` / `identity_approval`) blocks a shell
+command, the `tool_call` row carries an additional set of **additive** fields
+describing the identity event. They appear only on identity-gate decisions;
+ordinary rows are byte-for-byte unchanged, and the fields slot in before
+`prev_hash` so `hash` stays last and the walker reproduces the serialization
+without modification. The field names are chosen to be in-toto-predicate
+compatible, so a future signed identity-delegation predicate is a projection of
+these rows rather than a migration.
+
+| Field | Type | Notes |
+|---|---|---|
+| `event_type` | string | `secret_identity_access_blocked`, `identity_borrow_denied`, or `identity_borrow_request` (a borrow gated pending human approval). |
+| `actor` | object | `{ type, id, session_id, trust_level }` — the AI agent. `type` defaults to `ai_agent`, `trust_level` to `untrusted`. |
+| `delegator` | object | `{ type, id }` — the human the agent acts on behalf of, from `~/.occasio/identity.json` (fallback: OS username). |
+| `tool` | object | `{ type, name, raw_command, command_hash }` — `command_hash` is SHA-256 of the trimmed command. |
+| `identity_requested` | object | `{ type, target_class, risk }` — the identity being borrowed and its blast-radius class. |
+| `classification` | object | `{ action, reason, matched_rule }` — the identity classifier's verdict. |
+| `policy_decision` | object | `{ decision, reason, policy_name }`. |
+| `approval` | object \| null | `{ state: "pending", scope }` when approval is required; `null` otherwise. |
+| `enforcement_point` | string | `proxy` — the block was enforced inside Occasio's proxy loop. |
+| `coverage` | string | `enforced` — the `tool_use` stayed inside the loop and never reached the agent. A non-proxied path would record `uncovered`. |
+
+The `coverage` field is an honesty guarantee: a `denied`/`request` row with
+`coverage: enforced` means the command provably did not execute. The gate never
+records `enforced` for a path it did not actually intercept.
+
 #### `request` row field order
 
 The `request` row uses its own canonical field order. The order is load-bearing for hash stability and `test-audit-chain.js` test #20 locks it in:

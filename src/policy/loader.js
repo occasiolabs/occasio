@@ -20,6 +20,10 @@ const path   = require('path');
 const os     = require('os');
 const crypto = require('crypto');
 
+// Identity gate (v2): the closed set of target_class values an identity_approval
+// rule may declare. Shared with src/policy/validate.js (kept in sync there).
+const IDENTITY_TARGET_CLASSES = new Set(['local_dev', 'staging', 'production', 'secrets', 'cloud', 'unknown']);
+
 /** Expand ~ and resolve to absolute path for policy file entries. */
 function resolveConfigPath(p) {
   const expanded = p.startsWith('~') ? os.homedir() + p.slice(1) : p;
@@ -60,6 +64,17 @@ const DEFAULT_POLICY = Object.freeze({
   deny_paths:    Object.freeze([]),
   allow_paths:   Object.freeze([]),
   deny_patterns: Object.freeze([]),
+  // Identity gate (v2): hard-deny shell commands by regex. Each entry is a
+  // label → { command_regex } mapping (same nesting as `tools:`). Compiled to
+  // [{ label, regex }] at load; the label is the deny reason. Empty = off, so
+  // existing v1 policies are unaffected. See src/policy/engine.js SHELL_TOOLS.
+  deny_commands: Object.freeze([]),
+  // Identity gate (v2): commands that borrow an identity (ssh/az/sudo) and must
+  // be gated behind human approval. label → { command_regex, actor_type,
+  // target_class, reason }; compiled to [{ label, regex, actor_type,
+  // target_class, reason }]. Empty = off. Today a match is a fail-closed BLOCK;
+  // the approval store + re-attempt land in a follow-up.
+  identity_approval: Object.freeze([]),
   // Per-round volume caps (runaway-agent guard). Empty = nothing enforced;
   // strictly opt-in so existing policies are unaffected. See src/limits.js.
   limits:        Object.freeze({}),
@@ -257,7 +272,17 @@ function normalize(parsed) {
           process.stderr.write(`[Occasio] policy.yml: ${listKey}[${i}] — not a string, entry skipped\n`);
           return;
         }
-        resolved.push(resolveConfigPath(entry.trim()));
+        const t = entry.trim();
+        // Glob entries (** / * / ?) are filename/path patterns, not directory
+        // prefixes — they must NOT be path.resolve()'d (that would prepend cwd
+        // and mangle the wildcards). Expand ~ only and keep the pattern; the
+        // engine matches it against the resolved input path. Plain entries keep
+        // the existing absolute-prefix semantics (fully backward compatible).
+        if (t.includes('*') || t.includes('?')) {
+          resolved.push(t.startsWith('~') ? os.homedir() + t.slice(1) : t);
+        } else {
+          resolved.push(resolveConfigPath(t));
+        }
       });
       merged[listKey] = Object.freeze(resolved);
     }
@@ -279,6 +304,70 @@ function normalize(parsed) {
       }
     }
     merged.deny_patterns = Object.freeze(patterns);
+  }
+
+  // deny_commands: identity-gate hard-deny rules. Parsed shape is a
+  // label → { command_regex } mapping (like `tools:`); compiled to
+  // [{ label, regex }] at load. Invalid entries emit a stderr warning and are
+  // skipped — a silently dropped deny rule is a security gap, not a nuisance.
+  if (parsed.deny_commands && typeof parsed.deny_commands === 'object' && !Array.isArray(parsed.deny_commands)) {
+    const cmds = [];
+    for (const [label, entry] of Object.entries(parsed.deny_commands)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        process.stderr.write(`[Occasio] policy.yml: deny_commands.${label} — must be a mapping with command_regex, entry skipped\n`);
+        continue;
+      }
+      const rawPattern = entry.command_regex;
+      if (typeof rawPattern !== 'string' || !rawPattern.trim()) {
+        process.stderr.write(`[Occasio] policy.yml: deny_commands.${label} — missing command_regex string, entry skipped\n`);
+        continue;
+      }
+      try {
+        const regex = new RegExp(rawPattern);
+        cmds.push(Object.freeze({ label, regex }));
+      } catch {
+        process.stderr.write(`[Occasio] policy.yml: deny_commands.${label} — invalid RegExp "${rawPattern}", entry skipped\n`);
+      }
+    }
+    merged.deny_commands = Object.freeze(cmds);
+  }
+
+  // identity_approval: identity-borrow rules gated behind human approval.
+  // Parsed shape: label → { command_regex, actor_type?, target_class?, reason? }.
+  // Compiled to [{ label, regex, actor_type, target_class, reason }]. Invalid
+  // entries emit a stderr warning and are skipped (fail-safe: a dropped gate
+  // never silently *allows* — it just leaves that command to the next rule).
+  if (parsed.identity_approval && typeof parsed.identity_approval === 'object' && !Array.isArray(parsed.identity_approval)) {
+    const rules = [];
+    for (const [label, entry] of Object.entries(parsed.identity_approval)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        process.stderr.write(`[Occasio] policy.yml: identity_approval.${label} — must be a mapping with command_regex, entry skipped\n`);
+        continue;
+      }
+      const rawPattern = entry.command_regex;
+      if (typeof rawPattern !== 'string' || !rawPattern.trim()) {
+        process.stderr.write(`[Occasio] policy.yml: identity_approval.${label} — missing command_regex string, entry skipped\n`);
+        continue;
+      }
+      const targetClass = entry.target_class;
+      if (targetClass !== undefined && !IDENTITY_TARGET_CLASSES.has(targetClass)) {
+        process.stderr.write(`[Occasio] policy.yml: identity_approval.${label} — invalid target_class "${targetClass}", entry skipped\n`);
+        continue;
+      }
+      try {
+        const regex = new RegExp(rawPattern);
+        rules.push(Object.freeze({
+          label,
+          regex,
+          actor_type:   typeof entry.actor_type === 'string' ? entry.actor_type : 'ai_agent',
+          target_class: targetClass || 'unknown',
+          reason:       typeof entry.reason === 'string' ? entry.reason : label,
+        }));
+      } catch {
+        process.stderr.write(`[Occasio] policy.yml: identity_approval.${label} — invalid RegExp "${rawPattern}", entry skipped\n`);
+      }
+    }
+    merged.identity_approval = Object.freeze(rules);
   }
 
   // limits: per-round volume caps. Coerced to positive integers; absent/≤0

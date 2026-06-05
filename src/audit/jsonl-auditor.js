@@ -254,6 +254,14 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
       secrets_redacted:   result?.secretsRedacted?.length || undefined,
       distilled:          result?.distilled || undefined,
       tokens_saved:       result?.savedTokens || undefined,
+      // Identity-gate enrichment (v2): present only for identity decisions
+      // (decision.identity tagged by the engine); {} otherwise, so non-identity
+      // rows are byte-for-byte unchanged. Additive + walker-safe (hash stays last).
+      ...identityAuditFields(event, decision, result),
+      // Secret-redaction enrichment: present only for redaction rows (best-effort
+      // backstop). Mutually exclusive with identity fields (a redaction is a
+      // TRANSFORM, not a BLOCK). Records labels + count, never the secret value.
+      ...secretRedactionFields(decision, result),
       prev_hash:     prevHash,
     };
     row.hash = computeHash(row);
@@ -523,6 +531,114 @@ function createAuditor(filePath = DEFAULT_LOG, opts = {}) {
   }
 
   return { record, recordPolicyLoaded, recordRequest, recordGitState, recordLimitExceeded, file: filePath };
+}
+
+// ── Identity-gate audit enrichment (v2) ─────────────────────────────────────
+// Defined below createAuditor (function declarations are hoisted) so the
+// field-name strings inside these helpers do not shadow recordInner's row
+// literal in the AUDIT.md field-order drift guard.
+//
+// Resolve the human the AI agent acts on behalf of. Read once from
+// ~/.occasio/identity.json ({ id } | { delegator } | { user }); fall back to
+// the OS username. Cached so the identity path adds no per-event file I/O.
+let _delegatorCache;
+function resolveDelegator() {
+  if (_delegatorCache !== undefined) return _delegatorCache;
+  let delegatorId = null;
+  try {
+    const raw = fs.readFileSync(path.join(os.homedir(), '.occasio', 'identity.json'), 'utf8');
+    const j = JSON.parse(raw);
+    delegatorId = j.id || j.delegator || j.user || null;
+  } catch { /* no identity file → fall back to OS user */ }
+  if (!delegatorId) {
+    try { delegatorId = os.userInfo().username; } catch { delegatorId = 'unknown'; }
+  }
+  _delegatorCache = { type: 'human', id: delegatorId };
+  return _delegatorCache;
+}
+
+/**
+ * Build the additive identity-gate fields for an audit row, or {} when the
+ * decision is not an identity-gate decision (tagged by the engine via
+ * `decision.identity`). All field names are in-toto-predicate compatible so a
+ * future predicate export is a projection, not a migration.
+ *
+ * enforcement_point is always 'proxy' here: this row is written from the
+ * proxy's in-loop BLOCK. coverage is 'enforced' because the BLOCK kept the
+ * tool_use inside Occasio's loop (the command never reached the agent). A
+ * future hook enforcement point would set these differently.
+ */
+function identityAuditFields(event, decision, result) {
+  const idy = decision && decision.identity;
+  if (!idy) return {};
+  const command = (event.toolInput && typeof event.toolInput.command === 'string')
+    ? event.toolInput.command : '';
+  const approvalRequired = !!(decision.approval_required || (result && result.approval_required));
+  return {
+    event_type: idy.event_type,
+    // High-signal: an enforced deny / approval gate. Separates these from the
+    // chatty best-effort secret_redacted rows when scanning the chain by eye.
+    severity: 'high',
+    actor: {
+      type:        event.actorType || 'ai_agent',
+      id:          event.agent || null,
+      session_id:  event.sessionId || null,
+      trust_level: event.trustLevel || 'untrusted',
+    },
+    delegator: event.delegator || resolveDelegator(),
+    tool: {
+      type:         'shell',
+      name:         event.toolName,
+      raw_command:  command,
+      command_hash: command ? sha256hex(command.trim()) : null,
+    },
+    identity_requested: {
+      type:         idy.identity_type || null,
+      target_class: idy.target_class || 'unknown',
+      risk:         idy.risk || null,
+    },
+    classification: {
+      action:       idy.classification || null,
+      reason:       idy.classify_reason || null,
+      matched_rule: idy.matched_rule || null,
+    },
+    policy_decision: {
+      decision:    decision.action,
+      reason:      decision.reason,
+      policy_name: 'identity-gate',
+    },
+    approval:          approvalRequired ? { state: 'pending', scope: null } : null,
+    enforcement_point: 'proxy',
+    coverage:          'enforced',
+  };
+}
+
+/**
+ * Build the additive secret-redaction fields, or {} when the row is not a
+ * secret redaction. Fires for both redaction streams: path-1 (the dispatcher's
+ * redact-secrets TRANSFORM on a tool result) and path-2 (outbound redaction of
+ * an agent-injected tool_result). A redaction is a best-effort DETECTOR, not an
+ * enforced gate — so coverage is 'best-effort' and severity 'low', keeping it
+ * machine- and eye-separable from the high-signal enforced deny/approval rows.
+ *
+ * NEVER records the secret value — only labels (which detector matched) and a
+ * count. The redacted bytes live in the tool_result, not the audit row.
+ */
+function secretRedactionFields(decision, result) {
+  const isRedact = (decision && typeof decision.transform === 'string' && /redact-secrets/.test(decision.transform)) ||
+                   (result && Array.isArray(result.secretsRedacted) && result.secretsRedacted.length > 0);
+  if (!isRedact) return {};
+  const count = (result && Array.isArray(result.secretsRedacted)) ? result.secretsRedacted.length : 0;
+  if (count === 0) return {};
+  const labels = (result && Array.isArray(result.secretLabels)) ? result.secretLabels : undefined;
+  return {
+    event_type:          'secret_redacted',
+    severity:            'low',
+    secret_redacted_count: count,
+    ...(labels && labels.length ? { secret_labels: labels } : {}),
+    enforcement_point:   'proxy',
+    coverage:            'best-effort',
+  };
 }
 
 module.exports = {

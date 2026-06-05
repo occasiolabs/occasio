@@ -21,7 +21,7 @@ const loader = require('./loader');
 const builtIn = require('./built-in-classifiers');
 const toolNames = require('../core/tool-names');
 const { scanSecrets } = require('../analyzer');
-const { extractShellReadPaths } = require('./shell-path');
+const { extractShellReadPaths, extractCommandPathTokens } = require('./shell-path');
 
 // ── Path-based access control (ARCH-27) ──────────────────────────────────────
 
@@ -51,17 +51,10 @@ function resolveInputPath(rawPath) {
   }
 }
 
-/**
- * Safe prefix match: prevents ~/.aws from matching ~/.awskeys.
- * On Windows, comparison is case-insensitive.
- */
-function matchesPrefix(inputNorm, denyNorm) {
-  return inputNorm === denyNorm || inputNorm.startsWith(denyNorm + path.sep);
-}
-
-const normCase = process.platform === 'win32'
-  ? (p) => p.toLowerCase()
-  : (p) => p;
+// deny_paths / allow_paths matching lives in one shared module so the tool-call
+// gate (here) and the outbound auto-context gate (src/outbound-policy.js) can
+// never drift on glob vs prefix semantics.
+const { normCase, matchesPrefix, isGlobEntry, globToRegExp, pathMatchesEntry } = require('./path-match');
 
 /**
  * Apply deny_paths / allow_paths to a single absolute path string.
@@ -69,13 +62,12 @@ const normCase = process.platform === 'win32'
  */
 function evaluatePathAgainstPolicy(resolvedAbsPath, policy) {
   if (!resolvedAbsPath) return null;
-  const inputNorm = normCase(resolvedAbsPath);
 
   const denyPaths  = policy.deny_paths  || [];
   const allowPaths = policy.allow_paths || [];
 
   for (const denyPath of denyPaths) {
-    if (matchesPrefix(inputNorm, normCase(denyPath))) {
+    if (pathMatchesEntry(resolvedAbsPath, denyPath)) {
       return BLOCK(
         { type: 'policy', reason: 'path-denied' },
         'path-denied'
@@ -84,7 +76,7 @@ function evaluatePathAgainstPolicy(resolvedAbsPath, policy) {
   }
 
   if (allowPaths.length > 0) {
-    const allowed = allowPaths.some(ap => matchesPrefix(inputNorm, normCase(ap)));
+    const allowed = allowPaths.some(ap => pathMatchesEntry(resolvedAbsPath, ap));
     if (!allowed) {
       return BLOCK(
         { type: 'policy', reason: 'path-not-allowed' },
@@ -105,8 +97,15 @@ function evaluatePathAgainstPolicy(resolvedAbsPath, policy) {
 function pathPrefixMatch(rawInputPath, rawPrefix) {
   if (typeof rawInputPath !== 'string' || typeof rawPrefix !== 'string') return false;
   const i = resolveInputPath(rawInputPath);
+  if (!i) return false;
+  // Glob entries are not resolved (resolveInputPath would mangle the wildcards);
+  // expand ~ only and glob-match the resolved input path.
+  if (isGlobEntry(rawPrefix)) {
+    const pat = rawPrefix.startsWith('~') ? require('os').homedir() + rawPrefix.slice(1) : rawPrefix;
+    return globToRegExp(pat).test(i.replace(/\\/g, '/'));
+  }
   const d = resolveInputPath(rawPrefix);
-  if (!i || !d) return false;
+  if (!d) return false;
   return matchesPrefix(normCase(i), normCase(d));
 }
 
@@ -148,6 +147,127 @@ function checkShellPathPolicy(toolInput, policy) {
     const verdict = evaluatePathAgainstPolicy(resolved, policy);
     if (verdict) return verdict;
   }
+
+  // Verb-agnostic DENY backstop: a shell can read a file a thousand ways
+  // (less / awk / cp / grep / dd / python -c …). Rather than enumerate verbs,
+  // test every path-like token in the command against deny_paths only. This is
+  // what makes a sensitive *file* (e.g. `**/.env`) tool-agnostic instead of
+  // depending on a command-string coincidence. Deny-only: it can add a block,
+  // never grant access, so over-inclusion stays safe (allow_paths is enforced
+  // only on the precise read-operand pass above).
+  if (denyPaths.length > 0) {
+    for (const p of extractCommandPathTokens(command)) {
+      const resolved = (() => {
+        try { return fs.realpathSync(p); } catch { return path.resolve(p); }
+      })();
+      for (const denyPath of denyPaths) {
+        if (pathMatchesEntry(resolved, denyPath)) {
+          return BLOCK({ type: 'policy', reason: 'path-denied' }, 'path-denied');
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Identity gate — hard deny (v2). Tests the shell command string against the
+ * compiled `deny_commands` rules ([{ label, regex }]). First match wins; the
+ * label is the deny reason. Fail-closed by construction: a match always blocks.
+ * Returns a BLOCK Decision on match, null otherwise.
+ */
+function checkDenyCommands(toolInput, policy) {
+  const rules = policy.deny_commands || [];
+  if (rules.length === 0) return null;
+  const command = toolInput && toolInput.command;
+  if (typeof command !== 'string' || !command) return null;
+
+  const { classify } = require('./identity-classifier');
+  for (const { label, regex } of rules) {
+    if (regex.test(command)) {
+      const block = BLOCK(
+        { type: 'policy', reason: label, message: `denied: ${label}` },
+        label
+      );
+      // Tag identity-bearing denials so the auditor records a rich identity
+      // event. A plain command deny (classifier returns null) is left untagged.
+      const cls = classify(command);
+      if (cls) {
+        block.identity = {
+          event_type:     cls.action === 'secret_identity_access'
+            ? 'secret_identity_access_blocked'
+            : 'identity_borrow_denied',
+          identity_type:  cls.identity_type,
+          target_class:   cls.target_class,
+          risk:           cls.risk,
+          matched_rule:   label,
+          classification: cls.action,
+          classify_reason: cls.reason,
+        };
+      }
+      return block;
+    }
+  }
+  return null;
+}
+
+/**
+ * Identity gate — approval (v2). Tests the shell command against the compiled
+ * `identity_approval` rules. On the first match, enriches with the built-in
+ * identity classifier and returns a fail-closed approval-required BLOCK.
+ *
+ * P0 posture: there is no approval store yet, so a matched identity borrow is
+ * always blocked with a clear "requires human approval" refusal. An AI agent
+ * may request an identity; it may not silently assume one. The approval id +
+ * re-attempt flow is a follow-up; until then this never silently allows.
+ *
+ * Returns a BLOCK Decision on match, null otherwise.
+ */
+function checkIdentityApproval(toolInput, policy) {
+  const rules = policy.identity_approval || [];
+  if (rules.length === 0) return null;
+  const command = toolInput && toolInput.command;
+  if (typeof command !== 'string' || !command) return null;
+
+  const { classify } = require('./identity-classifier');
+
+  for (const rule of rules) {
+    if (!rule.regex.test(command)) continue;
+
+    // Enrich with the classifier; fall back to the rule's own fields.
+    const cls = classify(command) || {};
+    const identityType = cls.identity_type || rule.label;
+    const targetClass  = cls.target_class  || rule.target_class || 'unknown';
+    const risk         = cls.risk          || 'high';
+
+    const message =
+      `Denied: ${identityType} requires human approval (${rule.reason}). ` +
+      `This action borrows a ${targetClass} identity; an AI agent may request it, not assume it.`;
+
+    return Object.assign(
+      BLOCK(
+        { type: 'policy', reason: 'approval_required', message },
+        'approval_required'
+      ),
+      {
+        approval_required:  true,
+        identity_requested: identityType,
+        target_class:       targetClass,
+        risk,
+        matched_rule:       rule.label,
+        // Identity audit tag (consumed by the auditor to emit a rich row).
+        identity: {
+          event_type:      'identity_borrow_request',
+          identity_type:   identityType,
+          target_class:    targetClass,
+          risk,
+          matched_rule:    rule.label,
+          classification:  cls.action || 'identity_borrow',
+          classify_reason: cls.reason || rule.reason,
+        },
+      }
+    );
+  }
   return null;
 }
 
@@ -171,6 +291,18 @@ function evaluate(event) {
 
   const policy = loader.load();
 
+  // Carry the policy's deny_patterns on any redact-secrets decision so the
+  // dispatcher's path-1 redaction uses the SAME pattern set as the outbound
+  // path-2 redaction (src/outbound-policy.js). Without this, a custom
+  // deny_pattern secret is redacted on the auto-context stream but leaks on a
+  // locally-executed tool result. Spread (not Object.assign) handles the frozen
+  // TRANSFORM_CHAIN decision; only attaches when the transform redacts.
+  const denyPatterns = policy.deny_patterns;
+  const withRedactPatterns = (d) =>
+    (denyPatterns && denyPatterns.length && d && typeof d.transform === 'string' && /redact-secrets/.test(d.transform))
+      ? { ...d, extraPatterns: denyPatterns }
+      : d;
+
   // Path enforcement (ARCH-27): must run before any routing decision so that
   // deny_paths / allow_paths block access regardless of tool routing config.
   if (PATH_BEARING_TOOLS.has(event.toolName)) {
@@ -185,6 +317,17 @@ function evaluate(event) {
   if (SHELL_TOOLS.has(event.toolName)) {
     const shellBlock = checkShellPathPolicy(event.toolInput, policy);
     if (shellBlock) return shellBlock;
+
+    // Identity gate — hard deny (v2). Runs after path enforcement so an
+    // explicit deny_commands rule blocks the command regardless of routing.
+    const denyBlock = checkDenyCommands(event.toolInput, policy);
+    if (denyBlock) return denyBlock;
+
+    // Identity gate — approval (v2). A command that borrows an identity
+    // (ssh/az/sudo) is gated behind human approval. Today (no approval store)
+    // a match is a fail-closed BLOCK; the store + re-attempt land later.
+    const approvalBlock = checkIdentityApproval(event.toolInput, policy);
+    if (approvalBlock) return approvalBlock;
   }
 
   // Stage 3: tool routing is policy-driven. Read ~/.occasio/policy.yml's
@@ -217,12 +360,12 @@ function evaluate(event) {
   // without chaining — only the two built-in names participate in auto-chain.
   if (entry.action === 'TRANSFORM') {
     if (entry.transform === 'redact-secrets' && policy.distill_tool_results) {
-      return TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], entry.reason || 'per-tool-chain');
+      return withRedactPatterns(TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], entry.reason || 'per-tool-chain'));
     }
     if (entry.transform === 'distill-output' && policy.redact_secrets_in_tool_results) {
-      return TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], entry.reason || 'per-tool-chain');
+      return withRedactPatterns(TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], entry.reason || 'per-tool-chain'));
     }
-    return TRANSFORM(entry.transform, entry.reason || 'per-tool-policy');
+    return withRedactPatterns(TRANSFORM(entry.transform, entry.reason || 'per-tool-policy'));
   }
 
   if (entry.action === 'LOCAL') {
@@ -238,10 +381,10 @@ function evaluate(event) {
       const reason  = (result && result.reason) || 'classifier-rejected';
       if (!handled) return PASS(reason);
       if (policy.redact_secrets_in_tool_results && policy.distill_tool_results) {
-        return TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], reason);
+        return withRedactPatterns(TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], reason));
       }
       if (policy.redact_secrets_in_tool_results) {
-        return TRANSFORM('redact-secrets', reason);
+        return withRedactPatterns(TRANSFORM('redact-secrets', reason));
       }
       if (policy.distill_tool_results) {
         return TRANSFORM('distill-output', reason);
@@ -251,10 +394,10 @@ function evaluate(event) {
     // No classifier specified → unconditional LOCAL (caller's executor must
     // handle invalid input gracefully).
     if (policy.redact_secrets_in_tool_results && policy.distill_tool_results) {
-      return TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], entry.reason || 'ok');
+      return withRedactPatterns(TRANSFORM_CHAIN(['redact-secrets', 'distill-output'], entry.reason || 'ok'));
     }
     if (policy.redact_secrets_in_tool_results) {
-      return TRANSFORM('redact-secrets', entry.reason || 'ok');
+      return withRedactPatterns(TRANSFORM('redact-secrets', entry.reason || 'ok'));
     }
     if (policy.distill_tool_results) {
       return TRANSFORM('distill-output', entry.reason || 'ok');
@@ -360,4 +503,27 @@ function evaluateRequest(ctx = {}) {
   return { action: 'PASS', reason: 'within-budget' };
 }
 
-module.exports = { evaluate, evaluateToolResults, evaluateRequest, pathPrefixMatch, primaryInputPath };
+/**
+ * Gate a single shell command string against the identity gate, in the same
+ * order the live engine uses (path policy → deny_commands → identity_approval).
+ * Returns the BLOCK Decision that would fire, or a PASS Decision if the command
+ * is allowed. Shared by `occasio gate` and (later) the PreToolUse hook so the
+ * CLI preview and live enforcement can never disagree.
+ *
+ * @param {string} command  raw shell command
+ * @param {object} [policy] policy object (defaults to the active policy)
+ * @returns {object} Decision (PASS or BLOCK)
+ */
+function gateShellCommand(command, policy) {
+  const pol = policy || loader.load();
+  const toolInput = { command };
+  const pathBlock = checkShellPathPolicy(toolInput, pol);
+  if (pathBlock) return pathBlock;
+  const denyBlock = checkDenyCommands(toolInput, pol);
+  if (denyBlock) return denyBlock;
+  const approvalBlock = checkIdentityApproval(toolInput, pol);
+  if (approvalBlock) return approvalBlock;
+  return PASS('allow');
+}
+
+module.exports = { evaluate, evaluateToolResults, evaluateRequest, pathPrefixMatch, primaryInputPath, gateShellCommand };

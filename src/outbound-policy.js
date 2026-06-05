@@ -38,11 +38,10 @@ const path = require('path');
 const STRIP_MARKER =
   '[content stripped by Occasio outbound deny_paths — file is under a denied path]';
 
-// Path normalisation mirrors src/policy/engine.js so deny_paths semantics
-// stay byte-identical across both gates.
-const normCase = process.platform === 'win32'
-  ? (p) => p.toLowerCase()
-  : (p) => p;
+// deny_paths semantics (glob + prefix) come from the SAME module the tool-call
+// gate uses, so the two gates can never disagree. (They did once: globs were
+// added to the engine but not here, silently re-opening the auto-context strip.)
+const { pathMatchesEntry } = require('./policy/path-match');
 
 function expandHome(p) {
   return p.startsWith('~') ? os.homedir() + p.slice(1) : p;
@@ -55,21 +54,16 @@ function resolveInputPath(rawPath) {
   catch { return path.resolve(expanded); }
 }
 
-function matchesPrefix(inputNorm, denyNorm) {
-  return inputNorm === denyNorm || inputNorm.startsWith(denyNorm + path.sep);
-}
-
 function pathIsDenied(resolved, policy) {
   if (!resolved) return null;
-  const inputNorm  = normCase(resolved);
   const denyPaths  = policy.deny_paths  || [];
   const allowPaths = policy.allow_paths || [];
 
   for (const d of denyPaths) {
-    if (matchesPrefix(inputNorm, normCase(d))) return 'path-denied';
+    if (pathMatchesEntry(resolved, d)) return 'path-denied';
   }
   if (allowPaths.length > 0) {
-    const ok = allowPaths.some(a => matchesPrefix(inputNorm, normCase(a)));
+    const ok = allowPaths.some(a => pathMatchesEntry(resolved, a));
     if (!ok) return 'path-not-allowed';
   }
   return null;
