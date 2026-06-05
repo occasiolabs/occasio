@@ -21,6 +21,12 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 
+// Isolate the approval store from the real ~/.occasio (engine.checkIdentityApproval
+// now records pending requests on every borrow eval). Set before any require that
+// reaches the store.
+process.env.OCCASIO_APPROVALS_FILE   = path.join(os.tmpdir(), `idgate-approvals-${process.pid}.jsonl`);
+process.env.OCCASIO_APPROVAL_KEY_FILE = path.join(os.tmpdir(), `idgate-approvalkey-${process.pid}`);
+
 require('./src/adapters/claude-code');   // register Bash → shell_bash
 const loader   = require('./src/policy/loader');
 const engine   = require('./src/policy/engine');
