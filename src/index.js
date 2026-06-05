@@ -713,6 +713,16 @@ if (cmd === 'doctor' || cmd === 'check') {
       ok('port', 'auto-assigned at runtime');
     }
 
+    // PreToolUse hook — the second enforcement point for non-proxied execution.
+    try {
+      const hi = require('./cli/hook-install');
+      if (hi.hasOccasioHook(hi.readSettings(hi.settingsFile()))) {
+        ok('PreToolUse hook', 'installed — gates execution even outside the proxy');
+      } else {
+        process.stderr.write(col.y('  ○ PreToolUse hook') + col.d(' — not installed (optional); install: occasio hook --install\n'));
+      }
+    } catch { /* non-fatal */ }
+
     // 5. Python + LAO scorer script
     const laoPyPath = path.join(__dirname, 'lao_prep.py');
     const laoPyExists = fs.existsSync(laoPyPath);
