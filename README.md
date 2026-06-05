@@ -1,6 +1,6 @@
 # Occasio
 
-> Local-first audit chain for AI coding agents. Your prompts, your tool calls, your audit log; all on your machine, cryptographically verifiable later.
+> Local-first audit chain **and identity gate** for AI coding agents. Your prompts, your tool calls, your audit log; all on your machine, cryptographically verifiable later — and an agent may *request* an identity (ssh / cloud / root), not silently *assume* one.
 
 Occasio is a local proxy that sits between your AI coding agent (Claude Code, Cline, or anything that talks to the Anthropic API) and whichever LLM endpoint you configured. Every tool call passes through one human-readable policy file you control. You can see what is leaving your machine in real time, block what should not happen, and end up with a tamper-evident hash-chained log that a third party can verify offline months later if you ever need to prove what your agent did.
 
@@ -20,6 +20,27 @@ occasio harness          # Real Claude Code attacking a denied path — defense 
 ```
 
 The first three demos run against synthetic data so you can see the full pipeline in seconds with no external dependencies. The fourth spawns a real Claude Code subordinate under your Anthropic login (bundled auth — no API key required) and proves the defense end-to-end. Start with `demo audit` — it answers the only question that actually matters: *"prove what your AI agent did in CI."*
+
+---
+
+## Identity gate — request, don't assume
+
+The incident this was built for: an agent is asked only for a deploy command, but on its own it `ssh`es into the server and reads `env`. The `strict` policy stops exactly that — an AI agent may *request* an identity, it may not silently *assume* one.
+
+- **Exfiltration is denied, tool-agnostically.** `printenv`, `cat .env`, `/proc/self/environ`, private-key reads, `grep`-for-secret-names — blocked no matter which command or tool reads them; the output never reaches the model.
+- **Identity borrows need a human.** `ssh` / `scp`, `az` / the cloud control plane, `sudo` / `systemctl` — a fail-closed BLOCK with a "requires human approval" refusal the agent cannot satisfy on its own.
+- **The handshake distinguishes who is who.** The agent *requests*; you authorize once, out-of-band, from your own terminal:
+
+```bash
+occasio init --template strict          # the identity-gated posture
+# agent runs `ssh deploy@host`  →  BLOCKED, pending apr_…
+occasio approvals approve apr_… --once  # you, single-use, short TTL
+# the agent's retry passes through once — then it's blocked again
+```
+
+The agent **cannot self-approve**: the approval control plane is in its deny-zone and the token is HMAC-signed. The chain records `actor=ai_agent · delegator=you · approved_by=you`. A second, non-proxied enforcement point — a PreToolUse hook (`occasio hook --install`) — covers execution that doesn't pass through the proxy.
+
+Full design, threat model, and the **honest residuals** (runtime indirection, egress): [`docs/identity-gate.md`](docs/identity-gate.md).
 
 ---
 
@@ -45,7 +66,8 @@ Requires Node.js ≥ 18. Works on Windows, macOS, Linux.
 ```bash
 npm install -g @occasiolabs/occasio   # Install
 occasio doctor                          # Verify setup (Node, claude CLI, port, profile)
-occasio policy init                     # Write ~/.occasio/policy.yml (dev-default)
+occasio init                            # Write ~/.occasio/policy.yml (dev-default)
+occasio init --template strict          # …or the identity gate: deny secrets, gate ssh/cloud/root behind approval
 occasio register                        # Add 'claude' shell alias (one-time)
 claude "read package.json and tell me the version"
 ```
@@ -270,7 +292,7 @@ Under the hood, four layers do the work — Layers 1–2 every run, Layers 3–4
 
 **Layer 1 — Tool-call interception.** A local proxy sits between the agent and the Anthropic API. `Read`, `Glob`, `Grep`, `TodoRead`/`TodoWrite` run in-process on your machine; the file bytes never enter the outbound request. A curated set of read-only shell commands (`git status`, `git log --oneline -N`, with or without `git -C <path>`, plus `echo` / `cd` cwd-prefix chains) are also executed in-process. Other shell reads (`cat <file>` and similar) are policy-analyzed for embedded read paths so `deny_paths` enforces consistently, but the command itself executes server-side via the Bash tool.
 
-**Layer 2 — Policy enforcement.** Every tool call hits one decision: `LOCAL` / `PASS` / `BLOCK` / `TRANSFORM`, driven by [`policy.yml`](policy-templates/dev-default.yml). `deny_paths` is enforced on the realpath-resolved absolute path so symlinks and traversal variants resolve to the same denial. `block_secrets_in_tool_results` redacts API keys and JWTs out of any tool output before it re-enters the prompt. Hot-reload: edits to `policy.yml` take effect on the next call, with a `policy_loaded` row written to the audit chain.
+**Layer 2 — Policy enforcement.** Every tool call hits one decision: `LOCAL` / `PASS` / `BLOCK` / `TRANSFORM`, driven by [`policy.yml`](policy-templates/dev-default.yml). `deny_paths` is enforced on the realpath-resolved absolute path so symlinks and traversal variants resolve to the same denial. `block_secrets_in_tool_results` redacts API keys and JWTs out of any tool output before it re-enters the prompt. Hot-reload: edits to `policy.yml` take effect on the next call, with a `policy_loaded` row written to the audit chain. The `strict` template adds the **identity gate** — `deny_commands` block exfiltration behaviours (env dumps, secret-name greps) and `identity_approval` gates identity borrows (`ssh` / `az` / `sudo`) behind a single-use, human-approved token (see [Identity gate](#identity-gate--request-dont-assume)).
 
 **Layer 3 — Behavioral attestation.** `occasio attest --run-id <uuid>` produces a self-contained JSON predicate that commits to the full audit-chain slice for one agent session: every tool call, every block, every transform, every redacted secret, plus the active policy's SHA-256 hash and rules digest. `--sign` wraps it in an [in-toto Statement v1](https://github.com/in-toto/attestation) and Sigstore-signs it using GitHub Actions OIDC (no key management). The predicate type URI is [`agent-attestation/v1`](spec/agent-attestation/v1/README.md). Two independent reference verifiers ship — Node (`occasio attest verify`) and Python ([`docs/attest_verify.py`](docs/attest_verify.py)) — and the test suite asserts they agree byte-for-byte on the same payload.
 
