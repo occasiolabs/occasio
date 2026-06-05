@@ -130,8 +130,18 @@ For each row:
 
 1. Take the row object.
 2. Remove the `hash` field.
-3. Serialize **in insertion order** to a UTF-8 string with no whitespace between tokens, no key sorting, and non-ASCII characters emitted literally. (V8 `JSON.stringify` default; equivalent to Python `json.dumps(d, separators=(",", ":"), ensure_ascii=False)` over a Python 3.7+ dict.)
+3. Serialize **exactly as V8's `JSON.stringify` would**: in insertion order, no whitespace between tokens, no key sorting, non-ASCII characters emitted literally, and **numbers formatted by the ECMAScript `Number::toString` rules**.
 4. Compute the lowercase hex SHA-256 of the resulting bytes.
+
+> **Note — number formatting is part of the canonical form.** Python's
+> `json.dumps` is **not** byte-equivalent to V8 for all numbers: small floats
+> differ in decimal-vs-exponential notation (V8 emits `0.00003`, `json.dumps`
+> emits `3e-05`), and integer-valued floats differ (`30` vs `30.0`). The audit
+> rows contain sub-`$0.0001` cost/savings floats, so a naïve `json.dumps`-based
+> verifier will FALSELY reject valid chains. The reference walker
+> (`audit_walker.py`) therefore reimplements V8's `Number::toString` directly;
+> `test-audit-xlang.js` pins Node≡Python over an adversarial number/string
+> battery so the two can never drift.
 
 That is the value of `hash`. The `prev_hash` of the next row equals this `hash`.
 

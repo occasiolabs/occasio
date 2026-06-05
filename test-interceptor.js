@@ -7346,14 +7346,14 @@ console.log('\n3. runLocally');
 
     assert('AUDIT.md: documents genesis sentinel',      auditDoc.includes('0'.repeat(64)));
     assert('AUDIT.md: documents SHA-256 algorithm',     /SHA-256/i.test(auditDoc));
-    assert('AUDIT.md: documents canonical serializer',  /separators=\(",", ":"\)/.test(auditDoc));
+    assert('AUDIT.md: documents canonical serializer',  /JSON\.stringify/.test(auditDoc) && /Number::toString/.test(auditDoc));
     assert('AUDIT.md: links to audit_walker.py',        auditDoc.includes('audit_walker.py'));
     assert('AUDIT.md: documents stability commitment',  /stability/i.test(auditDoc) || /will not change/i.test(auditDoc));
     assert('AUDIT.md: documents what is NOT proven',    /[Dd]oes not prove/.test(auditDoc));
 
     assert('walker: uses hashlib.sha256',               walkerPy.includes('hashlib.sha256'));
-    assert('walker: uses json.dumps with separators',   /json\.dumps[\s\S]*separators=\(",", ":"\)/.test(walkerPy));
-    assert('walker: uses ensure_ascii=False',           walkerPy.includes('ensure_ascii=False'));
+    assert('walker: reproduces V8 Number::toString',    walkerPy.includes('_v8_number') && /ECMAScript|Number::toString/.test(walkerPy));
+    assert('walker: emits non-ASCII literally (V8 quote)', walkerPy.includes('_v8_quote'));
     assert('walker: emits OK on success',               walkerPy.includes('OK:'));
     assert('walker: emits MISMATCH on inconsistency',   walkerPy.includes('MISMATCH'));
 
