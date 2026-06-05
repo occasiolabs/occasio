@@ -331,9 +331,48 @@ async function runToolLoop({
       toolName: canonical, toolInput: b.input,
     });
     const dec = policyEng.evaluate(ev);
-    return { handled: dec.action !== 'PASS', reason: dec.reason, action: dec.action };
+    // Surface the full decision so the caller can detect an identity-approval
+    // grant (a PASS that must consume its one-time token + audit before it
+    // passes through). dec stays read-only here.
+    return { handled: dec.action !== 'PASS', reason: dec.reason, action: dec.action, decision: dec };
+  };
+
+  // Consume identity-approval grants for a freshly-classified batch. A granted
+  // block is a PASS carrying a valid one-time token; this is the SINGLE write
+  // point (the auditor lives here). Consume atomically; on success audit
+  // identity_borrow_consumed and let it pass through; on failure (a race — the
+  // token was denied/expired between the engine's read-only lookup and now)
+  // FAIL-CLOSED by flipping the block to handled→BLOCK so re-evaluation in
+  // runOneRound produces a fresh deferred deny instead of passing through.
+  const consumeGrants = (blocks, classified) => {
+    for (let i = 0; i < classified.length; i++) {
+      const c = classified[i];
+      const dec = c && c.decision;
+      if (!dec || !dec.identityApprovalGranted) continue;
+      const store = require('../policy/identity-store').getStore();
+      const r = store.consume(dec.approval_id);
+      if (r && r.ok) {
+        if (auditor && typeof auditor.record === 'function') {
+          const ev = makeBoundaryEvent({
+            direction: 'inbound', kind: 'tool_call', agent: _agent, protocol: PROTOCOL,
+            sessionId, runId,
+            toolName: toolNames.toCanonical(_agent, blocks[i].name), toolInput: blocks[i].input,
+          });
+          const status = auditor.record(ev, dec, { passThrough: true, approval_id: dec.approval_id });
+          if (status && status.ok === false) {
+            const { AuditWriteError } = require('../audit/errors');
+            throw new AuditWriteError(status.error, status.droppedRow);
+          }
+        }
+      } else {
+        c.handled = true; c.action = 'BLOCK'; c.reason = 'approval_revoked';
+      }
+    }
   };
   const initialClassified = initialToolBlocks.map(b => classifyForAgent(b));
+  // Consume any identity-approval grants before the handled/partial split, so a
+  // race-revoked grant is reclassified to BLOCK rather than passing through.
+  consumeGrants(initialToolBlocks, initialClassified);
   const allHandled         = initialClassified.every(c => c.handled);
   const someHandled        = !allHandled && initialClassified.some(c => c.handled);
   const partialBatch    = someHandled;
@@ -412,6 +451,7 @@ async function runToolLoop({
       }
       // Stage 3: mid-loop interceptability check is also registry+policy-driven.
       const midClassified = toolBlocks.map(b => classifyForAgent(b));
+      consumeGrants(toolBlocks, midClassified);
       if (!midClassified.every(c => c.handled)) {
         const midReasons = [...new Set(midClassified.filter(c => !c.handled).map(c => c.reason))];
         return {

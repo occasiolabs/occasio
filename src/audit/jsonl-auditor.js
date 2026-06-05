@@ -574,6 +574,17 @@ function identityAuditFields(event, decision, result) {
   const command = (event.toolInput && typeof event.toolInput.command === 'string')
     ? event.toolInput.command : '';
   const approvalRequired = !!(decision.approval_required || (result && result.approval_required));
+  // A consumed grant is an ALLOWED action (the command passed through under a
+  // human token), so coverage is 'authorized', not 'enforced' (which means a
+  // command provably did not run). The approval block carries who authorized it.
+  const isConsumed = idy.event_type === 'identity_borrow_consumed';
+  const approval =
+    isConsumed
+      ? { approval_id: idy.approval_id || null, state: 'consumed',
+          approved_by: idy.approved_by || null, identity_source: idy.identity_source || null }
+      : approvalRequired
+        ? { approval_id: idy.approval_id || null, state: 'pending', scope: null }
+        : null;
   return {
     event_type: idy.event_type,
     // High-signal: an enforced deny / approval gate. Separates these from the
@@ -609,9 +620,9 @@ function identityAuditFields(event, decision, result) {
       reason:      decision.reason,
       policy_name: 'identity-gate',
     },
-    approval:          approvalRequired ? { state: 'pending', scope: null } : null,
+    approval,
     enforcement_point: 'proxy',
-    coverage:          'enforced',
+    coverage:          isConsumed ? 'authorized' : 'enforced',
   };
 }
 
