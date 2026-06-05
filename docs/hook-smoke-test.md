@@ -50,7 +50,7 @@ Get-Content (Join-Path $SCRATCH ".claude/settings.json")   # confirm the hook en
 
 bash (macOS/Linux): same, with `export HOME=$(mktemp -d)` and `cd "$HOME"`.
 
-You should see a `hooks.PreToolUse` entry with `matcher: "Bash|PowerShell"` →
+You should see a `hooks.PreToolUse` entry with `matcher: "Bash"` →
 `command: "occasio hook"`.
 
 ## The test — three acts
@@ -67,10 +67,18 @@ Prompt:
 
 > Run this exact shell command: `ssh deploy@192.0.2.1 "echo hi"`
 
-**Expected:** the command does **not** run. Claude Code reports the tool was
-blocked, and the agent sees a refusal like *"requires human approval … occasio
-approvals approve apr_… --once"*. ✅ This is the seam: Claude Code invoked the
-hook and obeyed exit 2.
+**Expected:** the command does **not** run. Claude Code shows a *hook* block —
+e.g. `PreToolUse:Bash hook error: … Occasio: Denied: … requires human approval …
+occasio approvals approve apr_… --once` — and **no** Yes/No prompt. ✅ This is the
+seam: Claude Code invoked the hook and obeyed exit 2.
+
+> **Tell the two apart.** A *hook block* is the "hook error: Denied …" message
+> above, with no permission prompt. If instead you get Claude Code's own
+> **"This command requires approval — Do you want to proceed? Yes/No"**, that is
+> Claude Code's native permission system, **not** the hook — meaning the hook did
+> not fire (see Troubleshooting). After an approval is consumed (Act 3), the hook
+> returns 0 and you *do* fall through to that native Yes/No prompt — there it's
+> the expected signal that the hook let it through.
 
 Confirm out-of-band (a second terminal, **same** scratch HOME):
 
@@ -129,6 +137,18 @@ Remove-Item $SCRATCH -Recurse -Force
 
 ## Troubleshooting
 
+- **You get Claude Code's native Yes/No prompt in Act 1 (not a hook block).** The
+  hook didn't fire. Check, in order:
+  - **`occasio --version` must be the build with the hook** (≥ the release that
+    shipped `occasio hook`). A stale global install silently has no `hook` command.
+    Run `occasio hook --help`; if it's unknown, your global occasio is too old —
+    `npm i -g @occasiolabs/occasio@latest` (or point the hook command at a local
+    build).
+  - **The matcher must be exactly `"Bash"`.** A raw `"Bash|PowerShell"` is NOT a
+    valid match for the `Bash` tool — Claude Code never fires the hook and fails
+    open. Confirm with `/hooks` inside Claude Code (it should list one PreToolUse
+    hook) and check `~/.claude/settings.json`.
+  - **Restart Claude Code after editing settings** — hooks load at session start.
 - **The `ssh` ran in Act 1 (not blocked).** You're likely proxied or un-gated:
   (a) you launched `occasio claude` instead of `claude` (the hook no-ops under the
   proxy — that's correct, but then you're testing the proxy); (b) `occasio` isn't

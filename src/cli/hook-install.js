@@ -18,7 +18,11 @@ const col = {
   c: s => `\x1b[36m${s}\x1b[0m`, d: s => `\x1b[2m${s}\x1b[0m`, b: s => `\x1b[1m${s}\x1b[0m`,
 };
 
-const MATCHER  = 'Bash|PowerShell';
+// Claude Code's shell tool is named "Bash" on every platform. The matcher must
+// be an EXACT name (or a `\|`-escaped list) — a raw "Bash|PowerShell" is parsed
+// as a string/regex that does NOT match "Bash", so the hook silently never fires
+// (verified against real Claude Code + code.claude.com/docs/en/hooks).
+const MATCHER  = 'Bash';
 const HOOK_CMD = 'occasio hook';
 
 function settingsFile() {
@@ -58,7 +62,7 @@ function run() {
 
   process.stdout.write(col.b('\n⚡ Occasio — Hook install\n\n'));
   process.stdout.write(`  ${col.g('✓')} PreToolUse hook registered in ${col.c(file)}\n`);
-  process.stdout.write(col.d('     matcher Bash|PowerShell → occasio hook. It no-ops when the proxy is\n'));
+  process.stdout.write(col.d('     matcher Bash → occasio hook. It no-ops when the proxy is\n'));
   process.stdout.write(col.d('     active, and enforces (gate --enforce) when it is not.\n'));
   process.stdout.write(col.d('     Requires `occasio` on PATH (occasio register installs the alias).\n\n'));
   return 0;
