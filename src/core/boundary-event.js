@@ -33,6 +33,13 @@ const { randomUUID } = require('crypto');
  * @param {object|string} [input.toolResult]
  * @param {object|string} [input.payload]
  * @param {unknown}  [input.raw]         Adapter-private; opaque to other layers
+ * @param {string} [input.actorType]    Who is acting. Default 'ai_agent'. Used
+ *   by the identity gate's audit rows (an agent is an untrusted actor that may
+ *   request, not assume, an identity).
+ * @param {string} [input.trustLevel]   Trust level of the actor. Default
+ *   'untrusted'.
+ * @param {object} [input.delegator]    Who the actor acts on behalf of
+ *   ({ type, id }). Optional; the auditor resolves a default when absent.
  */
 function makeBoundaryEvent({
   direction,
@@ -46,6 +53,9 @@ function makeBoundaryEvent({
   toolResult,
   payload,
   raw,
+  actorType,
+  trustLevel,
+  delegator,
 }) {
   if (!direction) throw new Error('BoundaryEvent.direction is required');
   if (!kind)      throw new Error('BoundaryEvent.kind is required');
@@ -66,6 +76,11 @@ function makeBoundaryEvent({
     toolResult,
     payload,
     raw,
+    // Identity-gate actor context. Defaulted so existing callers/tests that
+    // omit them keep working unchanged.
+    actorType:  actorType  || 'ai_agent',
+    trustLevel: trustLevel || 'untrusted',
+    delegator:  delegator,
   };
 }
 

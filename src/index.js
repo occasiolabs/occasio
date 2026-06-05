@@ -372,6 +372,10 @@ if (cmd === 'scan') {
   process.exit(require('./cli/scan').run(args.slice(1)));
 }
 
+if (cmd === 'gate') {
+  process.exit(require('./cli/gate').run(args.slice(1)));
+}
+
 if (cmd === 'receipt') {
   (async () => process.exit(await require('./cli/receipt').run(args.slice(1))))();
   return;
@@ -1228,7 +1232,7 @@ const server = http.createServer((req, res) => {
                 reason: r.reason,
                 transform: 'redact-secrets',
                 policySource: policyForOutbound.deny_patterns?.length ? 'user' : 'default' },
-              { transformed: true, secretsRedacted: new Array(r.secretsRedacted) },
+              { transformed: true, secretsRedacted: new Array(r.secretsRedacted), secretLabels: r.labels },
             );
             if (status && status.ok === false) {
               const { AuditWriteError } = require('./audit/errors');

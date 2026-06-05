@@ -4558,7 +4558,7 @@ console.log('\n3. runLocally');
       const interceptorSrc = fsTmp.readFileSync(pathTmp.join(__dirname, 'src', 'interceptor.js'), 'utf8');
       assert('interceptor: blocked branch present',
         interceptorSrc.includes("if (r.blocked)") &&
-        interceptorSrc.includes("'(blocked by policy)'"));
+        interceptorSrc.includes("synth.message"));
     }
 
     // ── 10. interceptor: TRANSFORM gate present in distResult computation ──────
@@ -7121,7 +7121,7 @@ console.log('\n3. runLocally');
         Array.isArray(result.partialResults) &&
         result.partialResults.some(p => p.tool_use_id === 'r4'));
       assert('C: partialResult content is the synthetic refusal',
-        result.partialResults.find(p => p.tool_use_id === 'r4').content === '(blocked by policy)');
+        /blocked by policy|denied/i.test(result.partialResults.find(p => p.tool_use_id === 'r4').content));
       assert('C: fallback reason mentions Bash, not the BLOCK',
         (result.fallbackReason || '').includes('Bash'));
       assert('C: BLOCK row written for the denied Read',
@@ -7619,11 +7619,12 @@ console.log('\n3. runLocally');
     const loaderS = require('./src/policy/loader');
     const { validatePolicy } = require('./src/policy/validate');
 
-    assert('VALID_TEMPLATES has exactly 3 names', VALID_TEMPLATES.length === 3);
-    assert('VALID_TEMPLATES includes dev-default/strict/finance',
+    assert('VALID_TEMPLATES has exactly 4 names', VALID_TEMPLATES.length === 4);
+    assert('VALID_TEMPLATES includes dev-default/strict/finance/strict-identity-gate',
       VALID_TEMPLATES.includes('dev-default') &&
       VALID_TEMPLATES.includes('strict') &&
-      VALID_TEMPLATES.includes('finance'));
+      VALID_TEMPLATES.includes('finance') &&
+      VALID_TEMPLATES.includes('strict-identity-gate'));
     assert('DEFAULT_TEMPLATE is dev-default', DEFAULT_TEMPLATE === 'dev-default');
 
     for (const name of VALID_TEMPLATES) {

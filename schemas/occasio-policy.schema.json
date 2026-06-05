@@ -8,8 +8,8 @@
   "properties": {
     "version": {
       "type": "integer",
-      "description": "Policy schema version. Currently 1.",
-      "const": 1
+      "description": "Policy schema version. 1 = base; 2 = adds the identity gate (deny_commands, identity_approval). Both are accepted.",
+      "enum": [1, 2]
     },
     "block_secrets_in_tool_results": {
       "type": "boolean",
@@ -57,6 +57,53 @@
         "type": "string",
         "minLength": 1,
         "description": "JavaScript-flavored regular expression source (without leading/trailing slashes)."
+      }
+    },
+    "deny_commands": {
+      "type": "object",
+      "description": "Identity gate (v2) — hard-deny shell commands by regex. Each entry is label: { command_regex: \"regex-string\" }; the label is the deny reason. A match on a Bash/PowerShell command returns a synthetic BLOCK so the command never executes and the agent never sees its output. Empty (the default) means no command is denied.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command_regex"],
+        "properties": {
+          "command_regex": {
+            "type": "string",
+            "minLength": 1,
+            "description": "JavaScript-flavored regular expression source (without leading/trailing slashes), tested against the raw shell command string."
+          }
+        }
+      }
+    },
+    "identity_approval": {
+      "type": "object",
+      "description": "Identity gate (v2) — shell commands that borrow an identity (ssh into a server, drive a cloud control plane, escalate to root) and must be gated behind human approval. Each entry is label: { command_regex, actor_type?, target_class?, reason? }. A match returns a fail-closed BLOCK that an AI agent cannot satisfy on its own: it may request the identity, not assume it.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command_regex"],
+        "properties": {
+          "command_regex": {
+            "type": "string",
+            "minLength": 1,
+            "description": "JavaScript-flavored regular expression source (without leading/trailing slashes), tested against the raw shell command string."
+          },
+          "actor_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Which actor this rule gates. Default: ai_agent."
+          },
+          "target_class": {
+            "type": "string",
+            "enum": ["local_dev", "staging", "production", "secrets", "cloud", "unknown"],
+            "description": "The blast-radius class of the identity being borrowed."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable reason code surfaced in the refusal and the audit row."
+          }
+        }
       }
     },
     "limits": {

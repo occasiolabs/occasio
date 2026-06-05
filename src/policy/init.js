@@ -27,7 +27,7 @@ const path = require('path');
 // content out of a JS string makes the templates inspectable and reviewable
 // in source control as the durable artefacts they are.
 const TEMPLATES_DIR  = path.join(__dirname, '..', '..', 'policy-templates');
-const VALID_TEMPLATES = ['dev-default', 'strict', 'finance'];
+const VALID_TEMPLATES = ['dev-default', 'strict', 'finance', 'strict-identity-gate'];
 const DEFAULT_TEMPLATE = 'dev-default';
 
 function readTemplate(name) {

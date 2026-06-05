@@ -33,8 +33,14 @@ const KNOWN_TOP_LEVEL = new Set([
   'deny_paths',
   'allow_paths',
   'deny_patterns',
+  'deny_commands',
+  'identity_approval',
   'limits',
 ]);
+
+// Identity gate (v2): closed set of target_class values (mirrors
+// src/policy/loader.js IDENTITY_TARGET_CLASSES — keep in sync).
+const IDENTITY_TARGET_CLASSES = new Set(['local_dev', 'staging', 'production', 'secrets', 'cloud', 'unknown']);
 
 const KNOWN_LIMIT_KEYS = new Set([
   'max_tool_calls_per_round',
@@ -220,6 +226,61 @@ function validatePolicy(parsed) {
               message: `invalid RegExp "${rawPattern}" — ${e.message}`,
             });
           }
+        }
+      }
+    }
+  }
+
+  // deny_commands — identity-gate hard-deny rules: label → { command_regex }.
+  // Error severity: a silently dropped deny rule is a silent security gap.
+  if ('deny_commands' in parsed) {
+    const val = parsed.deny_commands;
+    if (!val || typeof val !== 'object' || Array.isArray(val)) {
+      errors.push({ path: 'deny_commands', message: 'must be a mapping of label: { command_regex: "regex" } entries' });
+    } else {
+      for (const [label, entry] of Object.entries(val)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          errors.push({ path: `deny_commands.${label}`, message: 'must be a mapping with a command_regex field' });
+          continue;
+        }
+        const rx = entry.command_regex;
+        if (typeof rx !== 'string' || !rx.trim()) {
+          errors.push({ path: `deny_commands.${label}.command_regex`, message: `expected a non-empty regex string, got ${JSON.stringify(rx)}` });
+        } else {
+          try { new RegExp(rx); } catch (e) {
+            errors.push({ path: `deny_commands.${label}.command_regex`, message: `invalid RegExp "${rx}" — ${e.message}` });
+          }
+        }
+      }
+    }
+  }
+
+  // identity_approval — identity-borrow rules gated behind human approval:
+  // label → { command_regex, actor_type?, target_class?, reason? }. Error
+  // severity for a dropped rule (silent governance gap).
+  if ('identity_approval' in parsed) {
+    const val = parsed.identity_approval;
+    if (!val || typeof val !== 'object' || Array.isArray(val)) {
+      errors.push({ path: 'identity_approval', message: 'must be a mapping of label: { command_regex: "regex", ... } entries' });
+    } else {
+      for (const [label, entry] of Object.entries(val)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          errors.push({ path: `identity_approval.${label}`, message: 'must be a mapping with a command_regex field' });
+          continue;
+        }
+        const rx = entry.command_regex;
+        if (typeof rx !== 'string' || !rx.trim()) {
+          errors.push({ path: `identity_approval.${label}.command_regex`, message: `expected a non-empty regex string, got ${JSON.stringify(rx)}` });
+        } else {
+          try { new RegExp(rx); } catch (e) {
+            errors.push({ path: `identity_approval.${label}.command_regex`, message: `invalid RegExp "${rx}" — ${e.message}` });
+          }
+        }
+        if ('target_class' in entry && !IDENTITY_TARGET_CLASSES.has(entry.target_class)) {
+          errors.push({
+            path:    `identity_approval.${label}.target_class`,
+            message: `"${entry.target_class}" is not a valid target_class — must be one of ${[...IDENTITY_TARGET_CLASSES].join(', ')}`,
+          });
         }
       }
     }

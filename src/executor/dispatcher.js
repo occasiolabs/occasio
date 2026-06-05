@@ -91,7 +91,18 @@ async function dispatch(event, decision, ctx = {}) {
       return { passThrough: true, reason: decision.reason };
 
     case 'BLOCK':
-      return { blocked: true, response: decision.syntheticResponse, reason: decision.reason };
+      // Forward any identity-gate approval metadata the engine attached to the
+      // Decision (via Object.assign) so the caller can render the approval UX
+      // and the audit row can record what identity was requested.
+      return {
+        blocked:  true,
+        response: decision.syntheticResponse,
+        reason:   decision.reason,
+        ...(decision.approval_required && { approval_required: true }),
+        ...(decision.identity_requested && { identity_requested: decision.identity_requested }),
+        ...(decision.target_class && { target_class: decision.target_class }),
+        ...(decision.risk && { risk: decision.risk }),
+      };
 
     case 'TRANSFORM': {
       // ── Chained transforms ─────────────────────────────────────────────────
@@ -117,10 +128,14 @@ async function dispatch(event, decision, ctx = {}) {
         let chainSecretsRedacted = [];
         let chainDistilled = false, chainSavedTokens = 0, chainLabel = null, chainRawContent = null;
 
+        // Same deny_patterns the engine matched on (carried on the decision),
+        // so path-1 redaction sees the identical secret set as path-2 outbound.
+        const chainOpts = (decision.extraPatterns && decision.extraPatterns.length)
+          ? { extraPatterns: decision.extraPatterns } : undefined;
         for (const tf of decision.transforms) {
           if (tf === 'redact-secrets') {
-            chainSecretsRedacted = scanSecrets(chainOutput);
-            chainOutput = redactSecrets(chainOutput);
+            chainSecretsRedacted = scanSecrets(chainOutput, chainOpts);
+            chainOutput = redactSecrets(chainOutput, chainOpts);
           } else if (tf === 'distill-output') {
             const cmd = event.toolInput?.command || event.toolInput?.script || event.toolName || '';
             const dr = distill(cmd, chainOutput);
@@ -163,8 +178,10 @@ async function dispatch(event, decision, ctx = {}) {
         if (raw.passThrough) return raw;
 
         const output = typeof raw.output === 'string' ? raw.output : String(raw.output || '');
-        const secretsRedacted = scanSecrets(output);
-        const redacted = redactSecrets(output);
+        const redactOpts = (decision.extraPatterns && decision.extraPatterns.length)
+          ? { extraPatterns: decision.extraPatterns } : undefined;
+        const secretsRedacted = scanSecrets(output, redactOpts);
+        const redacted = redactSecrets(output, redactOpts);
         return {
           transformed:     true,
           transform,

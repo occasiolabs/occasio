@@ -14,8 +14,9 @@
  */
 
 const engine = require('./engine');
-let extractShellReadPaths;
-try { ({ extractShellReadPaths } = require('./shell-path')); } catch { extractShellReadPaths = () => []; }
+let extractShellReadPaths, extractCommandPathTokens;
+try { ({ extractShellReadPaths, extractCommandPathTokens } = require('./shell-path')); }
+catch { extractShellReadPaths = () => []; extractCommandPathTokens = () => []; }
 
 // ── raw-text line locators (no YAML location metadata in the parser) ─────────
 
@@ -97,7 +98,11 @@ function matchDenyEntry(event, parsed) {
   if (direct) candidates.push(direct);
   const ti = event.tool_inputs || {};
   if ((event.tool_name === 'shell_bash' || event.tool_name === 'shell_powershell') && typeof ti.command === 'string') {
+    // Mirror the gate's extraction exactly: known read verbs PLUS the
+    // verb-agnostic token backstop, so explain can pinpoint the rule for a
+    // block caught by the backstop (e.g. `less .env`), not just `cat`/`head`.
     for (const p of extractShellReadPaths(ti.command)) candidates.push(p);
+    for (const p of extractCommandPathTokens(ti.command)) candidates.push(p);
   }
   for (const c of candidates) {
     for (let i = 0; i < deny.length; i++) {

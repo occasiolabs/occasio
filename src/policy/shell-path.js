@@ -132,4 +132,62 @@ function extractShellReadPaths(command, baseCwd) {
   return results;
 }
 
-module.exports = { extractShellReadPaths };
+/**
+ * Verb-agnostic backstop: pull every path-like token out of a shell command,
+ * resolved to absolute form. Unlike extractShellReadPaths (which only parses a
+ * known allowlist of read verbs), this makes no assumption about the command —
+ * `less .env`, `awk '{print}' .env`, `cp .env /tmp`, `grep '' .env`, or any
+ * future verb all surface their `.env` operand here. The caller applies
+ * deny_paths against the result, so a sensitive *file* is protected regardless
+ * of which command tries to read it.
+ *
+ * Intentionally broad: a token that merely looks like a path is included, and
+ * the engine only ever uses this to DENY (never to allow), so over-inclusion is
+ * safe — it can only add a block, never remove one. Quotes are stripped; flags
+ * (-x), operators, and non-path tokens are ignored.
+ *
+ * Returns absolute path strings (deduplicated, order-preserving).
+ */
+function extractCommandPathTokens(command, baseCwd) {
+  if (!command || typeof command !== 'string') return [];
+  const cwd = baseCwd || process.cwd();
+  const results = [];
+  const seen = new Set();
+
+  // Track cwd across cd / Set-Location so a denied relative path resolves the
+  // same way the command would actually see it.
+  const segments = command.includes(' && ')
+    ? command.split(' && ')
+    : command.includes(';')
+      ? command.split(';').map(s => s.trim()).filter(Boolean)
+      : [command];
+
+  let curCwd = cwd;
+  for (const seg of segments) {
+    const cdTarget = extractCwdFromCdSegment(seg.trim());
+    if (cdTarget) { curCwd = path.resolve(curCwd, cdTarget); continue; }
+
+    for (const rawTok of seg.split(/\s+/)) {
+      const tok = stripQuotes(rawTok);
+      if (!tok) continue;
+      if (tok.startsWith('-')) continue;                 // flag
+      if (/^[|&;><()$`]+$/.test(tok)) continue;          // shell operator
+      // Path-like heuristic: contains a separator, starts with . or ~, or has a
+      // dotted basename (foo.env, .env). Bare words (cat, ssh) are skipped.
+      const looksLikePath =
+        tok.includes('/') || tok.includes('\\') ||
+        tok.startsWith('.') || tok.startsWith('~') ||
+        /[^/\\]+\.[^/\\.]+$/.test(tok);
+      if (!looksLikePath) continue;
+
+      const expanded = tok.startsWith('~')
+        ? require('os').homedir() + tok.slice(1)
+        : tok;
+      const abs = path.resolve(curCwd, expanded);
+      if (!seen.has(abs)) { seen.add(abs); results.push(abs); }
+    }
+  }
+  return results;
+}
+
+module.exports = { extractShellReadPaths, extractCommandPathTokens };

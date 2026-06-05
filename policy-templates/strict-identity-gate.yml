@@ -1,0 +1,112 @@
+# yaml-language-server: $schema=https://occasio.ai/schemas/occasio-policy.schema.json
+# Occasio policy — strict identity gate (v2)
+#
+# One rule: an AI agent may *request* an identity, it may not silently
+# *assume* one. This posture denies the commands an agent uses to exfiltrate
+# an identity (env/secret dumps, private-key reads) and gates the commands it
+# uses to borrow one (ssh into a server, drive a cloud control plane, escalate
+# to root) behind explicit human approval.
+#
+# Built for the case where an agent is asked only for a deploy command but
+# reaches for the server's environment on its own. Under this policy that
+# attempt is blocked, the agent is told it needs human approval, and the
+# decision is written to the tamper-evident audit chain.
+#
+#   occasio policy show       — confirm the active policy
+#   occasio policy validate   — lint this file
+#   occasio gate "<command>"  — preview a decision (exit 0 allow / 2 deny / 3 approval)
+version: 2
+
+# ── Global flags ──────────────────────────────────────────────────────────────
+block_secrets_in_tool_results: true
+# Redaction is the best-effort BACKSTOP under deny_paths/approval — it masks a
+# secret VALUE that reaches the model regardless of how it was read (grep -ri,
+# interpreter, glob). It is NOT the boundary: it can miss encoded values and
+# does nothing against egress. Every redaction emits a secret_redacted audit
+# event (coverage: best-effort). See docs/identity-gate.md.
+redact_secrets_in_tool_results: true
+distill_tool_results: true
+block_requests_over_budget: true
+
+# ── Path-based access control ─────────────────────────────────────────────────
+# Deny credential / config locations on both POSIX (~) and Windows layouts so
+# a sensitive file is blocked the same way for the typed Read/Glob/Grep tools
+# AND for any shell command (cat, less, awk, cp, grep …). Directory entries are
+# prefixes; glob entries (**/.env) match a filename anywhere, tool-agnostically.
+deny_paths:
+  - "**/.env"        # any .env file, in any directory, read by any tool/command
+  - "**/.env.*"      # .env.local, .env.production, …
+  - "**/environ"     # /proc/<pid>/environ — the live-env dump *file* (Class 1)
+  - "**/id_rsa"      # SSH private keys by filename, anywhere (not just ~/.ssh)
+  - "**/id_ed25519"
+  - "**/id_ecdsa"
+  - "**/id_dsa"
+  - ~/.ssh
+  - ~/.aws
+  - ~/.config/gcloud
+  - ~/.gnupg
+  - ~/.kube
+  - ~/.docker
+  - ~/.netrc
+
+# ── Identity gate — hard deny (genuine command behaviours, not file paths) ────
+# These target COMMANDS, not files — file/credential locations live in
+# deny_paths above (tool-agnostic). A match returns a synthetic BLOCK: the
+# command never executes and the agent never sees its output.
+deny_commands:
+  # `printenv` / `env` dump the live process environment — no file is read, so a
+  # path rule cannot express it. Anchored so it does NOT fire on `.env` files
+  # (those are covered path-side by deny_paths **/.env).
+  env_dump:
+    command_regex: '(^|[\s;&|])(printenv|env)([\s;&|]|$)'
+  # Shell builtins that dump the live env: bare `set`, `declare -p`, `export -p`.
+  # Anchored so `set -e` and `export FOO=1` (legit) do NOT match.
+  shell_env_dump:
+    command_regex: '(^|[\s;&|])set\s*($|[;&|])|\b(declare|export)\s+-p\b'
+  # Searching for secret variable NAMES is a discovery behaviour, not a path.
+  cred_discovery:
+    command_regex: 'grep\b.*(EXAMPLE_API_KEY|PRIVATE_KEY|API_SECRET|PASSPHRASE|MNEMONIC|SEED)'
+
+# ── Output secret scan — backstop for reads with no denied path token ─────────
+# Reads that carry a secret into the result without touching a denied path
+# (grep -ri, python -c open(), find -exec cat) are caught here when the secret
+# value lands in the tool output. block_secrets_in_tool_results (above) blocks
+# it; these custom patterns extend the built-in scanner to the incident's keys.
+# Match the name AND its value (= or :) so redaction masks the *secret*, not
+# just the variable name. A bare name with no value is not a leak.
+deny_patterns:
+  example_api_key: 'EXAMPLE_API_KEY\s*[=:]\s*\S+'
+  generic_pk:    '(PRIVATE_KEY|MNEMONIC|SEED_PHRASE)\s*[=:]\s*\S+'
+
+# ── Identity gate — require human approval (identity borrow) ──────────────────
+# A match is a fail-closed BLOCK with a "requires human approval" refusal. An
+# AI agent cannot satisfy it on its own. target_class records the blast radius.
+identity_approval:
+  production_ssh:
+    command_regex: '\b(ssh|scp)\b'
+    actor_type: ai_agent
+    target_class: production
+    reason: production_ssh_requires_approval
+  # SSH via a library instead of the ssh verb (Class 4).
+  ssh_via_library:
+    command_regex: '\bparamiko\b|\bfabric\b'
+    actor_type: ai_agent
+    target_class: production
+    reason: library_ssh_requires_approval
+  cloud_control_plane:
+    command_regex: '\baz\b'
+    actor_type: ai_agent
+    target_class: cloud
+    reason: cloud_identity_requires_approval
+  # Cloud control plane over raw HTTP instead of the az verb (Class 4).
+  cloud_http_control:
+    command_regex: 'management\.azure\.com|login\.microsoftonline\.com|169\.254\.169\.254'
+    actor_type: ai_agent
+    target_class: cloud
+    reason: cloud_http_requires_approval
+  # Privilege escalation — sudo and its alternatives (Class 4).
+  privileged_service_control:
+    command_regex: '\b(systemctl|sudo|pkexec|doas)\b|(^|[\s;&|])su\b'
+    actor_type: ai_agent
+    target_class: production
+    reason: privileged_identity_requires_approval

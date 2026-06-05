@@ -1013,12 +1013,41 @@ async function runOneRound(toolBlocks, ctx) {
         continue;
       }
 
-      // Defensive: BLOCK from the canonical pipeline is not currently emitted
-      // on the tool-call path, but handle it so the pipeline cannot produce an
-      // unhandled state that silently drops a block.
+      // BLOCK from the canonical pipeline (e.g. the identity gate's deny_commands
+      // / identity_approval rules). The turn stays inside Occasio's loop — the
+      // command never executes and the agent never sees its output. Surface the
+      // decision's syntheticResponse.message verbatim so the deny / approval
+      // text reaches the agent; the whole gate UX depends on this. Carry the
+      // approval metadata into toolsRun so the audit/dashboard can credit and
+      // explain the blocked call.
       if (r.blocked) {
-        toolResults.push({ type: 'tool_result', tool_use_id: blk.id,
-                           content: '(blocked by policy)' });
+        const synth   = r.response || {};
+        const message = (typeof synth.message === 'string' && synth.message)
+          ? synth.message
+          : `blocked by policy${r.reason ? `: ${r.reason}` : ''}`;
+        const cmdLabel = (canonicalName === 'shell_bash' || canonicalName === 'shell_powershell')
+          ? ((blk.input?.command || '').trim() || '(no command)')
+          : (blk.input?.file_path || blk.input?.pattern || canonicalName);
+        toolResults.push({ type: 'tool_result', tool_use_id: blk.id, content: message });
+        toolsRun.push({
+          tool:              blk.name,
+          tool_use_id:       blk.id,
+          cmd:               cmdLabel,
+          exitCode:          1,
+          bytes:             0,
+          kept_bytes:        Buffer.byteLength(message || ''),
+          prevention_reason: r.reason || 'policy_block',
+          outputTokens:      0,
+          native:            true,
+          blocked:           true,
+          blockReason:       r.reason || 'policy_block',
+          ...(r.approval_required && { approvalRequired: true }),
+          ...(r.identity_requested && { identityRequested: r.identity_requested }),
+          ...(r.target_class && { targetClass: r.target_class }),
+        });
+        if (verbose) {
+          process.stderr.write(`  [interceptor/pipeline] BLOCK ${blk.name}(${cmdLabel.slice(0, 60)}) → ${r.reason || 'policy_block'}\n`);
+        }
         continue;
       }
 
