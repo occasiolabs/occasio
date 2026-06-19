@@ -39,15 +39,19 @@ async function main() {
   const TOKEN = process.env.GITHUB_TOKEN;
   const REPO  = process.env.GITHUB_REPOSITORY;
   const SHA   = process.env.OCC_HEAD_SHA;
-  const ATT   = process.env.OCC_ATTESTATION_PATH;
+  const SRC   = process.env.OCC_BUNDLE_PATH || process.env.OCC_ATTESTATION_PATH;
   const REK   = process.env.OCC_REKOR_ENTRY || '';
   const VIEW  = (process.env.OCC_VIEW_BASE_URL || '').replace(/\/+$/, '');
 
   if (!TOKEN) die('GITHUB_TOKEN missing — set inputs.github-token or grant `checks: write`.');
   if (!REPO || !SHA) die('GITHUB_REPOSITORY / head SHA env vars missing.');
-  if (!ATT || !fs.existsSync(ATT)) die(`attestation file not found: ${ATT}`);
+  if (!SRC || !fs.existsSync(SRC)) die(`evidence file not found: ${SRC}`);
 
-  const att = JSON.parse(fs.readFileSync(ATT, 'utf8'));
+  // Accept a single-file evidence bundle (extract its embedded attestation) or
+  // a bare attestation predicate (back-compat with older callers).
+  const parsed = JSON.parse(fs.readFileSync(SRC, 'utf8'));
+  const att = (parsed && parsed.schema === 'occasio-bundle/v1' && parsed.attestation)
+    ? parsed.attestation : parsed;
   const { title, summary, signed } = buildSummary(att, REK);
 
   const detailsUrl = VIEW
