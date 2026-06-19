@@ -6104,6 +6104,15 @@ console.log('\n3. runLocally');
       return dir;
     }
 
+    // The log-file date cutoff (readRecentEntries / mine default = 30 days) is
+    // computed relative to "now", so a hard-coded fixture date silently ages
+    // out of the window. Derive the "recent" log filename from the current
+    // date (2 days ago, always inside any window) so these tests stay green
+    // regardless of when they run. Entry `iso` content can stay fixed — the
+    // cutoff filters on the FILENAME date only (miner.js readRecentEntries).
+    const RECENT_LOG_FILE =
+      new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10) + '.jsonl';
+
     // Helper: capture console.log output
     function capture(fn) {
       const lines = [];
@@ -6269,7 +6278,7 @@ console.log('\n3. runLocally');
     {
       const dir = makeTmpLogsDir({
         '2025-01-01.jsonl': [{ run_id: 'old', iso: '2025-01-01T00:00:00Z', tools: [] }],
-        '2026-05-09.jsonl': [{ run_id: 'new', iso: '2026-05-09T00:00:00Z', tools: [] }],
+        [RECENT_LOG_FILE]: [{ run_id: 'new', iso: '2026-05-09T00:00:00Z', tools: [] }],
       });
       const entries = readRecentEntries(30, dir);
       fsMod.rmSync(dir, { recursive: true, force: true });
@@ -6282,11 +6291,11 @@ console.log('\n3. runLocally');
     // ── 11. readRecentEntries: tolerates malformed lines ─────────────────────
     {
       const dir = makeTmpLogsDir({
-        '2026-05-09.jsonl': [],
+        [RECENT_LOG_FILE]: [],
       });
       // Append malformed line manually
       fsMod.appendFileSync(
-        pathMod.join(dir, '2026-05-09.jsonl'),
+        pathMod.join(dir, RECENT_LOG_FILE),
         'not json\n{"run_id":"good","tools":[]}\n'
       );
       const entries = readRecentEntries(30, dir);
@@ -6317,7 +6326,7 @@ console.log('\n3. runLocally');
         entries5.push(makeEntry(rid, tools, root, `${isoBase}${i}:00Z`));
       }
 
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries5 });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries5 });
       const result = mine({ days: 30, logsDir: dir, filterCwd: root });
       fsMod.rmSync(dir, { recursive: true, force: true });
 
@@ -6344,7 +6353,7 @@ console.log('\n3. runLocally');
         { v: 2, run_id: 'legacy-1', iso: '2026-05-09T10:00:00Z', tools: [makeReadTool('/file.js')] },
         { v: 2, run_id: 'legacy-2', iso: '2026-05-09T10:00:01Z', tools: [makeReadTool('/file.js')] },
       ];
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const result = mine({ days: 30, logsDir: dir });
       fsMod.rmSync(dir, { recursive: true, force: true });
       // No cwd in entries → should produce empty result (nothing to group under)
@@ -6361,7 +6370,7 @@ console.log('\n3. runLocally');
         makeEntry('rA3', [makeReadTool(pathMod.join(rootA, 'a.js'))], rootA, '2026-05-09T10:02:00Z'),
         makeEntry('rB1', [makeReadTool(pathMod.join(rootB, 'b.js'))], rootB, '2026-05-09T10:03:00Z'),
       ];
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const result = mine({ days: 30, logsDir: dir, filterCwd: rootA });
       fsMod.rmSync(dir, { recursive: true, force: true });
 
@@ -6383,7 +6392,7 @@ console.log('\n3. runLocally');
         entries.push(makeEntry(`r${i}`, tools, root, `2026-05-09T10:0${i}:00Z`));
       }
 
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const result = mine({ days: 30, logsDir: dir, filterCwd: root });
       fsMod.rmSync(dir, { recursive: true, force: true });
 
@@ -6410,7 +6419,7 @@ console.log('\n3. runLocally');
           cwd: root, event_type: 'local_only',
           tools: [makeReadTool(file2), makeReadTool(file3)] },
       ];
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const result = mine({ days: 30, logsDir: dir, filterCwd: root });
       fsMod.rmSync(dir, { recursive: true, force: true });
 
@@ -6428,7 +6437,7 @@ console.log('\n3. runLocally');
       const tools = [];
       for (let i = 0; i < 8; i++) tools.push(makeReadTool(pathMod.join(root, `file${i}.js`)));
       const entries = [makeEntry('r1', tools, root)];
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const result = mine({ days: 30, logsDir: dir, filterCwd: root });
       fsMod.rmSync(dir, { recursive: true, force: true });
 
@@ -6444,7 +6453,7 @@ console.log('\n3. runLocally');
         makeEntry('c2', [{ tool: 'read_file',  cmd: pathMod.join(root, 'README.md'), exitCode: 0 }], root),
         makeEntry('c3', [{ tool: 'read_file',  cmd: pathMod.join(root, 'README.md'), exitCode: 0 }], root),
       ];
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const result = mine({ days: 30, logsDir: dir, filterCwd: root });
       fsMod.rmSync(dir, { recursive: true, force: true });
 
@@ -6471,7 +6480,7 @@ console.log('\n3. runLocally');
         makeEntry('r1', [makeReadTool(pathMod.join(root, 'a.js'))], root),
         makeEntry('r2', [makeReadTool(pathMod.join(root, 'a.js'))], root),
       ]; // only 2 sessions, below MIN_SESSIONS_FOR_PATTERN=3
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const out = capture(() =>
         runPreflightCli(['--days', '30'], { cwd: root, logsDir: dir })
       );
@@ -6487,7 +6496,7 @@ console.log('\n3. runLocally');
       for (let i = 0; i < 5; i++) {
         entries.push(makeEntry(`run${i}`, [makeReadTool(readme)], root, `2026-05-09T10:0${i}:00Z`));
       }
-      const dir = makeTmpLogsDir({ '2026-05-09.jsonl': entries });
+      const dir = makeTmpLogsDir({ [RECENT_LOG_FILE]: entries });
       const out = capture(() =>
         runPreflightCli([], { cwd: root, logsDir: dir })
       );
