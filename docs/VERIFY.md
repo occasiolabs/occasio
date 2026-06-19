@@ -1,8 +1,8 @@
 # Verify an Occasio attestation in 60 seconds
 
-You received an Occasio attestation bundle (typically a `.json` predicate plus a `.sigstore.json` Sigstore bundle and a `pipeline-events.jsonl` chain file). This page is the third-party verifier's manual: how to confirm the attestation is genuine, unmodified, and reflects events that actually happened, using only public tools and the verifier code shipped with Occasio.
+You received an Occasio **evidence bundle** — a single `run.occasio.json` file. This page is the third-party verifier's manual: how to confirm it is genuine, unmodified, and reflects events that actually happened, using only public tools and the verifier code shipped with Occasio.
 
-You do not need an Occasio account, a network connection to Occasio Labs, or any vendor portal. The three checks below run offline.
+You do not need an Occasio account, a network connection to Occasio Labs, or any vendor portal. Everything below runs offline. (A legacy multi-file form — a separate `.json` + `.sigstore.json` + `pipeline-events.jsonl` — is still documented at the end for bundles produced before the single-file cutover.)
 
 ## Simplest: a single evidence bundle (one file, one command)
 
@@ -10,10 +10,17 @@ If the producer sent you a single `*.occasio.json` **evidence bundle** (produced
 
 ```bash
 npm install -g @occasiolabs/occasio
-occasio verify run.occasio.json
+occasio verify run.occasio.json            # lenient: quick local check
+occasio verify --strict run.occasio.json   # audit-grade: require signature + policy binding + git state
 ```
 
-`occasio verify` runs six checks offline and exits non-zero on any failure (so it drops straight into CI):
+For an independent check that trusts no Occasio code, an auditor can run the reference Python verifier on the same file — it reproduces the same six checks byte-for-byte (see [`python-verifier.md`](python-verifier.md)):
+
+```bash
+python docs/verify_bundle.py run.occasio.json --strict
+```
+
+`occasio verify` runs six checks offline and exits non-zero on any failure (so it drops straight into CI). `--strict` (and the granular `--require-signature` / `--require-policy-binding` / `--require-git-state`) turn the otherwise-lenient signature / policy / git checks into hard requirements:
 
 1. **schema** — recognised bundle format.
 2. **manifest integrity** — embedded artifacts hash to the recorded manifest.
