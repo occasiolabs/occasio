@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """
+attest_verify.py — DEPRECATED, legacy-format verifier.
+
+This verifies the OLD multi-file form (a separate attestation.json + a
+.sigstore.json sidecar + an external chain file). The launch format is the
+single-file evidence bundle (run.occasio.json); verify it independently with
+``python docs/verify_bundle.py <run.occasio.json> [--strict]`` instead. This
+file is kept for bundles produced before the cutover.
+
 attest_verify.py — independent Python verifier for Occasio's
 AI-Agent Behavioral Attestation v1 predicate.
 
