@@ -312,7 +312,15 @@ function runAttestCli(args) {
   args = args || [];
 
   // Subcommand: `occasio attest verify <file>` → delegate.
+  // DEPRECATED: the launch path is one artifact + one command. Verify the
+  // single-file evidence bundle with `occasio verify`. This shim still runs so
+  // existing CI does not hard-break mid-transition, but it warns on every use.
   if (args[0] === 'verify') {
+    process.stderr.write(
+      '[Occasio] `occasio attest verify` is deprecated. Build a bundle with ' +
+      '`occasio bundle --sign` and verify it with `occasio verify <run.occasio.json>` ' +
+      '(add --strict for CI).\n'
+    );
     const { runAttestVerifyCli } = require('./verify');
     return runAttestVerifyCli(args.slice(1)).catch(e => {
       process.stderr.write(`[Occasio] attest verify: ${e.message}\n`);
@@ -326,7 +334,7 @@ function runAttestCli(args) {
       '  occasio attest --run-id <uuid> [--out <path>] [--log <path>] [--policy <path>] [--stdout]\n' +
       '                    [--sign] [--sign-mode ci|token] [--oidc-token <jwt>] [--bundle-out <path>]\n' +
       '                    [--git-commit <sha>] [--files-changed <a,b,c>]\n' +
-      '  occasio attest verify <attestation.json> [--bundle <path>]\n'
+      '  occasio attest verify <attestation.json> [--bundle <path>]   (deprecated → use `occasio verify`)\n'
     );
     return;
   }

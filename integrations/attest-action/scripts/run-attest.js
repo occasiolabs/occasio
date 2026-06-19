@@ -102,34 +102,31 @@ function main() {
   if (gitCommit  && !validCommitSha(gitCommit)) die(`Invalid github SHA: ${gitCommit}`);
 
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-  const outPath   = path.join(workspace, 'occasio-attestation.json');
-  const bunPath   = path.join(workspace, 'occasio-attestation.sigstore.json');
+  const outPath   = path.join(workspace, 'run.occasio.json');
 
-  const args = [
-    'attest',
-    '--run-id', runId,
-    '--out',    outPath,
-    '--bundle-out', bunPath,
-  ];
+  // One artifact, one command: `occasio bundle` packs the attestation, the
+  // run's chain slice, the policy snapshot and (with --sign) the Sigstore
+  // bundle into a single self-contained file. git_state is chain-sourced
+  // inside the bundle, so there is no --git-commit/--files-changed injection
+  // here — the embedded git_state is exactly what `occasio verify --strict`
+  // cross-checks against the chain.
+  const args = ['bundle', '--run', runId, '--out', outPath];
   if (chainFile)  args.push('--log',    chainFile);
   if (policyFile) args.push('--policy', policyFile);
-  if (gitCommit)  args.push('--git-commit', gitCommit);
-  const files = resolveFilesChanged();
-  if (files.length) args.push('--files-changed', files.join(','));
-  if (sign) args.push('--sign');
+  if (sign)       args.push('--sign');
 
   process.stdout.write(`[attest-action] occasio ${args.join(' ')}\n`);
   const r = spawnSync('occasio', args, { encoding: 'utf8', stdio: 'inherit' });
-  if (r.status !== 0) die(`occasio attest failed (exit ${r.status})`);
+  if (r.status !== 0) die(`occasio bundle failed (exit ${r.status})`);
 
-  out('attestation-path', outPath);
-  out('bundle-path',      sign ? bunPath : '');
+  out('bundle-path',      outPath);
+  out('attestation-path', outPath);  // back-compat alias: same single file
 
-  // Extract rekor entry from the produced attestation, if present.
+  // Extract rekor entry from the bundle's embedded attestation, if signed.
   let rekor = '';
   try {
-    const att = JSON.parse(fs.readFileSync(outPath, 'utf8'));
-    rekor = (att && att.signature && att.signature.rekor_entry) || '';
+    const b = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+    rekor = (b && b.attestation && b.attestation.signature && b.attestation.signature.rekor_entry) || '';
   } catch { /* ignore */ }
   out('rekor-entry', rekor);
 }

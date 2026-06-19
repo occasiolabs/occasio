@@ -41,12 +41,12 @@ inputs:
     default: 'https://occasiolabs.github.io/attest-view'
 
 outputs:
-  attestation-path:
-    description: 'Filesystem path to the written attestation.json'
-    value: ${{ steps.attest.outputs.attestation-path }}
   bundle-path:
-    description: 'Filesystem path to the written Sigstore bundle (.sigstore.json)'
+    description: 'Filesystem path to the single-file evidence bundle (run.occasio.json), verifiable with `occasio verify`'
     value: ${{ steps.attest.outputs.bundle-path }}
+  attestation-path:
+    description: 'Back-compat alias for bundle-path (same single file)'
+    value: ${{ steps.attest.outputs.attestation-path }}
   check-run-url:
     description: 'URL of the created GitHub Check Run'
     value: ${{ steps.check.outputs.check-run-url }}
@@ -87,21 +87,16 @@ runs:
     # bundle), the action fails before the artifact reaches anyone who would
     # rely on it. Only runs when the attestation was actually signed
     # (inputs.sign == 'true'); unsigned attestations have nothing to verify.
-    - name: Self-verify signed attestation
+    - name: Self-verify the signed evidence bundle (strict)
       if: inputs.sign == 'true' && steps.attest.outputs.bundle-path != ''
       shell: bash
-      run: |
-        occasio attest verify \
-          "${{ steps.attest.outputs.attestation-path }}" \
-          --bundle "${{ steps.attest.outputs.bundle-path }}"
+      run: occasio verify --strict "${{ steps.attest.outputs.bundle-path }}"
 
-    - name: Upload attestation artifacts
+    - name: Upload evidence bundle
       uses: actions/upload-artifact@v4
       with:
-        name: occasio-attestation
-        path: |
-          ${{ steps.attest.outputs.attestation-path }}
-          ${{ steps.attest.outputs.bundle-path }}
+        name: occasio-evidence-bundle
+        path: ${{ steps.attest.outputs.bundle-path }}
         if-no-files-found: error
         retention-days: 90
 
