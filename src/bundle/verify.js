@@ -16,6 +16,12 @@
  *
  * Returns { ok, checks:[{name,ok,detail}] }. CLI exits non-zero on failure, so
  * `occasio verify bundle.occasio.json` is a drop-in CI gate.
+ *
+ * Strictness (lenient by default; opt in via ctx for audit-grade evidence):
+ *   ctx.requireSignature      — an unsigned bundle fails instead of passing #6
+ *   ctx.requirePolicyBinding  — policy.source=inferred / no snapshot fails #4
+ *   ctx.requireGitState       — a missing chain-sourced git_state fails #5
+ * The CLI maps --strict to all three (plus granular --require-* flags).
  */
 
 const fs     = require('fs');
@@ -111,6 +117,11 @@ async function verifyBundle(bundlePath, ctx = {}) {
         throw new Error('policy snapshot bytes do not match attestation.policy.file_hash (policy swap)');
       }
       checks.push({ name: 'policy binding', ok: true, detail: `policy ${snapSha.slice(0, 12)}…` });
+    } else if (ctx.requirePolicyBinding) {
+      return fail('policy binding',
+        pol && pol.source === 'inferred'
+          ? 'required (--require-policy-binding) but policy.source=inferred — no committed policy bytes to bind'
+          : 'required (--require-policy-binding) but bundle carries no policy snapshot');
     } else {
       checks.push({ name: 'policy binding', ok: true,
         detail: pol && pol.source === 'inferred' ? 'skipped (policy.source=inferred — weaker evidence)' : 'skipped (no policy snapshot)' });
@@ -131,6 +142,9 @@ async function verifyBundle(bundlePath, ctx = {}) {
       const fp = (s) => (s && s.head) ? s.head.slice(0, 12) : (s ? 'no-head' : '—');
       checks.push({ name: 'git state matches chain', ok: true,
         detail: `run_start ${fp(rederived.run_start)} · run_end ${fp(rederived.run_end)}` });
+    } else if (ctx.requireGitState) {
+      return fail('git state matches chain',
+        'required (--require-git-state) but attestation carries no chain-sourced git_state');
     }
   } catch (e) {
     return fail('git state matches chain', e.message);
@@ -159,6 +173,8 @@ async function verifyBundle(bundlePath, ctx = {}) {
     } catch (e) {
       return fail('signature', e.message);
     }
+  } else if (ctx.requireSignature) {
+    return fail('signature', 'required (--require-signature) but bundle is unsigned');
   } else {
     checks.push({ name: 'signature', ok: true, detail: 'unsigned bundle (no signature to verify)' });
   }
@@ -170,26 +186,43 @@ async function verifyBundle(bundlePath, ctx = {}) {
 
 async function runCli(args) {
   args = args || [];
-  if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+  const wantsHelp  = args.includes('--help') || args.includes('-h');
+  const flags      = new Set(args.filter(a => a.startsWith('-')));
+  const positional = args.filter(a => !a.startsWith('-'));
+
+  if (wantsHelp || positional.length === 0) {
     process.stdout.write(
-      'Usage: occasio verify <bundle.occasio.json>\n\n' +
+      'Usage: occasio verify <bundle.occasio.json> [--strict]\n\n' +
       'Verifies a portable evidence bundle offline (schema, manifest, chain\n' +
       'slice, policy binding, git state, and signature if present).\n' +
-      'Exits non-zero on any failure — usable directly as a CI gate.\n'
+      'Exits non-zero on any failure — usable directly as a CI gate.\n\n' +
+      'Strictness (default: lenient — unsigned / inferred-policy / no-git\n' +
+      'bundles still pass, for quick local checks):\n' +
+      '  --strict                  require signature AND policy binding AND git state\n' +
+      '  --require-signature       fail if the bundle is unsigned\n' +
+      '  --require-policy-binding  fail if policy.source=inferred or no policy snapshot\n' +
+      '  --require-git-state       fail if no chain-sourced git_state is present\n'
     );
-    return args.length === 0 ? 2 : 0;
+    return wantsHelp ? 0 : 2;
   }
+
+  const strict = flags.has('--strict');
+  const reqCtx = {
+    requireSignature:     strict || flags.has('--require-signature'),
+    requirePolicyBinding: strict || flags.has('--require-policy-binding'),
+    requireGitState:      strict || flags.has('--require-git-state'),
+  };
 
   const col = {
     g: s => `\x1b[32m${s}\x1b[0m`, r: s => `\x1b[31m${s}\x1b[0m`,
     d: s => `\x1b[2m${s}\x1b[0m`,  b: s => `\x1b[1m${s}\x1b[0m`,
   };
-  const bundlePath = path.resolve(args[0]);
-  process.stdout.write(`${col.b('Verifying')} ${bundlePath}\n\n`);
+  const bundlePath = path.resolve(positional[0]);
+  process.stdout.write(`${col.b('Verifying')} ${bundlePath}${strict ? col.d(' (strict)') : ''}\n\n`);
 
   let result;
   try {
-    result = await verifyBundle(bundlePath);
+    result = await verifyBundle(bundlePath, reqCtx);
   } catch (e) {
     process.stderr.write(`${col.r('✗')} verify crashed: ${e.message}\n`);
     return 2;

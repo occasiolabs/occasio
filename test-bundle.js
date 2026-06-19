@@ -279,6 +279,74 @@ console.log('\n2. verifyBundle — honest');
     assert('forged signed bundle fails overall', badR.ok === false);
   }
 
+  // ── 11. strict mode — required checks fail-closed ──────────────────────────
+  console.log('\n11. strict mode — --strict / --require-* fail-closed');
+  {
+    // (a) lenient default: unsigned bundle still passes, signature marked unsigned
+    const fLenient = path.join(dir, 'strict-lenient.json');
+    fs.writeFileSync(fLenient, JSON.stringify(baseBundle));
+    const rLenient = await verifyBundle(fLenient);          // no requirements
+    assert('lenient default: unsigned bundle passes', rLenient.ok === true);
+    assert('lenient default: signature check notes unsigned',
+      rLenient.checks.find(c => c.name === 'signature' && c.ok && /unsigned/.test(c.detail)) !== undefined);
+
+    // (b) unsigned + requireSignature → fail on signature
+    const rSig = await verifyBundle(fLenient, { requireSignature: true });
+    assert('requireSignature: unsigned bundle fails', rSig.ok === false);
+    assert('requireSignature: signature is the failing check',
+      rSig.checks.find(c => c.name === 'signature' && c.ok === false) !== undefined);
+
+    // (c) inferred policy + requirePolicyBinding → fail on policy binding
+    const bInf = JSON.parse(JSON.stringify(baseBundle));
+    bInf.attestation.policy.source = 'inferred';
+    recomputeManifest(bInf);
+    const fInf = path.join(dir, 'strict-inferred.json');
+    fs.writeFileSync(fInf, JSON.stringify(bInf));
+    assert('lenient: inferred policy still passes', (await verifyBundle(fInf)).ok === true);
+    const rPol = await verifyBundle(fInf, { requirePolicyBinding: true });
+    assert('requirePolicyBinding: inferred policy fails', rPol.ok === false);
+    assert('requirePolicyBinding: policy binding is the failing check',
+      rPol.checks.find(c => c.name === 'policy binding' && c.ok === false) !== undefined);
+
+    // (d) missing git_state + requireGitState → fail on git state
+    const bNoGit = JSON.parse(JSON.stringify(baseBundle));
+    delete bNoGit.attestation.subject.git_state;
+    recomputeManifest(bNoGit);
+    const fNoGit = path.join(dir, 'strict-nogit.json');
+    fs.writeFileSync(fNoGit, JSON.stringify(bNoGit));
+    assert('lenient: missing git_state still passes', (await verifyBundle(fNoGit)).ok === true);
+    const rGit = await verifyBundle(fNoGit, { requireGitState: true });
+    assert('requireGitState: missing git_state fails', rGit.ok === false);
+    assert('requireGitState: git state is the failing check',
+      rGit.checks.find(c => c.name === 'git state matches chain' && c.ok === false) !== undefined);
+
+    // (e) a fully signed, bound, git-stamped bundle passes the strict trifecta
+    function jwt(claims) {
+      const enc = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
+      return `${enc({ alg: 'none' })}.${enc(claims)}.sig`;
+    }
+    const attS = buildAttestation({ runId: RUN, logFile: chainFile, policyFile: polFile });
+    const signStub = {
+      attest(payload, payloadType) {
+        return Promise.resolve({
+          mediaType: 'application/vnd.dev.sigstore.bundle+json;version=0.3',
+          verificationMaterial: { tlogEntries: [{ logIndex: '7' }] },
+          dsseEnvelope: { payload: payload.toString('base64'), payloadType },
+        });
+      },
+    };
+    const outS = await signAttestation(attS, { oidcToken: jwt({ sub: 'repo:o/r:ref:refs/heads/main' }), sigstoreModule: signStub });
+    attS.signature = outS.signatureBlock;
+    const signedStrict = buildBundle({ runId: RUN, logFile: chainFile, policyFile: polFile, attestation: attS, sigstoreBundle: outS.bundle });
+    const fStrict = path.join(dir, 'strict-signed.json');
+    fs.writeFileSync(fStrict, JSON.stringify(signedStrict));
+    const rStrict = await verifyBundle(fStrict, {
+      sigstoreModule: { verify: async () => true },
+      requireSignature: true, requirePolicyBinding: true, requireGitState: true,
+    });
+    assert('strict: fully signed+bound+git bundle passes all requirements', rStrict.ok === true, JSON.stringify(rStrict.checks));
+  }
+
   // cleanup + summary
   for (const d of tmps) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
   console.log(`\n${failed === 0 ? '✓' : '✗'} bundle: ${passed} passed, ${failed} failed\n`);
