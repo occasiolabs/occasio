@@ -73,15 +73,15 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # ── Sign + Check Run ───────────────────────────────────────────
-      - uses: occasiolabs/attest-action@v1
+      - uses: occasiolabs/occasio/integrations/attest-action@v1
         # All inputs optional — run_id auto-resolves from session.json,
         # paths default to ~/.occasio/*. Defaults are tuned for the
         # 95% case.
 ```
 
 That's it. The composite Action handles:
-- `occasio attest --sign` using the workflow's OIDC token (no key management)
-- Uploading `attestation.json` + `.sigstore.json` as a workflow artifact (90-day retention)
+- `occasio bundle --sign` using the workflow's OIDC token (no key management)
+- Self-verifying the bundle with `occasio verify --strict`, then uploading the single `run.occasio.json` evidence bundle as a workflow artifact (90-day retention)
 - Creating the Check Run via the GitHub API
 
 ## Step 4 — what reviewers see
@@ -100,21 +100,18 @@ Click **View evidence** to open the [viewer](https://occasiolabs.github.io/attes
 The viewer **deliberately does not** verify the Sigstore certificate chain in-browser — bundling Fulcio/Rekor trust roots in-browser is a serious build problem we have not solved cheaply, and we are honest about it on the page itself. Offline crypto-verification is one CLI call:
 
 ```bash
-occasio attest verify occasio-attestation.json
+occasio verify --strict run.occasio.json
 ```
 
-That command runs three checks in order, all of which must pass:
-1. Sigstore signature is valid (cert chain → Fulcio root, Rekor inclusion proof)
-2. The DSSE payload inside the bundle byte-matches the attestation predicate (modulo `signature` field)
-3. The audit chain integrity verifies end-to-end; the claimed `first_hash` / `last_hash` exist in the chain in the right relative order
+That command runs six checks in order, all of which must pass — schema, manifest integrity, chain-slice integrity (anchored to the attestation's `first_hash`/`last_hash`), policy binding, git-state cross-check, and the Sigstore signature. See [VERIFY.md](VERIFY.md) for the full list, and [python-verifier.md](python-verifier.md) for the independent Python re-verification (`python docs/verify_bundle.py run.occasio.json --strict`).
 
 ## Step 5 — what auditors do
 
 Auditors do not need access to the producer's machine. They download the workflow artifact, install Occasio (or `cosign`), and verify offline. The signed artifact is portable and self-contained: predicate JSON + Sigstore Bundle + (optionally) the chain file.
 
 For a SOC2 audit period the workflow becomes:
-1. Pull all `occasio-attestation` artifacts from the period (GitHub API)
-2. For each: `occasio attest verify` and capture the exit code
+1. Pull all `occasio-evidence-bundle` artifacts from the period (GitHub API)
+2. For each: `occasio verify --strict run.occasio.json` and capture the exit code
 3. Aggregate the `execution_summary` data: how many runs, how many blocks, what rules, what files
 
 The audit chain is hash-linked across all of an agent's runs on the same machine; verifying any one slice does not require touching the producer's full log.
@@ -129,7 +126,6 @@ The audit chain is hash-linked across all of an agent's runs on the same machine
 ## What this does NOT yet do
 
 - **Multi-commit attestations.** Today the predicate binds to a single `run_id`. v1.1 will likely add `subject.git_commits[]` and a way to merge slices for a PR that includes N commits from M runs.
-- **Embedded chain slice.** Today the chain-file path is advisory; the chain itself is not bundled. A v1.x option may add an embedded compressed chain for fully offline replay at a size cost.
 - **Policy provenance.** `policy.file_hash` commits to the file bytes. We do not yet carry the *origin* of the policy (was it committed to a repo? signed by a security team?). v1.1 may add `policy.attestation_url` for nested signed claims.
 
 ## Reference / further reading

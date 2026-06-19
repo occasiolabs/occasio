@@ -40,13 +40,16 @@ removed from the outbound request, not just logged.
 Caption: **"Every action is hash-chained and signed. Here's the proof."**
 
 ```
-occasio attest verify session.json
+occasio verify --strict run.occasio.json
 ```
-Show the three green checks rolling in:
+Show the six green checks rolling in:
 ```
-✓ sigstore signature       valid (Fulcio + Rekor)
-✓ predicate equivalence    byte-identical
-✓ audit chain integrity    GENESIS → 3,174 rows
+✓ schema                   occasio-bundle/v1
+✓ manifest integrity       digest 9f2c… 
+✓ chain slice integrity    3,174 rows, anchored to attestation
+✓ policy binding           policy 4a7b…
+✓ git state matches chain  run_start 1a2b… · run_end 9f8e…
+✓ signature                valid (Fulcio + Rekor)
 verified — there is no "trust us" path
 ```
 

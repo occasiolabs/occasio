@@ -8,55 +8,54 @@ A predicate type whose verification is only feasible in the language that produc
 
 This is the proof artifact for the OpenSSF / in-toto Attestation Registry submission. The same predicate JSON + Sigstore bundle is verified pass/fail by:
 
-- `occasio attest verify` (Node)
-- `python docs/attest_verify.py` (Python)
+- `occasio verify` (Node, `src/bundle/verify.js`)
+- `python docs/verify_bundle.py` (Python)
 - The browser viewer at [`integrations/attest-view/`](../integrations/attest-view/) (in-browser, partial — Sigstore crypto is deferred to one of the two above)
 
-The Node test suite asserts that all three implementations agree byte-for-byte on the same payload (`test-interceptor.js` — search for `xlang:`).
+The Node test suite asserts that Node and Python agree byte-for-byte on the same single-file evidence bundle (`test-bundle-xlang.js`) — honest bundles pass in both, each single-point tamper (chain / policy / git / manifest bytes) fails the same check in both, and the strict requirements fail closed identically. (The per-row canonical-serialization guarantee they both depend on has its own Node↔Python pin in `test-audit-xlang.js`.)
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `canonicalize.py` | RFC 8785 subset, mirror of `src/attest/canonicalize.js` |
-| `audit_walker.py` | SHA-256 chain walker (pre-existing, reused) |
-| `attest_verify.py` | End-to-end verifier with CLI |
+| `canonicalize.py` | RFC 8785 subset, mirror of `src/attest/canonicalize.js` (predicate + git_state comparison) |
+| `audit_walker.py` | SHA-256 chain walker + V8 `JSON.stringify` reproduction (`_v8_json`), reused for the manifest hashes and per-row chain hash |
+| `verify_bundle.py` | **Bundle verifier** for `run.occasio.json`, mirror of `src/bundle/verify.js` (the launch verifier) |
+| `attest_verify.py` | Legacy verifier for the pre-cutover multi-file form (`.json` + `.sigstore.json` + chain) |
 
 The Python `canonicalize` and the JS `canonicalize` must stay in lockstep. The two files exist in parallel deliberately — bundling them into one cross-compiled artifact would defeat the point of cross-language verifiability.
 
 ## Usage
 
 ```bash
-# Verify a signed attestation pair end-to-end
-python docs/attest_verify.py path/to/occasio-attestation.json
+# Verify a single-file evidence bundle (lenient — quick local check)
+python docs/verify_bundle.py path/to/run.occasio.json
 
-# Explicit bundle path (default: <attestation>.sigstore.json sidecar)
-python docs/attest_verify.py path/to/att.json --bundle path/to/bundle.json
+# Audit-grade: require signature + policy binding + git state
+python docs/verify_bundle.py path/to/run.occasio.json --strict
 
-# Override the chain file (default: read chain_file from the attestation)
-python docs/attest_verify.py path/to/att.json --chain path/to/pipeline-events.jsonl
+# Or granular requirements
+python docs/verify_bundle.py path/to/run.occasio.json --require-policy-binding --require-git-state
 
 # Machine-readable output
-python docs/attest_verify.py --json path/to/att.json
+python docs/verify_bundle.py --json path/to/run.occasio.json
 ```
 
-Exit code 0 when every (non-skipped) check passes, 1 otherwise.
+Exit code 0 when every check passes, 1 otherwise. (The legacy `attest_verify.py` keeps the same CLI shape for the old multi-file form.)
 
-## What the three checks prove
+## What the six checks prove
 
-1. **Sigstore signature** — Fulcio certificate chain valid + Rekor inclusion proof present. Requires `pip install sigstore`; without it the step is marked `SKIP` so the auditor knows not to trust a partial result.
-2. **Bundle payload matches attestation** — re-decode the DSSE envelope, canonicalize its `predicate`, compare canonical bytes to the canonicalised attestation (minus `signature` metadata). Pure-stdlib, always runs.
-3. **Audit chain integrity** — SHA-256 walk every `prev_hash → hash` link from GENESIS, then assert that the attestation's `first_hash` and `last_hash` appear in the chain in the correct relative order. Reuses `audit_walker.py`.
-
-Each check is independent. Skipping any one of them is not the same as a full verification, and the verifier surfaces that distinction explicitly (the overall pass requires `ok=True` on every check; skipped counts as not-ok).
+Identical to `occasio verify`, in the same order: **schema**, **manifest integrity** (embedded artifacts hash to the manifest, via the V8 `JSON.stringify` reproduction in `audit_walker._v8_json`), **chain slice integrity** (per-row hash recomputes + links, anchored to the attestation's `first_hash`/`last_hash`), **policy binding** (`sha256(policy_snapshot) == attestation.policy.file_hash`), **git state** (`deriveGitState(slice)` byte-matches `subject.git_state`), and **signature** (Sigstore valid + DSSE predicate matches; needs `pip install sigstore`). Under `--strict` the last-three skips become hard failures.
 
 ## Round-trip claim
 
-For a payload produced by `occasio attest --sign` and verified by `occasio attest verify`, the Python verifier produces the same pass/fail result on:
-- the unmodified payload (both pass on steps 2+3; step 1 requires sigstore-python)
-- a tampered predicate (both fail at step 2)
-- a tampered chain (both fail at step 3)
-- a tampered Sigstore bundle (both fail at step 1; SKIP if sigstore-python not installed)
+For a `run.occasio.json` produced by `occasio bundle --sign`, the Python verifier produces the same pass/fail result as `occasio verify` on (proven by `test-bundle-xlang.js`):
+- the unmodified bundle (both pass)
+- a tampered chain row (both fail at *chain slice integrity*)
+- a swapped policy snapshot (both fail at *policy binding*)
+- a forged `subject.git_state` (both fail at *git state matches chain*)
+- edited manifest bytes (both fail at *manifest integrity* — proves the `_v8_json` byte-equality)
+- an unsigned bundle under `--strict` (both fail at *signature*)
 
 The test suite covers cases 1, 2, and 3 deterministically with the Sigstore step mocked. The cross-language byte-equivalence on the predicate-canonicalization step is asserted via Python-spawn from the Node test runner (`xlang:` and `xlang-float:` test blocks); both implementations reject non-integer numbers so the equivalence cannot be silently broken by adding a float field to a future schema. Case 4 (real Sigstore tamper detection) requires GitHub Actions OIDC infrastructure and is exercised by the live Action's self-verify step in CI, not by the in-process test suite.
 

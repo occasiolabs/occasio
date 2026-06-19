@@ -37,11 +37,11 @@ jobs:
       #    (See docs/reference-pipeline.md for driving Claude Code in CI.)
       #    For a minimal adoption signal you can attest an existing chain file.
 
-      - name: Sign behavioral attestation
-        run: occasio attest --run-id "${{ github.run_id }}" --sign
+      - name: Bundle + sign the evidence
+        run: occasio bundle --run "${{ github.run_id }}" --sign --out run.occasio.json
 
-      - name: Verify it (all three checks)
-        run: occasio attest verify occasio-attestation.json
+      - name: Verify it (six checks, strict)
+        run: occasio verify --strict run.occasio.json
 
       - name: Summary
         if: always()
@@ -55,12 +55,16 @@ jobs:
 ```
 
 ## Notes
-- `occasio attest --sign` only works where an OIDC token is available (GitHub
-  Actions with `id-token: write`). Locally it builds an *unsigned* attestation —
-  the chain + predicate still verify; the Sigstore step is marked skipped.
-- `occasio attest verify` exits non-zero if any of the three checks fail, so it
+- `occasio bundle --sign` only signs where an OIDC token is available (GitHub
+  Actions with `id-token: write`). Locally it builds an *unsigned* bundle —
+  the chain + predicate still verify; signature is marked unsigned. Use
+  `occasio verify` (lenient) for an unsigned bundle; `--strict` requires a
+  signature, policy binding and git state, and is the audit-grade CI gate.
+- `occasio verify --strict` exits non-zero if any of the six checks fail, so it
   gates the job honestly.
 - No telemetry: nothing in this workflow calls Occasio Labs. Signing talks only
   to the public Sigstore (Fulcio + Rekor) infrastructure.
-- Minimal-adoption variant: even a job that just runs `occasio attest verify` on
-  a committed attestation bundle counts as a public reference.
+- Minimal-adoption variant: even a job that just runs `occasio verify` on a
+  committed `run.occasio.json` bundle counts as a public reference.
+- Independent re-verification, no Occasio code trusted:
+  `python docs/verify_bundle.py run.occasio.json --strict`.

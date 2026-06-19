@@ -45,7 +45,7 @@ jobs:
       # - run: npm i -g @occasiolabs/occasio @anthropic-ai/claude-code
       # - run: occasio claude < your-prompt.txt
 
-      - uses: occasiolabs/attest-action@v1
+      - uses: occasiolabs/occasio/integrations/attest-action@v1
         with:
           run-id: ''             # auto-resolves from ~/.occasio/session.json
 ```
@@ -66,8 +66,8 @@ jobs:
 
 | Name | Description |
 |---|---|
-| `attestation-path` | Filesystem path to `occasio-attestation.json`. |
-| `bundle-path` | Filesystem path to `occasio-attestation.sigstore.json`. |
+| `bundle-path` | Filesystem path to the single-file evidence bundle `run.occasio.json`, verifiable with `occasio verify`. |
+| `attestation-path` | Back-compat alias for `bundle-path` (same single file). |
 | `check-run-url` | URL of the created GitHub Check Run. |
 | `rekor-entry` | Rekor transparency log search URL (when signed). |
 
@@ -84,21 +84,26 @@ permissions:
 
 ## How verification works
 
-The attestation file written by this action is a self-contained JSON object conforming to the [`agent-attestation/v1`](https://github.com/occasiolabs/occasio/blob/main/spec/agent-attestation/v1/README.md) predicate. The accompanying Sigstore Bundle (`.sigstore.json`) is signed by a short-lived Fulcio certificate bound to this workflow's OIDC identity, with a Rekor transparency log entry.
+The artifact written by this action is a single self-contained evidence bundle, `run.occasio.json` (schema `occasio-bundle/v1`): it embeds the [`agent-attestation/v1`](https://github.com/occasiolabs/occasio/blob/main/spec/agent-attestation/v1/README.md) predicate, the run's audit-chain slice, the exact policy snapshot, and — when signed — the Sigstore Bundle (Fulcio cert bound to this workflow's OIDC identity, Rekor transparency log entry).
 
-The action **self-verifies** the signed attestation in the same CI run before publishing the artifact — Sigstore signature, DSSE-payload-equivalence, and audit-chain integrity all checked. If any check fails the action fails, so no broken attestation ever reaches a consumer. This is the real-OIDC end-to-end round-trip the test suite cannot exercise locally.
+The action **self-verifies** the signed bundle with `occasio verify --strict` in the same CI run before publishing the artifact. If any check fails the action fails, so no broken bundle ever reaches a consumer. This is the real-OIDC end-to-end round-trip the test suite cannot exercise locally.
 
 To re-verify offline at any time, install Occasio and run:
 
 ```bash
 npm install -g @occasiolabs/occasio
-occasio attest verify occasio-attestation.json
+occasio verify --strict run.occasio.json
 ```
 
-The verifier performs three independent checks and refuses any single failure:
-1. Sigstore signature is valid (cert chain → Fulcio root, Rekor inclusion proof).
-2. The DSSE payload inside the bundle byte-matches the attestation predicate.
-3. The audit chain integrity verifies end-to-end; the claimed `first_hash` / `last_hash` exist in the chain in the right order.
+The verifier performs six independent checks and refuses any single failure:
+1. Schema + required keys present.
+2. Manifest integrity: the embedded artifacts hash to the manifest.
+3. Audit-chain slice integrity end-to-end, anchored to the attestation's `first_hash` / `last_hash`.
+4. Policy binding: the embedded policy bytes match `attestation.policy.file_hash`.
+5. Git state: `attestation.subject.git_state` re-derives from the embedded chain slice.
+6. Signature: the Sigstore bundle is valid and its DSSE payload matches the embedded predicate.
+
+For an independent, Occasio-code-free check, an auditor can run the reference Python verifier on the same file: `python docs/verify_bundle.py run.occasio.json --strict`.
 
 ## License
 
