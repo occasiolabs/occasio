@@ -34,6 +34,16 @@ for the format that actually ships. See [`docs/VERIFY.md`](docs/VERIFY.md).
   Action README) re-pointed to the one-file, one-command, six-checks flow.
 
 ### Fixed
+- **Policy binding never held on a real run.** `recordPolicyLoaded` hard-coded
+  `run_id: undefined`, so every `policy_loaded` row fell outside its run slice and
+  the attestation always marked `policy.source = inferred` — which means
+  `occasio verify --strict` (the GitHub Action's self-verify) failed at policy
+  binding on every signed run. The proxy now binds the row to the session's
+  `run_id` (matching what `git_state` rows already did), so a real run's policy is
+  cryptographically bound and `--strict` passes. Additive and walker-safe; existing
+  chains stay `inferred` (honest — their active policy was never recorded per-run).
+  New `test-policy-binding.js` drives the real writer end-to-end, the gap the
+  hand-built bundle fixtures missed.
 - **Preflight test time bomb.** `test-interceptor.js` log fixtures derive their
   date from `now` instead of a hard-coded `2026-05-09`, which would have started
   failing 30 days out.

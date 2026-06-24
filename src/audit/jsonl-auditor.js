@@ -405,13 +405,18 @@ function createAuditor(filePath, opts = {}) {
     return { ok: true };
   }
 
-  function recordPolicyLoadedInner({ hash, path: policyPath, version, source }) {
+  function recordPolicyLoadedInner({ hash, path: policyPath, version, source, runId, sessionId }) {
     const row = {
       audit_schema: 1,
       ts:            new Date().toISOString(),
       event_id:      crypto.randomUUID(),
-      session_id:    undefined,
-      run_id:        undefined,
+      // run_id binds this policy_loaded row to the session that loaded the
+      // policy, so loadRunSlice (which filters on run_id) includes it and the
+      // attestation can mark policy.source='user' instead of 'inferred'. Stays
+      // undefined when no run id is supplied (e.g. the process-scoped MCP
+      // server), preserving the old byte-for-byte row in that case.
+      session_id:    sessionId || undefined,
+      run_id:        runId || undefined,
       agent:         'occasio',
       protocol:      'internal',
       direction:     'inbound',

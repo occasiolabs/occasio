@@ -915,7 +915,12 @@ const sessionAuditor = _createAuditor(process.env.OCCASIO_AUDIT_FILE || undefine
 {
   const policyLoader = require('./policy/loader');
   policyLoader.onPolicyChange((change) => {
-    const status = sessionAuditor.recordPolicyLoaded(change);
+    // Bind the policy_loaded row to this session's run so the run slice
+    // includes it and the attestation can bind policy.source='user'
+    // (otherwise `occasio verify --strict` fails at policy binding).
+    const status = sessionAuditor.recordPolicyLoaded({
+      ...change, runId: currentRunId, sessionId: currentRunId,
+    });
     if (status && status.ok === false) {
       const dropped = status.droppedRow ? JSON.stringify(status.droppedRow) : '(no row attached)';
       process.stderr.write(`\n${col.r('[occasio][audit-fatal]')} policy_loaded write failed: ${status.error?.message}\n`);
