@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.12.1] — 2026-06-24
+
+### The proof path is one artifact, one command, strict-fail when evidence is missing
+
+The public way to verify an Occasio run is now a single portable file,
+`run.occasio.json`, checked by one command. The older multi-file flow
+(`attestation.json` + `.sigstore.json` + an external chain) is retired as the
+public path and kept only as documented legacy. The same single file is now
+re-verifiable in a second language, so "independently verifiable" finally holds
+for the format that actually ships. See [`docs/VERIFY.md`](docs/VERIFY.md).
+
+### Added
+- **Strict verification (fail-closed).** `occasio verify --strict`, plus the
+  granular `--require-signature` / `--require-policy-binding` /
+  `--require-git-state`. The default stays lenient (fast local check); strict is
+  the CI path, where the three previously soft checks (signature, policy binding,
+  git state) become hard failures instead of being skipped.
+- **Independent Python verifier for the bundle.** `docs/verify_bundle.py` mirrors
+  all six checks of the Node verifier (`src/bundle/verify.js`), including the
+  strict requirements, reusing the already cross-language-pinned building blocks
+  (`audit_walker._v8_json` for manifest/row hashes, `canonicalize` for predicate
+  and git_state). `test-bundle-xlang.js` asserts Node and Python agree on the same
+  `run.occasio.json`: an honest bundle passes both, and each single-point tamper
+  (chain / policy / git / manifest) fails at the same check in both.
+
+### Changed
+- **Cutover to the single-file evidence bundle.** The GitHub Action now produces
+  `occasio bundle --sign`, self-verifies it with `occasio verify --strict`, and
+  uploads a single `run.occasio.json` evidence artifact. `occasio attest verify`
+  is deprecated and points to `occasio verify`. Docs (`VERIFY.md`,
+  `reference-pipeline.md`, `launch/ci-snippet.md`, `python-verifier.md`, the
+  Action README) re-pointed to the one-file, one-command, six-checks flow.
+
+### Fixed
+- **Preflight test time bomb.** `test-interceptor.js` log fixtures derive their
+  date from `now` instead of a hard-coded `2026-05-09`, which would have started
+  failing 30 days out.
+
 ## [0.12.0] — 2026-06-05
 
 ### Identity gate — an agent may *request* an identity, not assume one
